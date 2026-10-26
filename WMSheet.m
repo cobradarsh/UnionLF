@@ -15,6 +15,17 @@ static UIColor *WMRGB(CGFloat r, CGFloat g, CGFloat b) {
 #define WM_CARD   WMRGB(41, 41, 47)
 #define WM_GREEN  WMRGB(52, 199, 89)
 
+// Debug breadcrumb: records the last AI-page step reached so a crash is pinpointable
+// from the "Where are my settings coming from?" diagnostics, even without a crash log.
+static void WMCrumb(NSString *step) {
+    @try {
+        NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+        [d setObject:step forKey:@"com.adarsh.wingman.lastAIStep"];
+        [d synchronize];
+    } @catch (__unused NSException *e) {}
+    NSLog(@"[Wingman] AI step: %@", step);
+}
+
 typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 
 @interface WMSheet () <UITextFieldDelegate, UIGestureRecognizerDelegate>
@@ -337,7 +348,22 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     [self presentViewController:a animated:YES completion:nil];
 }
 
-- (void)_goAI    { _page = WMPageAI;    [self _rebuild]; }
+- (void)_goAI {
+    WMCrumb(@"goAI");
+    @try {
+        _page = WMPageAI;
+        [self _rebuild];
+    } @catch (NSException *e) {
+        // Turn an Objective-C exception into a readable message instead of a force-close,
+        // and recover to the quick-replies page. (EXC_BAD_ACCESS can't be caught here.)
+        NSString *last = [[NSUserDefaults standardUserDefaults] stringForKey:@"com.adarsh.wingman.lastAIStep"];
+        _page = WMPageQuick;
+        [self _rebuild];
+        [self _alert:@"Wingman hit an error opening the AI page"
+             message:[NSString stringWithFormat:@"%@: %@\n(last step: %@)",
+                      e.name ?: @"error", e.reason ?: @"?", last ?: @"(none)"]];
+    }
+}
 - (void)_goQuick { [self.view endEditing:YES]; _page = WMPageQuick; [self _rebuild]; }
 
 - (void)_goKeys {
@@ -529,9 +555,11 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 #pragma mark - page 2: AI
 
 - (CGFloat)_buildAIPage {
+    WMCrumb(@"build:start");
     CGFloat W = self.view.bounds.size.width, pad = 16, inner = W - 2*pad, y = 4;
 
     y = [self _addFramesStripAtY:y height:72] + 4;
+    WMCrumb(@"build:afterFrames");
     UILabel *read = [self _label:@"" size:11 bold:NO color:[UIColor colorWithWhite:0.5 alpha:1]];
     read.frame = CGRectMake(pad, y, inner, 16);
     [_scroll addSubview:read];
@@ -550,6 +578,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     notes.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
     [_scroll addSubview:notes];
     y += 46;
+    WMCrumb(@"build:afterButtons");
 
     // provider switch
     UILabel *pl = [self _label:@"AI" size:13 bold:YES color:[UIColor colorWithWhite:0.75 alpha:1]];
@@ -583,9 +612,12 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     [mb addTarget:self action:@selector(_modelTapped) forControlEvents:UIControlEventTouchUpInside];
     [_scroll addSubview:mb];
     _modelButton = mb;
+    WMCrumb(@"build:beforeModelUpdate");
     [self _updateModelButton];
+    WMCrumb(@"build:beforePrefetch");
     [self _prefetchModels];
     y += 52;
+    WMCrumb(@"build:afterModel");
 
     // context
     UILabel *ctxL = [self _label:@"What's the context? (optional)" size:13 bold:NO color:[UIColor colorWithWhite:0.6 alpha:1]];
@@ -630,6 +662,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     y += 24;
     NSInteger cols = 3; CGFloat gap = 8, chipH = 42;
     CGFloat chipW = (inner - gap * (cols - 1)) / cols;
+    WMCrumb(@"build:beforeStyles");
     for (NSInteger i = 0; i < WMReplyModeCount; i++) {
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
         b.frame = CGRectMake(pad + (i % cols) * (chipW + gap), y + (i / cols) * (chipH + gap), chipW, chipH);
@@ -648,6 +681,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         [_chips addObject:b];
     }
     y += ((WMReplyModeCount + cols - 1) / cols) * (chipH + gap) + 10;
+    WMCrumb(@"build:afterStyles");
 
     _resultsTop = y;
     UIView *rv = [[UIView alloc] initWithFrame:CGRectMake(0, y, W, 0)];
@@ -655,6 +689,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     _resultsView = rv;
     if (_replies.count)      [self _showReplies];
     else if (_statusText)    [self _showStatus:_statusText spinner:_busy];
+    WMCrumb(@"build:done");
     return y + _resultsView.frame.size.height;
 }
 

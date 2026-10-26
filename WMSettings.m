@@ -148,6 +148,8 @@ static NSString *WMSharedGlobalPath(void) {
     NSString *shared = WMSharedGlobalPath();
     [s appendFormat:@"\nshared file: %@",
         [[NSFileManager defaultManager] fileExistsAtPath:shared] ? @"present (readable here)" : @"not created yet"];
+    NSString *lastAI = [[NSUserDefaults standardUserDefaults] stringForKey:@"com.adarsh.wingman.lastAIStep"];
+    [s appendFormat:@"\nlast AI step: %@", lastAI ?: @"(none)"];
     return s;
 }
 
