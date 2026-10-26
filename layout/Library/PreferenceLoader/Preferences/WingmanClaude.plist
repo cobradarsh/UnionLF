@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Get one at console.anthropic.com. Claude can read screenshots, so it works even when the phone cannot read the text on screen.</string>
+			<key>label</key>
+			<string>Claude API Key</string>
+		</dict>
+		<dict>
+			<key>autoCaps</key>
+			<string>None</string>
+			<key>cell</key>
+			<string>PSSecureEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>claudeAPIKey</string>
+			<key>label</key>
+			<string>API Key</string>
+			<key>noAutoCorrect</key>
+			<true/>
+			<key>placeholder</key>
+			<string>sk-ant-...</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Easiest: open Wingman in any chat, tap Write with AI, then tap the Model row. It lists the models your key can use and saves your pick here. You can also type a model ID. Blank = claude-sonnet-4-5-20250929.</string>
+			<key>label</key>
+			<string>Model</string>
+		</dict>
+		<dict>
+			<key>autoCaps</key>
+			<string>None</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>claudeModel</string>
+			<key>label</key>
+			<string>Model</string>
+			<key>noAutoCorrect</key>
+			<true/>
+			<key>placeholder</key>
+			<string>claude-sonnet-4-5-20250929</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Text only: Wingman reads the chat on your phone and sends just the text. Cheapest. Text + Screenshot also sends the picture, which helps with photos, stickers and emoji-only messages. If the phone cannot read a screen, the screenshot is sent automatically either way.</string>
+			<key>label</key>
+			<string>What To Send</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSegmentCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>claudeReads</string>
+			<key>validTitles</key>
+			<array>
+				<string>Text only</string>
+				<string>Text + Screenshot</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>Claude API</string>
+</dict>
+</plist>

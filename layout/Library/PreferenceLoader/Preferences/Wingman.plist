@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>entry</key>
+	<dict>
+		<key>cell</key>
+		<string>PSLinkCell</string>
+		<key>icon</key>
+		<string>Wingman.png</string>
+		<key>label</key>
+		<string>Wingman</string>
+	</dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Auto-detect covers WhatsApp, WhatsApp Business, Telegram, Instagram, Messenger, Snapchat, Signal, Discord, X, LinkedIn, LINE, Viber, WeChat, Slack and Teams, plus dating apps including Tinder, Bumble, Hinge, OkCupid, Badoo, happn, Grindr, Aisle, TrulyMadly and Feeld.
+
+To add anything else (Hopr, for example), open the "Wingman Apps" row in the main Settings list, just below Wingman.</string>
+			<key>label</key>
+			<string>Apps</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>autoDetectApps</string>
+			<key>label</key>
+			<string>Auto-detect Chat &amp; Dating Apps</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Optional. Only needed if an app is missing from the Wingman Apps list. Type bundle IDs separated by commas, e.g. com.hopr.app</string>
+		</dict>
+		<dict>
+			<key>autoCaps</key>
+			<string>None</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>otherAppIDs</string>
+			<key>label</key>
+			<string>Extra Bundle IDs</string>
+			<key>noAutoCorrect</key>
+			<true/>
+			<key>placeholder</key>
+			<string>com.example.app, com.other.app</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>You can switch between Claude and DeepSeek for any single reply inside Wingman. This only picks which one is selected first.</string>
+			<key>label</key>
+			<string>Default AI</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSegmentCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>apiProvider</string>
+			<key>validTitles</key>
+			<array>
+				<string>Claude</string>
+				<string>DeepSeek</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Each service has its own page.</string>
+			<key>label</key>
+			<string>API Keys</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>items</key>
+			<array>
+				<dict>
+					<key>cell</key>
+					<string>PSGroupCell</string>
+					<key>footerText</key>
+					<string>Get one at console.anthropic.com. Claude can read screenshots, so it works even when the phone cannot read the text on screen.</string>
+					<key>label</key>
+					<string>Claude API Key</string>
+				</dict>
+				<dict>
+					<key>autoCaps</key>
+					<string>None</string>
+					<key>cell</key>
+					<string>PSSecureEditTextCell</string>
+					<key>defaults</key>
+					<string>com.adarsh.wingman</string>
+					<key>key</key>
+					<string>claudeAPIKey</string>
+					<key>label</key>
+					<string>API Key</string>
+					<key>noAutoCorrect</key>
+					<true/>
+					<key>placeholder</key>
+					<string>sk-ant-...</string>
+				</dict>
+				<dict>
+					<key>cell</key>
+					<string>PSGroupCell</string>
+					<key>footerText</key>
+					<string>Easiest: open Wingman in any chat, tap Write with AI, then tap the Model row. It lists the models your key can use and saves your pick here. You can also type a model ID. Blank = claude-sonnet-4-5-20250929.</string>
+					<key>label</key>
+					<string>Model</string>
+				</dict>
+				<dict>
+					<key>autoCaps</key>
+					<string>None</string>
+					<key>cell</key>
+					<string>PSEditTextCell</string>
+					<key>defaults</key>
+					<string>com.adarsh.wingman</string>
+					<key>key</key>
+					<string>claudeModel</string>
+					<key>label</key>
+					<string>Model</string>
+					<key>noAutoCorrect</key>
+					<true/>
+					<key>placeholder</key>
+					<string>claude-sonnet-4-5-20250929</string>
+				</dict>
+				<dict>
+					<key>cell</key>
+					<string>PSGroupCell</string>
+					<key>footerText</key>
+					<string>Text only: Wingman reads the chat on your phone and sends just the text. Cheapest. Text + Screenshot also sends the picture, which helps with photos, stickers and emoji-only messages. If the phone cannot read a screen, the screenshot is sent automatically either way.</string>
+					<key>label</key>
+					<string>What To Send</string>
+				</dict>
+				<dict>
+					<key>cell</key>
+					<string>PSSegmentCell</string>
+					<key>default</key>
+					<integer>0</integer>
+					<key>defaults</key>
+					<string>com.adarsh.wingman</string>
+					<key>key</key>
+					<string>claudeReads</string>
+					<key>validTitles</key>
+					<array>
+						<string>Text only</string>
+						<string>Text + Screenshot</string>
+					</array>
+					<key>validValues</key>
+					<array>
+						<integer>0</integer>
+						<integer>1</integer>
+					</array>
+				</dict>
+			</array>
+			<key>label</key>
+			<string>Claude API</string>
+			<key>pl_alt_plist_name</key>
+			<string>WingmanClaude</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>items</key>
+			<array>
+				<dict>
+					<key>cell</key>
+					<string>PSGroupCell</string>
+					<key>footerText</key>
+					<string>Get one at platform.deepseek.com. DeepSeek is text only: it cannot see screenshots, so it uses the chat text read on your phone.</string>
+					<key>label</key>
+					<string>DeepSeek API Key</string>
+				</dict>
+				<dict>
+					<key>autoCaps</key>
+					<string>None</string>
+					<key>cell</key>
+					<string>PSSecureEditTextCell</string>
+					<key>defaults</key>
+					<string>com.adarsh.wingman</string>
+					<key>key</key>
+					<string>deepseekAPIKey</string>
+					<key>label</key>
+					<string>API Key</string>
+					<key>noAutoCorrect</key>
+					<true/>
+					<key>placeholder</key>
+					<string>sk-...</string>
+				</dict>
+				<dict>
+					<key>cell</key>
+					<string>PSGroupCell</string>
+					<key>footerText</key>
+					<string>Easiest: open Wingman in any chat, tap Write with AI, switch to DeepSeek and tap the Model row. It lists the models your key can use and saves your pick here. You can also type one. Blank = deepseek-chat.</string>
+					<key>label</key>
+					<string>Model</string>
+				</dict>
+				<dict>
+					<key>autoCaps</key>
+					<string>None</string>
+					<key>cell</key>
+					<string>PSEditTextCell</string>
+					<key>defaults</key>
+					<string>com.adarsh.wingman</string>
+					<key>key</key>
+					<string>deepseekModel</string>
+					<key>label</key>
+					<string>Model</string>
+					<key>noAutoCorrect</key>
+					<true/>
+					<key>placeholder</key>
+					<string>deepseek-chat</string>
+				</dict>
+				<dict>
+					<key>cell</key>
+					<string>PSGroupCell</string>
+					<key>footerText</key>
+					<string>Default https://api.deepseek.com. Wingman adds /chat/completions for replies and /models for the model list, so enter just the base. A full /chat/completions URL also works.</string>
+					<key>label</key>
+					<string>Base URL</string>
+				</dict>
+				<dict>
+					<key>autoCaps</key>
+					<string>None</string>
+					<key>cell</key>
+					<string>PSEditTextCell</string>
+					<key>defaults</key>
+					<string>com.adarsh.wingman</string>
+					<key>isURL</key>
+					<true/>
+					<key>key</key>
+					<string>deepseekBaseURL</string>
+					<key>label</key>
+					<string>Base URL</string>
+					<key>noAutoCorrect</key>
+					<true/>
+					<key>placeholder</key>
+					<string>https://api.deepseek.com</string>
+				</dict>
+			</array>
+			<key>label</key>
+			<string>DeepSeek API</string>
+			<key>pl_alt_plist_name</key>
+			<string>WingmanDeepSeek</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Describe how you text, e.g. "lots of Hinglish, short sentences, no caps, say bro and yaar a lot, sarcastic".</string>
+			<key>label</key>
+			<string>Sound Like Me</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>soundLikeMe</string>
+			<key>label</key>
+			<string>Style</string>
+			<key>placeholder</key>
+			<string>Describe your texting style...</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Tap the bubble to capture the screen, long-press to capture 3 screens of history. Drag it anywhere and each app remembers its spot. If you hide it from inside Wingman, it returns next time you open the app.
+
+Quick replies are edited inside the Wingman sheet and saved per app.</string>
+			<key>label</key>
+			<string>Bubble</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>bubbleOnRight</string>
+			<key>label</key>
+			<string>Start on Right Edge</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.85</real>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>bubbleAlpha</string>
+			<key>label</key>
+			<string>Bubble Opacity</string>
+			<key>max</key>
+			<real>1.0</real>
+			<key>min</key>
+			<real>0.3</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>Wingman</string>
+</dict>
+</plist>

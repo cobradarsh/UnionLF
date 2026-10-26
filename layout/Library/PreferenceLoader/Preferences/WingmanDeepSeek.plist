@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Get one at platform.deepseek.com. DeepSeek is text only: it cannot see screenshots, so it uses the chat text read on your phone.</string>
+			<key>label</key>
+			<string>DeepSeek API Key</string>
+		</dict>
+		<dict>
+			<key>autoCaps</key>
+			<string>None</string>
+			<key>cell</key>
+			<string>PSSecureEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>deepseekAPIKey</string>
+			<key>label</key>
+			<string>API Key</string>
+			<key>noAutoCorrect</key>
+			<true/>
+			<key>placeholder</key>
+			<string>sk-...</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Easiest: open Wingman in any chat, tap Write with AI, switch to DeepSeek and tap the Model row. It lists the models your key can use and saves your pick here. You can also type one. Blank = deepseek-chat.</string>
+			<key>label</key>
+			<string>Model</string>
+		</dict>
+		<dict>
+			<key>autoCaps</key>
+			<string>None</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>key</key>
+			<string>deepseekModel</string>
+			<key>label</key>
+			<string>Model</string>
+			<key>noAutoCorrect</key>
+			<true/>
+			<key>placeholder</key>
+			<string>deepseek-chat</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Default https://api.deepseek.com. Wingman adds /chat/completions for replies and /models for the model list, so enter just the base. A full /chat/completions URL also works.</string>
+			<key>label</key>
+			<string>Base URL</string>
+		</dict>
+		<dict>
+			<key>autoCaps</key>
+			<string>None</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>defaults</key>
+			<string>com.adarsh.wingman</string>
+			<key>isURL</key>
+			<true/>
+			<key>key</key>
+			<string>deepseekBaseURL</string>
+			<key>label</key>
+			<string>Base URL</string>
+			<key>noAutoCorrect</key>
+			<true/>
+			<key>placeholder</key>
+			<string>https://api.deepseek.com</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>DeepSeek API</string>
+</dict>
+</plist>

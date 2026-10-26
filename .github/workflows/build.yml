@@ -1,0 +1,36 @@
+# Builds Wingman with the RootHide fork of Theos.
+# Not tested for this project; tools/build_roothide_linux.sh is the build that produced 1.6.0.
+name: Build Wingman (RootHide)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RootHide Theos
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos)"
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+
+      - name: Get iOS 16.5 SDK
+        run: |
+          cd $HOME/theos/sdks
+          curl -sLO https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          tar xf iPhoneOS16.5.sdk.tar.xz
+
+      - name: Run logic tests
+        run: python3 tests/test_wingman.py
+
+      - name: Build
+        run: make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: wingman-roothide-deb
+          path: packages/*.deb
