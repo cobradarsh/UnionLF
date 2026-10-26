@@ -1,5 +1,6 @@
-# Builds Wingman with the RootHide fork of Theos.
-# Not tested for this project; tools/build_roothide_linux.sh is the build that produced 1.6.0.
+# Builds Wingman for RootHide on Linux, driving tools/build_roothide_linux.sh
+# (the script that produced 1.6.0). macOS runners aren't reliably available to
+# this repo, so we build on Ubuntu instead.
 name: Build Wingman (RootHide)
 on:
   push:
@@ -8,29 +9,52 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install RootHide Theos
+      - name: Install build dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential fakeroot rsync perl git curl wget \
+            xz-utils dpkg-dev python3 python3-pip fonts-dejavu-core libplist-dev
+          pip3 install --user pillow || python3 -m pip install pillow
+
+      - name: Install LLVM 18 (provides ld64.lld-18)
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 18
+          sudo apt-get install -y lld-18
+          ld64.lld-18 --version || true
+
+      - name: Install ldid (ProcursusTeam)
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/ldid \
+            https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64
+          sudo chmod +x /usr/local/bin/ldid
+          ldid -V || true
+
+      - name: Install RootHide Theos (+ Linux toolchain)
+        run: |
+          export THEOS=$HOME/theos
           bash -c "$(curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos)"
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
       - name: Get iOS 16.5 SDK
         run: |
-          cd $HOME/theos/sdks
+          cd "$HOME/theos/sdks"
           curl -sLO https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
           tar xf iPhoneOS16.5.sdk.tar.xz
 
       - name: Run logic tests
         run: python3 tests/test_wingman.py
 
-      - name: Build
-        run: make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+      - name: Build the .deb
+        run: THEOS="$HOME/theos" bash tools/build_roothide_linux.sh
 
       - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: wingman-roothide-deb
-          path: packages/*.deb
+          path: "*.deb"
