@@ -6,6 +6,23 @@
 
 #import "Wingman.h"
 
+// Private session, created once. Its delegate queue is a serial queue we own,
+// so no Wingman network callback ever runs on the host app's shared session
+// queue (which triggered the recursive-lock SIGTRAP inside WhatsApp).
+NSURLSession *WMPrivateSession(void) {
+    static NSURLSession *session;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
+        cfg.waitsForConnectivity = NO;
+        NSOperationQueue *q = [[NSOperationQueue alloc] init];
+        q.name = @"com.adarsh.wingman.net";
+        q.maxConcurrentOperationCount = 1;   // serial: our callbacks never overlap
+        session = [NSURLSession sessionWithConfiguration:cfg delegate:nil delegateQueue:q];
+    });
+    return session;
+}
+
 @implementation WMAPIClient
 
 + (instancetype)shared {
@@ -109,7 +126,7 @@
     req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
     req.timeoutInterval = 90;
 
-    [[[NSURLSession sharedSession] dataTaskWithRequest:req
+    [[WMPrivateSession() dataTaskWithRequest:req
       completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
         NSArray *replies = nil; NSError *e = err;
         if (!e) {
@@ -166,7 +183,7 @@
     req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
     req.timeoutInterval = 90;
 
-    [[[NSURLSession sharedSession] dataTaskWithRequest:req
+    [[WMPrivateSession() dataTaskWithRequest:req
       completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
         NSArray *replies = nil; NSError *e = err;
         if (!e) {

@@ -82,7 +82,7 @@ static NSMutableDictionary *gCache;       // "provider|key" -> @{ "at": date, "m
         NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
         [req setValue:[@"Bearer " stringByAppendingString:key] forHTTPHeaderField:@"Authorization"];
         req.timeoutInterval = 20;
-        [[[NSURLSession sharedSession] dataTaskWithRequest:req
+        [[WMPrivateSession() dataTaskWithRequest:req
           completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
             if (err) { finish(err); return; }
             id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -115,7 +115,7 @@ static NSMutableDictionary *gCache;       // "provider|key" -> @{ "at": date, "m
         [req setValue:key           forHTTPHeaderField:@"x-api-key"];
         [req setValue:@"2023-06-01" forHTTPHeaderField:@"anthropic-version"];
         req.timeoutInterval = 20;
-        [[[NSURLSession sharedSession] dataTaskWithRequest:req
+        [[WMPrivateSession() dataTaskWithRequest:req
           completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
             if (err) { finish(err); return; }
             id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;

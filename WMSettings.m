@@ -52,16 +52,6 @@ static NSArray<NSString *> *WMGlobalPaths(void) {
     return p;
 }
 
-// The one file we actively CREATE and keep world-readable, so every sandboxed app
-// (not just the one a key was typed in) can read the settings. Prefer the jbroot copy,
-// which an injected tweak can reach from any app; fall back to the plain path.
-static NSString *WMSharedGlobalPath(void) {
-    NSString *jb = WMJBRoot();
-    NSString *dir = jb ? [jb stringByAppendingString:@"/var/mobile/Library/Preferences"]
-                       : @"/var/mobile/Library/Preferences";
-    return [dir stringByAppendingPathComponent:kWMPlistName];
-}
-
 @implementation WMSettings {
     NSDictionary *_prefs;        // merged view
     NSDictionary *_global;       // what the global store gave us
@@ -145,11 +135,6 @@ static NSString *WMSharedGlobalPath(void) {
     [s appendFormat:@"\n\nClaude key: %@", _prefs[@"claudeAPIKey"] ? @"found" : @"MISSING"];
     [s appendFormat:@"\nDeepSeek key: %@", _prefs[@"deepseekAPIKey"] ? @"found" : @"MISSING"];
     [s appendFormat:@"\njbroot: %@", WMJBRoot() ?: @"not detected"];
-    NSString *shared = WMSharedGlobalPath();
-    [s appendFormat:@"\nshared file: %@",
-        [[NSFileManager defaultManager] fileExistsAtPath:shared] ? @"present (readable here)" : @"not created yet"];
-    NSString *lastAI = [[NSUserDefaults standardUserDefaults] stringForKey:@"com.adarsh.wingman.lastAIStep"];
-    [s appendFormat:@"\nlast AI step: %@", lastAI ?: @"(none)"];
     return s;
 }
 
@@ -164,32 +149,11 @@ static NSString *WMSharedGlobalPath(void) {
     if (CFPreferencesSynchronize(kWMDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost))
         global = YES;
 
-    NSFileManager *fm = [NSFileManager defaultManager];
     for (NSString *p in WMGlobalPaths()) {
         NSMutableDictionary *d = [NSMutableDictionary dictionaryWithContentsOfFile:p];
         if (!d) continue;                      // only update a file that already exists
         d[key] = value;
-        if ([d writeToFile:p atomically:YES]) {
-            global = YES;
-            // keep it readable from every app's sandbox, not just the one that wrote it
-            [fm setAttributes:@{ NSFilePosixPermissions: @(0644) } ofItemAtPath:p error:nil];
-        }
-    }
-
-    // The real cross-app fix: CREATE a shared, world-readable copy if one doesn't
-    // exist yet. Before this, a key entered inside Wingman only ever reached this
-    // app's own NSUserDefaults, so it showed as "no API key" in every OTHER app.
-    NSString *shared = WMSharedGlobalPath();
-    if (shared) {
-        [fm createDirectoryAtPath:[shared stringByDeletingLastPathComponent]
-      withIntermediateDirectories:YES attributes:nil error:nil];
-        NSMutableDictionary *d = [NSMutableDictionary dictionaryWithContentsOfFile:shared] ?: [NSMutableDictionary dictionary];
-        for (id k in _global) if (!d[k]) d[k] = _global[k];   // don't lose keys we already knew
-        d[key] = value;
-        if ([d writeToFile:shared atomically:YES]) {
-            [fm setAttributes:@{ NSFilePosixPermissions: @(0644) } ofItemAtPath:shared error:nil];
-            global = YES;
-        }
+        if ([d writeToFile:p atomically:YES]) global = YES;
     }
 
     // see what the global store holds now (our write may or may not have stuck)

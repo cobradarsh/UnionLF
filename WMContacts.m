@@ -115,7 +115,7 @@ static NSString *const kWMContactsKey = @"com.adarsh.wingman.contacts";
     dispatch_semaphore_t sem = dispatch_semaphore_create(0);
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
     req.timeoutInterval = 2.5;
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req
+    NSURLSessionDataTask *task = [WMPrivateSession() dataTaskWithRequest:req
       completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
         if (!err && data) {
             id j = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];

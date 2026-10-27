@@ -57,7 +57,9 @@
       "4. Never reveal you are an AI. You are me.\n"
       "5. Roasts can be savage and witty but NEVER use slurs, threats, or attacks on "
          "religion, caste, gender, ethnicity, sexuality or disability.\n"
-      "6. Flirty means charming and playful, never explicit or crude.\n"
+      "6. Keep replies non-sexual by default. If the chosen STYLE explicitly asks for "
+         "romance, seduction or sexual content, it is fine to be flirty, sensual or "
+         "explicit, as long as everyone involved is a consenting adult.\n"
       "7. Make the replies genuinely different from each other, not rewordings.\n\n"
 
       "OUTPUT FORMAT:\n"
@@ -121,6 +123,31 @@
                     "flirty, Gen Z, lyrical, excited, chill, emojify, decent roast, defend me. "
                     "For example reply 1 funny + chill, reply 2 flirty + emojify, reply 3 "
                     "Gen Z + light roast. Pick the mixes that suit this chat best.";
+        case WMReplyModePlanDate:
+            return @"PLAN A DATE. Suggest an actual date. Read the chat for what they're into, "
+                    "then propose one concrete, doable plan (a place or activity, a rough day "
+                    "or time) and ask in a relaxed, confident way they can simply say yes to, "
+                    "not a vague 'we should hang out'. Make the three replies three plans.";
+        case WMReplyModeRomance:
+            return @"ROMANCE HER. Warm, romantic and sincere. Make them feel genuinely seen and "
+                    "wanted: an honest compliment or a touch of longing, heartfelt rather than "
+                    "cheesy, confident and never needy.";
+        case WMReplyModeSeduce:
+            return @"SEDUCE LIKE BOND. Smooth, witty and magnetic, like a charming spy: "
+                    "effortless confidence, a slow burn, playful innuendo and understatement. "
+                    "Suave, never crude; leave a little to the imagination.";
+        case WMReplyModeSensual:
+            return @"SENSUAL. Slow, sensual and suggestive. Build tension and desire with "
+                    "evocative, teasing lines that hint at intimacy without being graphic. "
+                    "Warm, intimate and clearly consensual.";
+        case WMReplyModeLustful:
+            return @"LUSTFUL. Hungry and openly turned on. Make my desire for them obvious and "
+                    "bold, heated and physical, while staying consensual and adult.";
+        case WMReplyModeDirty:
+            return @"DIRTY / SEXT. Explicit, dirty sexting between two consenting adults. Be "
+                    "direct and graphic about what I want, matching how far the chat has "
+                    "already gone. Everyone is a consenting adult; never anything underage, "
+                    "coercive or non-consensual.";
         default:
             return @"";
     }
@@ -183,6 +210,12 @@
         case WMReplyModeChill:         return @"Chill";
         case WMReplyModeEmojify:       return @"Emojify";
         case WMReplyModeRemix:         return @"Remix of All";
+        case WMReplyModePlanDate:      return @"Plan a Date";
+        case WMReplyModeRomance:       return @"Romance Her";
+        case WMReplyModeSeduce:        return @"Seduce (Bond)";
+        case WMReplyModeSensual:       return @"Sensual";
+        case WMReplyModeLustful:       return @"Lustful";
+        case WMReplyModeDirty:         return @"Dirty / Sext";
         default:                       return @"";
     }
 }
@@ -203,8 +236,18 @@
         case WMReplyModeChill:         return @"\U0001F60E"; // 😎
         case WMReplyModeEmojify:       return @"\U0001F308"; // 🌈
         case WMReplyModeRemix:         return @"\U0001F3B2"; // 🎲
+        case WMReplyModePlanDate:      return @"\U0001F4C5"; // 📅
+        case WMReplyModeRomance:       return @"\U0001F339"; // 🌹
+        case WMReplyModeSeduce:        return @"\U0001F576"; // 🕶
+        case WMReplyModeSensual:       return @"\U0001F319"; // 🌙
+        case WMReplyModeLustful:       return @"\U0001F48B"; // 💋
+        case WMReplyModeDirty:         return @"\U0001F608"; // 😈
         default:                       return @"";
     }
+}
+
++ (BOOL)isDatingMode:(WMReplyMode)mode {
+    return mode >= WMReplyModeFirstDating && mode < WMReplyModeCount;
 }
 
 @end

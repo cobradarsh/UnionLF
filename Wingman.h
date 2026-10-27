@@ -8,6 +8,13 @@
 
 @class WMBubble, WMSheet, WMAPIClient, WMCapture, WMSettings;
 
+// Our OWN URLSession. Never use [NSURLSession sharedSession] inside a host app:
+// its delegate queue is shared with the host (WhatsApp), and our completion
+// handlers running there collide with the host's notification/weak-ref locks
+// (a recursive os_unfair_lock abort -> SIGTRAP). A private session runs every
+// Wingman callback on our own serial queue, fully isolated from the host.
+NSURLSession *WMPrivateSession(void);
+
 // ── reply styles (one is picked per generation) ───────────
 typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeAggressive = 0,
@@ -24,8 +31,17 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeChill,
     WMReplyModeEmojify,
     WMReplyModeRemix,
+    // dating / flirt styles (consenting adults)
+    WMReplyModePlanDate,
+    WMReplyModeRomance,
+    WMReplyModeSeduce,
+    WMReplyModeSensual,
+    WMReplyModeLustful,
+    WMReplyModeDirty,
     WMReplyModeCount
 };
+
+static WMReplyMode const WMReplyModeFirstDating = WMReplyModePlanDate;
 
 typedef NS_ENUM(NSInteger, WMReplyLength) {
     WMReplyLengthShort = 0,
