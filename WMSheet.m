@@ -145,14 +145,15 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 
     // read the chat on-device right away (free, local)
     [WMOCR transcriptFromFrames:_frames completion:^(NSString *t, NSInteger n) {
+        WMCrumb(@"ocr:cb");
         self.ocrDone = YES;
         self.transcript = t;
         self.ocrCount = n;
         [self _updateReadLabel];
         if (self.generateWhenReady) { self.generateWhenReady = NO; [self _generate]; }
-        // Run the contact-name OCR only AFTER the transcript OCR finishes, never alongside it:
-        // two Vision passes running at once on the same frames corrupted memory and crashed later.
-        [self _detectContactName];
+        // TEMP: contact-name/gender OCR disabled while isolating the Write-with-AI crash.
+        // [self _detectContactName];
+        WMCrumb(@"ocr:end");
     }];
 }
 
@@ -360,6 +361,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         WMCrumb(@"goAI:afterRebuild");
         [self.view layoutIfNeeded];   // force layout now so a layout-time exception is caught here
         WMCrumb(@"goAI:afterLayout");
+        dispatch_async(dispatch_get_main_queue(), ^{ WMCrumb(@"goAI:nextloop"); });
     } @catch (NSException *e) {
         // Turn an Objective-C exception into a readable message instead of a force-close,
         // and recover to the quick-replies page. (EXC_BAD_ACCESS can't be caught here.)
@@ -948,7 +950,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     [WMOCR transcriptFromFrames:_frames completion:^(NSString *t, NSInteger n) {
         self.ocrDone = YES; self.transcript = t; self.ocrCount = n;
         [self _updateReadLabel];
-        [self _detectContactName];   // after the transcript OCR, never concurrently with it
+        // [self _detectContactName];  // TEMP disabled while isolating the crash
     }];
 }
 
