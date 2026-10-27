@@ -24,18 +24,8 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeChill,
     WMReplyModeEmojify,
     WMReplyModeRemix,
-    // dating / flirt styles (override the "keep it non-sexual" rule; consenting adults only)
-    WMReplyModePlanDate,
-    WMReplyModeRomance,
-    WMReplyModeSeduce,
-    WMReplyModeSensual,
-    WMReplyModeLustful,
-    WMReplyModeDirty,
     WMReplyModeCount
 };
-
-// First dating style in the enum above; everything from here to WMReplyModeCount is a dating vibe.
-static WMReplyMode const WMReplyModeFirstDating = WMReplyModePlanDate;
 
 typedef NS_ENUM(NSInteger, WMReplyLength) {
     WMReplyLengthShort = 0,
@@ -139,20 +129,6 @@ static NSInteger const kWMQuickReplyCount = 5;
                   completion:(void(^)(NSString *transcript, NSInteger messageCount))done;
 // the ignore ruleset (also used by the prompt)
 + (BOOL)isSystemNotice:(NSString *)line;
-// best guess at the chat's contact / title name (read from the header band of a frame)
-+ (NSString *)contactNameFromFrame:(UIImage *)frame;
-@end
-
-// ── per-contact memory + name→gender guess (dating) ───────
-@interface WMContacts : NSObject
-// notes stored per app + contact name (this app's own storage)
-+ (NSString *)noteForApp:(NSString *)bundle name:(NSString *)name;
-+ (void)setNote:(NSString *)note forApp:(NSString *)bundle name:(NSString *)name;
-// "male" / "female" / "" — a keyless online lookup of the first name, cached. Call OFF the main thread.
-+ (NSString *)ensureGenderForApp:(NSString *)bundle name:(NSString *)name;
-// the extra context handed to the model: name, likely gender, saved notes, then my own text
-+ (NSString *)promptContextForApp:(NSString *)bundle name:(NSString *)name
-                           gender:(NSString *)gender typed:(NSString *)typed;
 @end
 
 // ── screen capture ────────────────────────────────────────
@@ -160,12 +136,6 @@ static NSInteger const kWMQuickReplyCount = 5;
 + (NSArray<UIImage *> *)screenshotHidingView:(UIView *)viewToHide;
 + (void)scrollCaptureHidingView:(UIView *)viewToHide
                      completion:(void(^)(NSArray<UIImage *> *frames))done;
-// scroll-capture a specific number of screens (for the "Scroll Older" button)
-+ (void)scrollCaptureHidingView:(UIView *)viewToHide
-                        screens:(NSInteger)screens
-                     completion:(void(^)(NSArray<UIImage *> *frames))done;
-// resign the chat app's first responder so the keyboard drops and more messages show
-+ (void)dismissKeyboardInChat;
 @end
 
 // ── floating bubble ───────────────────────────────────────
@@ -209,5 +179,4 @@ static NSInteger const kWMQuickReplyCount = 5;
                       hasImages:(BOOL)hasImages;
 + (NSString *)labelForMode:(WMReplyMode)mode;
 + (NSString *)emojiForMode:(WMReplyMode)mode;
-+ (BOOL)isDatingMode:(WMReplyMode)mode;
 @end

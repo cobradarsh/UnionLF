@@ -9,7 +9,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Wingman
 
-Wingman_FILES  = Tweak.x WMBubble.m WMCapture.m WMSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMQuickReplies.m WMOCR.m WMModels.m WMContacts.m
+Wingman_FILES  = Tweak.x WMBubble.m WMCapture.m WMSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMQuickReplies.m WMOCR.m WMModels.m
 Wingman_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 Wingman_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision
 
