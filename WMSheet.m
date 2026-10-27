@@ -15,17 +15,6 @@ static UIColor *WMRGB(CGFloat r, CGFloat g, CGFloat b) {
 #define WM_CARD   WMRGB(41, 41, 47)
 #define WM_GREEN  WMRGB(52, 199, 89)
 
-// Debug breadcrumb: records the last AI-page step reached so a crash is pinpointable
-// from the "Where are my settings coming from?" diagnostics, even without a crash log.
-static void WMCrumb(NSString *step) {
-    @try {
-        NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-        [d setObject:step forKey:@"com.adarsh.wingman.lastAIStep"];
-        [d synchronize];
-    } @catch (__unused NSException *e) {}
-    NSLog(@"[Wingman] AI step: %@", step);
-}
-
 typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 
 @interface WMSheet () <UITextFieldDelegate, UIGestureRecognizerDelegate>
@@ -44,10 +33,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 @property (nonatomic, copy)   NSString      *statusText;
 @property (nonatomic)         BOOL           busy;
 @property (nonatomic)         NSInteger      generation;
-
-// who this chat is with (read from the header) + how many screens we've captured
-@property (nonatomic, copy)   NSString      *contactName;
-@property (nonatomic)         NSInteger      screensWanted;
 
 // on-device reading
 @property (nonatomic)         BOOL           ocrDone;
@@ -83,7 +68,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         _chips = [NSMutableArray array];
         _currentMode = -1;
         _page = WMPageQuick;
-        _screensWanted = MAX(1, (NSInteger)_frames.count);
         [[WMSettings shared] reload];
         _provider = [WMSettings shared].provider;
         self.modalPresentationStyle = UIModalPresentationOverFullScreen;
@@ -145,30 +129,12 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 
     // read the chat on-device right away (free, local)
     [WMOCR transcriptFromFrames:_frames completion:^(NSString *t, NSInteger n) {
-        WMCrumb(@"ocr:cb");
         self.ocrDone = YES;
         self.transcript = t;
         self.ocrCount = n;
         [self _updateReadLabel];
         if (self.generateWhenReady) { self.generateWhenReady = NO; [self _generate]; }
-        // TEMP: contact-name/gender OCR disabled while isolating the Write-with-AI crash.
-        // [self _detectContactName];
-        WMCrumb(@"ocr:end");
     }];
-}
-
-// Read the chat's name from the newest frame's header, then pre-warm the gender guess.
-- (void)_detectContactName {
-    UIImage *frame = _frames.lastObject;       // frames are oldest-first; the newest has the header
-    if (!frame) return;
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        NSString *nm = nil;
-        @try { nm = [WMOCR contactNameFromFrame:frame]; } @catch (NSException *e) { nm = nil; }
-        if (nm.length == 0) return;
-        NSString *bundle = [NSBundle mainBundle].bundleIdentifier;
-        dispatch_async(dispatch_get_main_queue(), ^{ self.contactName = nm; });
-        @try { [WMContacts ensureGenderForApp:bundle name:nm]; } @catch (NSException *e) {}  // cached for later
-    });
 }
 
 - (void)_rebuild {
@@ -179,16 +145,14 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     CGFloat W = self.view.bounds.size.width;
     CGFloat tx = sub ? 50 : 16;
     _titleLabel.frame = CGRectMake(tx, 22, W - tx - 60, 28);
-    _titleLabel.text = _page == WMPageAI   ? @"✨ Write with AI"
-                     : _page == WMPageKeys ? @"\U0001F511 API keys & model"
-                     : [NSString stringWithFormat:@"\U0001FABD Wingman · %@", [WMApps currentAppName]];
+    _titleLabel.text = _page == WMPageAI   ? @"Write with AI"
+                     : _page == WMPageKeys ? @"API keys & model"
+                     : [NSString stringWithFormat:@"Wingman · %@", [WMApps currentAppName]];
     CGFloat y = _page == WMPageAI   ? [self _buildAIPage]
               : _page == WMPageKeys ? [self _buildKeysPage]
               : [self _buildQuickPage];
-    if (_page == WMPageAI) WMCrumb(@"rebuild:afterBuild");
     _scroll.contentSize = CGSizeMake(W, y + 40);
     [_scroll setContentOffset:CGPointZero animated:NO];
-    if (_page == WMPageAI) WMCrumb(@"rebuild:end");
 }
 
 - (UILabel *)_label:(NSString *)t size:(CGFloat)s bold:(BOOL)b color:(UIColor *)c {
@@ -353,26 +317,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     [self presentViewController:a animated:YES completion:nil];
 }
 
-- (void)_goAI {
-    WMCrumb(@"goAI");
-    @try {
-        _page = WMPageAI;
-        [self _rebuild];
-        WMCrumb(@"goAI:afterRebuild");
-        [self.view layoutIfNeeded];   // force layout now so a layout-time exception is caught here
-        WMCrumb(@"goAI:afterLayout");
-        dispatch_async(dispatch_get_main_queue(), ^{ WMCrumb(@"goAI:nextloop"); });
-    } @catch (NSException *e) {
-        // Turn an Objective-C exception into a readable message instead of a force-close,
-        // and recover to the quick-replies page. (EXC_BAD_ACCESS can't be caught here.)
-        NSString *last = [[NSUserDefaults standardUserDefaults] stringForKey:@"com.adarsh.wingman.lastAIStep"];
-        _page = WMPageQuick;
-        [self _rebuild];
-        [self _alert:@"Wingman hit an error opening the AI page"
-             message:[NSString stringWithFormat:@"%@: %@\n(last step: %@)",
-                      e.name ?: @"error", e.reason ?: @"?", last ?: @"(none)"]];
-    }
-}
+- (void)_goAI    { _page = WMPageAI;    [self _rebuild]; }
 - (void)_goQuick { [self.view endEditing:YES]; _page = WMPageQuick; [self _rebuild]; }
 
 - (void)_goKeys {
@@ -481,8 +426,8 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     y += 54;
 
     UILabel *note = [self _label:
-        @"The key is saved to a shared file every app can read, so it works in Instagram, Reddit, "
-         "X and the rest, not just the app you typed it in. Verify confirms it."
+        @"The key is stored for every app when iOS allows it, otherwise just for this app. "
+         "Verify tells you which happened."
                             size:12 bold:NO color:[UIColor colorWithWhite:0.45 alpha:1]];
     note.numberOfLines = 0; note.adjustsFontSizeToFitWidth = NO;
     CGSize nf = [note sizeThatFits:CGSizeMake(inner, CGFLOAT_MAX)];
@@ -564,30 +509,15 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 #pragma mark - page 2: AI
 
 - (CGFloat)_buildAIPage {
-    WMCrumb(@"build:start");
     CGFloat W = self.view.bounds.size.width, pad = 16, inner = W - 2*pad, y = 4;
 
     y = [self _addFramesStripAtY:y height:72] + 4;
-    WMCrumb(@"build:afterFrames");
     UILabel *read = [self _label:@"" size:11 bold:NO color:[UIColor colorWithWhite:0.5 alpha:1]];
     read.frame = CGRectMake(pad, y, inner, 16);
     [_scroll addSubview:read];
     _readLabel = read;
     [self _updateReadLabel];
     y += 26;
-
-    // scroll older + per-contact notes
-    CGFloat halfW = (inner - 8) / 2;
-    UIButton *older = [self _pill:@"⟲  Scroll Older" color:WM_FIELD action:@selector(_scrollOlder)
-                            frame:CGRectMake(pad, y, halfW, 36)];
-    older.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    [_scroll addSubview:older];
-    UIButton *notes = [self _pill:@"\U0001F4DD  Notes" color:WM_FIELD action:@selector(_editNotes)
-                            frame:CGRectMake(pad + halfW + 8, y, halfW, 36)];
-    notes.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    [_scroll addSubview:notes];
-    y += 46;
-    WMCrumb(@"build:afterButtons");
 
     // provider switch
     UILabel *pl = [self _label:@"AI" size:13 bold:YES color:[UIColor colorWithWhite:0.75 alpha:1]];
@@ -621,12 +551,9 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     [mb addTarget:self action:@selector(_modelTapped) forControlEvents:UIControlEventTouchUpInside];
     [_scroll addSubview:mb];
     _modelButton = mb;
-    WMCrumb(@"build:beforeModelUpdate");
     [self _updateModelButton];
-    WMCrumb(@"build:beforePrefetch");
-    [self _prefetchModels];   // re-enabled; the picker (below) is no-op'd to test if IT is the crash
+    [self _prefetchModels];
     y += 52;
-    WMCrumb(@"build:afterModel");
 
     // context
     UILabel *ctxL = [self _label:@"What's the context? (optional)" size:13 bold:NO color:[UIColor colorWithWhite:0.6 alpha:1]];
@@ -671,7 +598,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     y += 24;
     NSInteger cols = 3; CGFloat gap = 8, chipH = 42;
     CGFloat chipW = (inner - gap * (cols - 1)) / cols;
-    WMCrumb(@"build:beforeStyles");
     for (NSInteger i = 0; i < WMReplyModeCount; i++) {
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
         b.frame = CGRectMake(pad + (i % cols) * (chipW + gap), y + (i / cols) * (chipH + gap), chipW, chipH);
@@ -690,7 +616,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         [_chips addObject:b];
     }
     y += ((WMReplyModeCount + cols - 1) / cols) * (chipH + gap) + 10;
-    WMCrumb(@"build:afterStyles");
 
     _resultsTop = y;
     UIView *rv = [[UIView alloc] initWithFrame:CGRectMake(0, y, W, 0)];
@@ -698,7 +623,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     _resultsView = rv;
     if (_replies.count)      [self _showReplies];
     else if (_statusText)    [self _showStatus:_statusText spinner:_busy];
-    WMCrumb(@"build:done");
     return y + _resultsView.frame.size.height;
 }
 
@@ -762,23 +686,16 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     if (!_models) _models = [NSMutableDictionary dictionary];
     if (!_autoPickerShown) _autoPickerShown = [NSMutableSet set];
     [WMModels fetchForProvider:p force:NO completion:^(NSArray *models, NSError *err) {
-        @try {
-            WMCrumb(@"prefetch:cb");
-            if (!models.count) return;              // no key / offline: stay quiet
-            self.models[@(p)] = models;
-            if (p != self.provider) return;
-            [self _updateModelButton];
-            WMSettings *s = [WMSettings shared];
-            BOOL missing = ![self _nameForModel:[s modelForProvider:p]];
-            if ((![s hasChosenModelForProvider:p] || missing) && ![self.autoPickerShown containsObject:@(p)]
-                && self.page == WMPageAI && !self.presentedViewController) {
-                [self.autoPickerShown addObject:@(p)];
-                WMCrumb(@"prefetch:present");
-                [self _presentModelPicker:models];
-            }
-            WMCrumb(@"prefetch:cbEnd");
-        } @catch (NSException *e) {
-            WMCrumb([@"prefetch:EXC " stringByAppendingString:(e.reason ?: e.name ?: @"?")]);
+        if (!models.count) return;                  // no key / offline: stay quiet
+        self.models[@(p)] = models;
+        if (p != self.provider) return;
+        [self _updateModelButton];
+        WMSettings *s = [WMSettings shared];
+        BOOL missing = ![self _nameForModel:[s modelForProvider:p]];
+        if ((![s hasChosenModelForProvider:p] || missing) && ![self.autoPickerShown containsObject:@(p)]
+            && self.page == WMPageAI && !self.presentedViewController) {
+            [self.autoPickerShown addObject:@(p)];
+            [self _presentModelPicker:models];
         }
     }];
 }
@@ -811,11 +728,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 }
 
 - (void)_presentModelPicker:(NSArray<NSDictionary *> *)models {
-    WMCrumb(@"picker:start");
-    if (!self.isViewLoaded || self.view.window == nil || self.presentedViewController) {
-        WMCrumb(@"picker:skip");
-        return;
-    }
     WMAPIProvider p = _provider;
     NSString *cur = [[WMSettings shared] modelForProvider:p];
     UIAlertController *a = [UIAlertController
@@ -845,12 +757,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     a.popoverPresentationController.sourceView = _modelButton ?: self.view;
-    @try {
-        [self presentViewController:a animated:YES completion:nil];
-        WMCrumb(@"picker:presented");
-    } @catch (NSException *e) {
-        WMCrumb([@"picker:EXC " stringByAppendingString:(e.reason ?: e.name ?: @"?")]);
-    }
+    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)_alert:(NSString *)title message:(NSString *)msg {
@@ -887,15 +794,13 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     _replies = nil;
     [self _showStatus:msg spinner:YES];
 
-    NSString *name = _contactName;
-    NSString *typed = _contextText ?: @"";
-    NSString *bundle = [NSBundle mainBundle].bundleIdentifier;
-    WMAPIProvider provider = _provider;
-    NSArray *frames = _frames;
-    NSString *transcript = _transcript;
-    WMReplyLength length = _length;
-
-    void (^onDone)(NSArray<NSString *> *, NSError *) = ^(NSArray<NSString *> *replies, NSError *err) {
+    [[WMAPIClient shared] generateRepliesWithProvider:_provider
+                                               frames:_frames
+                                           transcript:_transcript
+                                              context:_contextText ?: @""
+                                                 mode:mode
+                                               length:_length
+                                           completion:^(NSArray<NSString *> *replies, NSError *err) {
         if (gen != self.generation) return;
         if (err || replies.count == 0) {
             [self _showStatus:[NSString stringWithFormat:@"⚠️ %@",
@@ -905,80 +810,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         self.replies = replies;
         self.statusText = nil; self.busy = NO;
         if (self.page == WMPageAI) [self _showReplies];
-    };
-
-    // Build the context (who they are, likely gender, saved notes, then my own text) off the
-    // main thread, since the gender guess may hit the network the first time for a new contact.
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *gender = name.length ? [WMContacts ensureGenderForApp:bundle name:name] : @"";
-        NSString *ctx = [WMContacts promptContextForApp:bundle name:name gender:gender typed:typed];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (gen != self.generation) return;
-            [[WMAPIClient shared] generateRepliesWithProvider:provider
-                                                       frames:frames
-                                                   transcript:transcript
-                                                      context:ctx
-                                                         mode:mode
-                                                       length:length
-                                                   completion:onDone];
-        });
-    });
-}
-
-#pragma mark - scroll older + notes
-
-- (void)_scrollOlder {
-    [self.view endEditing:YES];
-    if (_page != WMPageAI) { _page = WMPageAI; [self _rebuild]; }
-    _screensWanted = MIN(_screensWanted + 2, 8);
-    _replies = nil;
-    [self _showStatus:[NSString stringWithFormat:@"Grabbing %ld screens of older messages...",
-                       (long)_screensWanted] spinner:YES];
-    [WMCapture dismissKeyboardInChat];
-    [WMCapture scrollCaptureHidingView:[WMBubble shared].overlayWindow
-                               screens:_screensWanted
-                            completion:^(NSArray<UIImage *> *frames) {
-        if (frames.count) { self.frames = frames; [self _reloadAfterRecapture]; }
-        else [self _showStatus:@"Couldn't grab more from this screen." spinner:NO];
     }];
-}
-
-// re-OCR the new frames and refresh the AI page (frame strip, read label, contact name)
-- (void)_reloadAfterRecapture {
-    _ocrDone = NO; _transcript = nil; _ocrCount = 0; _statusText = nil; _replies = nil;
-    [self _rebuild];
-    [WMOCR transcriptFromFrames:_frames completion:^(NSString *t, NSInteger n) {
-        self.ocrDone = YES; self.transcript = t; self.ocrCount = n;
-        [self _updateReadLabel];
-        // [self _detectContactName];  // TEMP disabled while isolating the crash
-    }];
-}
-
-- (void)_editNotes {
-    NSString *name = _contactName;
-    if (name.length == 0) {
-        [self _alert:@"Who is this chat with?"
-             message:@"Wingman couldn't read the name from the top of the chat. Open the chat so the "
-                     "name shows in the header, then tap the bubble again."];
-        return;
-    }
-    NSString *bundle = [NSBundle mainBundle].bundleIdentifier;
-    UIAlertController *a = [UIAlertController
-        alertControllerWithTitle:[NSString stringWithFormat:@"Notes · %@", name]
-                         message:@"Likes, dislikes, anything worth remembering. Saved on this phone and used in replies."
-                  preferredStyle:UIAlertControllerStyleAlert];
-    [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
-        tf.text = [WMContacts noteForApp:bundle name:name];
-        tf.placeholder = @"e.g. loves hiking, hates smokers, from Pune";
-        tf.autocapitalizationType = UITextAutocapitalizationTypeSentences;
-        tf.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-    [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Save" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) {
-        [WMContacts setNote:a.textFields.firstObject.text forApp:bundle name:name];
-        [WMSheet _toast:@"Saved ✓" in:self.view];
-    }]];
-    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)_clearResults {

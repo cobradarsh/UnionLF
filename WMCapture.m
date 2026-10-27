@@ -16,10 +16,7 @@ static CGFloat const kWMCaptureScale = 1.5;   // ~645 px wide on a Pro Max
     fmt.opaque = YES;
     UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:win.bounds.size format:fmt];
     return [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-        // afterScreenUpdates:NO on purpose. YES flushes pending screen updates, and combined with
-        // the keyboard being dismissed right before capture it produced a bad frame that corrupted
-        // memory downstream. The view is already settled (we wait before capturing), so NO is clean.
-        [win drawViewHierarchyInRect:win.bounds afterScreenUpdates:NO];
+        [win drawViewHierarchyInRect:win.bounds afterScreenUpdates:YES];
     }];
 }
 
@@ -33,20 +30,8 @@ static CGFloat const kWMCaptureScale = 1.5;   // ~645 px wide on a Pro Max
     return img ? @[img] : @[];
 }
 
-// drop the chat app's keyboard so the list grows and more messages are in frame
-+ (void)dismissKeyboardInChat {
-    [[self _keyWindow] endEditing:YES];
-}
-
 // ── scrolling capture (current screen + up to 2 older) ────
 + (void)scrollCaptureHidingView:(UIView *)viewToHide
-                     completion:(void(^)(NSArray<UIImage *> *frames))done {
-    [self scrollCaptureHidingView:viewToHide screens:3 completion:done];
-}
-
-// ── scrolling capture of a chosen number of screens (Scroll Older) ────
-+ (void)scrollCaptureHidingView:(UIView *)viewToHide
-                        screens:(NSInteger)screens
                      completion:(void(^)(NSArray<UIImage *> *frames))done {
 
     UIWindow *win = [self _keyWindow];
@@ -64,7 +49,7 @@ static CGFloat const kWMCaptureScale = 1.5;   // ~645 px wide on a Pro Max
     CGFloat maxY     = MAX(minY, sv.contentSize.height - sv.bounds.size.height + sv.adjustedContentInset.bottom);
 
     NSMutableArray<UIImage *> *frames = [NSMutableArray array];
-    __block NSInteger remaining = MAX(1, screens);
+    __block NSInteger remaining = 3;
     __block void (^step)(void);
     __weak __block void (^weakStep)(void);
 

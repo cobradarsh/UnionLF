@@ -182,43 +182,6 @@ typedef struct { CGFloat minX, maxX, top, bottom; } WMBox;
     return msgs;
 }
 
-#pragma mark - contact name (chat header)
-
-// Best guess at the chat's title: the prominent text in the header band, which the
-// transcript pass deliberately drops. Used for the gender guess and per-contact memory.
-+ (NSString *)contactNameFromFrame:(UIImage *)img {
-    CGImageRef cg = img.CGImage;
-    if (!cg) return nil;
-
-    VNRecognizeTextRequest *req = [[VNRecognizeTextRequest alloc] init];
-    req.recognitionLevel = VNRequestTextRecognitionLevelAccurate;
-    req.usesLanguageCorrection = NO;
-    req.recognitionLanguages = @[@"en-US"];
-    VNImageRequestHandler *h = [[VNImageRequestHandler alloc] initWithCGImage:cg options:@{}];
-    if (![h performRequests:@[req] error:nil]) return nil;
-
-    NSString *best = nil;
-    CGFloat bestScore = -1;
-    for (VNRecognizedTextObservation *o in req.results) {
-        NSString *txt = [[o topCandidates:1].firstObject.string
-                         stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (txt.length == 0 || txt.length > 30) continue;
-        CGRect b = o.boundingBox;                    // normalized, origin bottom-left
-        CGFloat top = 1.0 - CGRectGetMaxY(b);
-        if (top < 0.03 || top > 0.14) continue;      // header band only (below status bar, above chat)
-        if ([self isSystemNotice:txt]) continue;
-        if ([txt rangeOfCharacterFromSet:[NSCharacterSet letterCharacterSet]].location == NSNotFound) continue;
-        NSString *lc = txt.lowercaseString;
-        if ([lc isEqualToString:@"online"] || [lc hasPrefix:@"last seen"] || [lc hasPrefix:@"typing"] ||
-            [lc isEqualToString:@"back"] || [lc containsString:@"active now"] || [lc isEqualToString:@"chats"])
-            continue;
-        CGFloat midX = CGRectGetMidX(b);
-        CGFloat score = b.size.height * 100.0 - fabs(midX - 0.5) * 8.0;   // taller + more central wins
-        if (score > bestScore) { bestScore = score; best = txt; }
-    }
-    return best;
-}
-
 #pragma mark - public
 
 + (void)transcriptFromFrames:(NSArray<UIImage *> *)frames

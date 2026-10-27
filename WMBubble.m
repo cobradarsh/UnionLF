@@ -162,9 +162,8 @@ static NSString *const kWMPosKey = @"com.adarsh.wingman.bubblePos";
 - (void)_tapped {
     if (_capturing) return;
     _capturing = YES;
-    [WMCapture dismissKeyboardInChat];   // minimise the keyboard so earlier messages come into frame
     [self hide];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.30 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         NSArray<UIImage *> *frames = [WMCapture screenshotHidingView:self.overlayWindow];
         self.capturing = NO;
@@ -177,7 +176,6 @@ static NSString *const kWMPosKey = @"com.adarsh.wingman.bubblePos";
     if (gr.state != UIGestureRecognizerStateBegan || _capturing) return;
     _capturing = YES;
     [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
-    [WMCapture dismissKeyboardInChat];   // minimise the keyboard before the scrolling capture
     [self hide];
     [WMCapture scrollCaptureHidingView:self.overlayWindow completion:^(NSArray<UIImage *> *frames) {
         self.capturing = NO;
