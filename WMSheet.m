@@ -147,7 +147,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     _titleLabel.frame = CGRectMake(tx, 22, W - tx - 60, 28);
     _titleLabel.text = _page == WMPageAI   ? @"Write with AI"
                      : _page == WMPageKeys ? @"API keys & model"
-                     : [NSString stringWithFormat:@"Wingman %@ · %@", @"v1.7.9", [WMApps currentAppName]];
+                     : [NSString stringWithFormat:@"Wingman %@ · %@", @"v1.8.0", [WMApps currentAppName]];
     CGFloat y = _page == WMPageAI   ? [self _buildAIPage]
               : _page == WMPageKeys ? [self _buildKeysPage]
               : [self _buildQuickPage];

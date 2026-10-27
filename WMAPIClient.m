@@ -6,15 +6,28 @@
 
 #import "Wingman.h"
 
-// Private session, created once. Its delegate queue is a serial queue we own,
-// so no Wingman network callback ever runs on the host app's shared session
-// queue (which triggered the recursive-lock SIGTRAP inside WhatsApp).
+// Private session, created once, fully isolated from the host app (WhatsApp).
+//
+// An EPHEMERAL configuration is the key: it gives us our own in-memory cookie
+// store, credential store and URL cache instead of the process-wide shared
+// ones. Touching the *shared* stores posts notifications (cookies-changed,
+// credentials-changed, cache) that WhatsApp observes -- and its observer is
+// what hit the recursive os_unfair_lock abort (SIGTRAP). With ephemeral
+// storage our requests post none of those, so WhatsApp's observers never fire.
+// We also clear protocolClasses so any URL-protocol the host injected into the
+// default config (its "XPlugins" interception layer) can't wrap our requests.
+// Our own serial delegate queue keeps every callback off the host's queues.
 NSURLSession *WMPrivateSession(void) {
     static NSURLSession *session;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
-        cfg.waitsForConnectivity = NO;
+        NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+        cfg.waitsForConnectivity   = NO;
+        cfg.HTTPCookieStorage      = nil;   // no shared-cookie notifications
+        cfg.URLCredentialStorage   = nil;   // no shared-credential notifications
+        cfg.URLCache               = nil;
+        cfg.HTTPShouldSetCookies   = NO;
+        cfg.protocolClasses        = @[];   // bypass any host-injected NSURLProtocol
         NSOperationQueue *q = [[NSOperationQueue alloc] init];
         q.name = @"com.adarsh.wingman.net";
         q.maxConcurrentOperationCount = 1;   // serial: our callbacks never overlap
