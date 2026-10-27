@@ -624,7 +624,9 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     WMCrumb(@"build:beforeModelUpdate");
     [self _updateModelButton];
     WMCrumb(@"build:beforePrefetch");
-    [self _prefetchModels];
+    // TEMP: auto model-fetch disabled while isolating the WhatsApp crash (it's the one
+    // network call that runs on open in WhatsApp, where the key is found, but not in X).
+    // [self _prefetchModels];
     y += 52;
     WMCrumb(@"build:afterModel");
 
