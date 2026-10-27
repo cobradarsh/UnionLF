@@ -150,9 +150,10 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         self.ocrCount = n;
         [self _updateReadLabel];
         if (self.generateWhenReady) { self.generateWhenReady = NO; [self _generate]; }
+        // Run the contact-name OCR only AFTER the transcript OCR finishes, never alongside it:
+        // two Vision passes running at once on the same frames corrupted memory and crashed later.
+        [self _detectContactName];
     }];
-
-    [self _detectContactName];
 }
 
 // Read the chat's name from the newest frame's header, then pre-warm the gender guess.
@@ -357,6 +358,8 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
         _page = WMPageAI;
         [self _rebuild];
         WMCrumb(@"goAI:afterRebuild");
+        [self.view layoutIfNeeded];   // force layout now so a layout-time exception is caught here
+        WMCrumb(@"goAI:afterLayout");
     } @catch (NSException *e) {
         // Turn an Objective-C exception into a readable message instead of a force-close,
         // and recover to the quick-replies page. (EXC_BAD_ACCESS can't be caught here.)
@@ -945,8 +948,8 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     [WMOCR transcriptFromFrames:_frames completion:^(NSString *t, NSInteger n) {
         self.ocrDone = YES; self.transcript = t; self.ocrCount = n;
         [self _updateReadLabel];
+        [self _detectContactName];   // after the transcript OCR, never concurrently with it
     }];
-    [self _detectContactName];
 }
 
 - (void)_editNotes {
