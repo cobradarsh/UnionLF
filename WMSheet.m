@@ -160,11 +160,12 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     UIImage *frame = _frames.lastObject;       // frames are oldest-first; the newest has the header
     if (!frame) return;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        NSString *nm = [WMOCR contactNameFromFrame:frame];
+        NSString *nm = nil;
+        @try { nm = [WMOCR contactNameFromFrame:frame]; } @catch (NSException *e) { nm = nil; }
         if (nm.length == 0) return;
         NSString *bundle = [NSBundle mainBundle].bundleIdentifier;
         dispatch_async(dispatch_get_main_queue(), ^{ self.contactName = nm; });
-        [WMContacts ensureGenderForApp:bundle name:nm];   // cached for when a reply is generated
+        @try { [WMContacts ensureGenderForApp:bundle name:nm]; } @catch (NSException *e) {}  // cached for later
     });
 }
 
@@ -182,8 +183,10 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     CGFloat y = _page == WMPageAI   ? [self _buildAIPage]
               : _page == WMPageKeys ? [self _buildKeysPage]
               : [self _buildQuickPage];
+    if (_page == WMPageAI) WMCrumb(@"rebuild:afterBuild");
     _scroll.contentSize = CGSizeMake(W, y + 40);
     [_scroll setContentOffset:CGPointZero animated:NO];
+    if (_page == WMPageAI) WMCrumb(@"rebuild:end");
 }
 
 - (UILabel *)_label:(NSString *)t size:(CGFloat)s bold:(BOOL)b color:(UIColor *)c {
@@ -353,6 +356,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     @try {
         _page = WMPageAI;
         [self _rebuild];
+        WMCrumb(@"goAI:afterRebuild");
     } @catch (NSException *e) {
         // Turn an Objective-C exception into a readable message instead of a force-close,
         // and recover to the quick-replies page. (EXC_BAD_ACCESS can't be caught here.)
@@ -753,16 +757,23 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     if (!_models) _models = [NSMutableDictionary dictionary];
     if (!_autoPickerShown) _autoPickerShown = [NSMutableSet set];
     [WMModels fetchForProvider:p force:NO completion:^(NSArray *models, NSError *err) {
-        if (!models.count) return;                  // no key / offline: stay quiet
-        self.models[@(p)] = models;
-        if (p != self.provider) return;
-        [self _updateModelButton];
-        WMSettings *s = [WMSettings shared];
-        BOOL missing = ![self _nameForModel:[s modelForProvider:p]];
-        if ((![s hasChosenModelForProvider:p] || missing) && ![self.autoPickerShown containsObject:@(p)]
-            && self.page == WMPageAI && !self.presentedViewController) {
-            [self.autoPickerShown addObject:@(p)];
-            [self _presentModelPicker:models];
+        @try {
+            WMCrumb(@"prefetch:cb");
+            if (!models.count) return;              // no key / offline: stay quiet
+            self.models[@(p)] = models;
+            if (p != self.provider) return;
+            [self _updateModelButton];
+            WMSettings *s = [WMSettings shared];
+            BOOL missing = ![self _nameForModel:[s modelForProvider:p]];
+            if ((![s hasChosenModelForProvider:p] || missing) && ![self.autoPickerShown containsObject:@(p)]
+                && self.page == WMPageAI && !self.presentedViewController) {
+                [self.autoPickerShown addObject:@(p)];
+                WMCrumb(@"prefetch:present");
+                [self _presentModelPicker:models];
+            }
+            WMCrumb(@"prefetch:cbEnd");
+        } @catch (NSException *e) {
+            WMCrumb([@"prefetch:EXC " stringByAppendingString:(e.reason ?: e.name ?: @"?")]);
         }
     }];
 }
@@ -795,6 +806,11 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 }
 
 - (void)_presentModelPicker:(NSArray<NSDictionary *> *)models {
+    WMCrumb(@"picker:start");
+    if (!self.isViewLoaded || self.view.window == nil || self.presentedViewController) {
+        WMCrumb(@"picker:skip");
+        return;
+    }
     WMAPIProvider p = _provider;
     NSString *cur = [[WMSettings shared] modelForProvider:p];
     UIAlertController *a = [UIAlertController
@@ -824,7 +840,12 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     a.popoverPresentationController.sourceView = _modelButton ?: self.view;
-    [self presentViewController:a animated:YES completion:nil];
+    @try {
+        [self presentViewController:a animated:YES completion:nil];
+        WMCrumb(@"picker:presented");
+    } @catch (NSException *e) {
+        WMCrumb([@"picker:EXC " stringByAppendingString:(e.reason ?: e.name ?: @"?")]);
+    }
 }
 
 - (void)_alert:(NSString *)title message:(NSString *)msg {
