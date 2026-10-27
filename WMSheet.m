@@ -624,9 +624,7 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
     WMCrumb(@"build:beforeModelUpdate");
     [self _updateModelButton];
     WMCrumb(@"build:beforePrefetch");
-    // TEMP: auto model-fetch disabled while isolating the WhatsApp crash (it's the one
-    // network call that runs on open in WhatsApp, where the key is found, but not in X).
-    // [self _prefetchModels];
+    [self _prefetchModels];   // re-enabled; the picker (below) is no-op'd to test if IT is the crash
     y += 52;
     WMCrumb(@"build:afterModel");
 
@@ -814,6 +812,9 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 
 - (void)_presentModelPicker:(NSArray<NSDictionary *> *)models {
     WMCrumb(@"picker:start");
+    // TEMP: no-op the model picker to test whether presenting it is the WhatsApp crash.
+    WMCrumb([NSString stringWithFormat:@"picker:NOOP (%lu models)", (unsigned long)models.count]);
+    return;
     if (!self.isViewLoaded || self.view.window == nil || self.presentedViewController) {
         WMCrumb(@"picker:skip");
         return;
