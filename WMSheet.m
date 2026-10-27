@@ -812,9 +812,6 @@ typedef NS_ENUM(NSInteger, WMPage) { WMPageQuick, WMPageAI, WMPageKeys };
 
 - (void)_presentModelPicker:(NSArray<NSDictionary *> *)models {
     WMCrumb(@"picker:start");
-    // TEMP: no-op the model picker to test whether presenting it is the WhatsApp crash.
-    WMCrumb([NSString stringWithFormat:@"picker:NOOP (%lu models)", (unsigned long)models.count]);
-    return;
     if (!self.isViewLoaded || self.view.window == nil || self.presentedViewController) {
         WMCrumb(@"picker:skip");
         return;

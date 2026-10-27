@@ -16,7 +16,10 @@ static CGFloat const kWMCaptureScale = 1.5;   // ~645 px wide on a Pro Max
     fmt.opaque = YES;
     UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:win.bounds.size format:fmt];
     return [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-        [win drawViewHierarchyInRect:win.bounds afterScreenUpdates:YES];
+        // afterScreenUpdates:NO on purpose. YES flushes pending screen updates, and combined with
+        // the keyboard being dismissed right before capture it produced a bad frame that corrupted
+        // memory downstream. The view is already settled (we wait before capturing), so NO is clean.
+        [win drawViewHierarchyInRect:win.bounds afterScreenUpdates:NO];
     }];
 }
 
