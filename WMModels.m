@@ -44,6 +44,15 @@ static NSMutableDictionary *gCache;       // "provider|key" -> @{ "at": date, "m
                      key:(NSString *)explicitKey
                    force:(BOOL)force
               completion:(void(^)(NSArray<NSDictionary *> *models, NSError *err))done {
+    // === DIAGNOSTIC (v1.8.1-TEST): no network call at all ===
+    // "Verify and load models" returns a canned list without any HTTPS request,
+    // to prove whether the WhatsApp crash is the network layer.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        done(@[ @{ @"id": @"test-no-network", @"name": @"TEST — no network was called" } ], nil);
+    });
+    return;
+
     WMSettings *s = [WMSettings shared];
     NSString *name = (p == WMAPIProviderDeepSeek) ? @"DeepSeek" : @"Claude";
     NSString *key = explicitKey.length

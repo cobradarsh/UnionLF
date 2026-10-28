@@ -1,6 +1,6 @@
 Package: com.adarsh.wingman
 Name: Wingman
-Version: 1.8.0
+Version: 1.8.1
 Architecture: iphoneos-arm64e
 Description: Personal AI reply assistant for chat and dating apps. A floating bubble captures the chat (dropping the keyboard so earlier messages show), offers 5 editable quick replies per app, or writes 3 AI replies in one of 20 styles (incl. dating/flirt) using Claude or DeepSeek. Reads the chat on-device, remembers dating matches with a name-based gender guess and per-contact notes, and types the reply straight into the message box. API keys now sync across all apps.
 Maintainer: Adarsh

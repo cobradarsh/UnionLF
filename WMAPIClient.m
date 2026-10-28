@@ -52,6 +52,19 @@ NSURLSession *WMPrivateSession(void) {
                                mode:(WMReplyMode)mode
                              length:(WMReplyLength)length
                          completion:(void(^)(NSArray<NSString *> *, NSError *))done {
+    // === DIAGNOSTIC (v1.8.1-TEST): no network call at all ===
+    // Returns canned replies without building or sending any request, to prove
+    // whether the WhatsApp crash is the network layer. If "Write with AI" shows
+    // these lines, the AI path ran with ZERO networking -> the crash was the
+    // network. If it still crashes before this appears, the crash is elsewhere.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        done(@[ @"TEST BUILD — no network was called.",
+                @"If you can read this, the AI path ran without any HTTPS request.",
+                @"So the crash was the network layer; next build rebuilds it on Network.framework." ], nil);
+    });
+    return;
+
     WMSettings *s = [WMSettings shared];
     [s reload];
     if (provider == WMAPIProviderDeepSeek)
