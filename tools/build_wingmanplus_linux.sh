@@ -30,11 +30,13 @@ for f in "$BUILD/obj/Tweak_logos.m" \
 done
 
 echo "== Link + sign =="
-"${LD64:-ld64.lld-18}" -dylib -arch arm64e \
+# Link through the roothide toolchain's clang driver (NOT system ld64.lld-18):
+# lld can't emit arm64e authenticated-pointer relocations, but the toolchain's
+# own linker can. clang auto-links libobjc/libSystem.
+"$CLANG" -dynamiclib -target arm64e-apple-ios15.0 -isysroot "$SDK" \
   -install_name "@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/WingmanPlus.dylib" \
-  -platform_version ios 15.0.0 16.5.0 -syslibroot "$SDK" \
-  -L"$SDK/usr/lib" -F"$SDK/System/Library/Frameworks" -F"$PF" \
-  -lobjc -lSystem -framework Foundation -framework CoreFoundation \
+  -F"$SDK/System/Library/Frameworks" -F"$PF" \
+  -framework Foundation -framework CoreFoundation \
   -framework UIKit -framework CoreGraphics -framework QuartzCore -framework Vision \
   -o "$BUILD/WingmanPlus.dylib" "${OBJS[@]}"
 ldid -S "$BUILD/WingmanPlus.dylib"
