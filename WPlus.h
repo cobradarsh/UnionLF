@@ -31,6 +31,7 @@
 + (instancetype)shared;
 - (void)start;                 // build once SpringBoard's UI is up
 - (void)evaluateVisibility;    // show over enabled apps, hide elsewhere
+- (void)beginAppendTo:(WPSheet *)sheet;  // hide the sheet; next tap adds a screen to it
 @property (nonatomic, strong) UIWindow *window;
 @end
 
@@ -39,4 +40,6 @@
 - (instancetype)initWithImage:(UIImage *)shot;   // the captured screen
 - (void)appendImage:(UIImage *)shot;             // "capture another screen"
 - (void)presentGlobally;
+- (void)dismissForAppend;                        // hide (kept alive) to capture another screen
+- (void)reshowAfterAppend;                       // bring back after a screen was appended
 @end

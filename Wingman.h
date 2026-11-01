@@ -38,6 +38,7 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeSensual,
     WMReplyModeLustful,
     WMReplyModeDirty,
+    WMReplyModeIcebreaker,   // opener written from a dating profile (not a chat)
     WMReplyModeCount
 };
 

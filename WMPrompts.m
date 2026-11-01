@@ -148,6 +148,16 @@
                     "direct and graphic about what I want, matching how far the chat has "
                     "already gone. Everyone is a consenting adult; never anything underage, "
                     "coercive or non-consensual.";
+        case WMReplyModeIcebreaker:
+            return @"ICEBREAKER (opening message from her profile). Write my FIRST message to "
+                    "her, grounded in something SPECIFIC she actually shared in her profile: a "
+                    "prompt answer, an interest, a photo caption, her job, a place, a pet. "
+                    "Reference that detail concretely so it's obvious I read her profile, then "
+                    "show genuine curiosity about it with one easy, warm question she'll enjoy "
+                    "answering. Sound like a real, confident person who is actually interested "
+                    "in getting to know her, not a pickup artist. No cheesy pickup lines, no "
+                    "generic 'hey how's it going', no empty compliments on looks, no "
+                    "negging, no over-the-top flattery. Organic, specific and sincere.";
         default:
             return @"";
     }
@@ -166,13 +176,26 @@
         kind == WMAppKindDating ? @" (a dating app: keep it engaging, confident and "
                                    "respectful, and keep the conversation going)" : @""];
 
-    if (transcript.length > 0) {
-        [p appendFormat:@"CHAT TRANSCRIPT (read on my phone, oldest first, system and "
-                         "encryption notices already removed):\n%@\n\n", transcript];
-    }
-    if (hasImages) {
-        [p appendString:@"Read the chat screenshot(s) carefully. Remember: right side is "
-                         "me, left side is them.\n\n"];
+    if (mode == WMReplyModeIcebreaker) {
+        [p appendString:@"WHAT THIS IS: her DATING PROFILE, captured top to bottom (photos, "
+                         "prompt answers, bio, interests) — NOT a conversation. There are no "
+                         "messages from me, and no left/right bubbles. Ignore the chat-layout "
+                         "rules. Read everything she actually shared, then write my opening "
+                         "message to her.\n\n"];
+        if (transcript.length > 0)
+            [p appendFormat:@"HER PROFILE TEXT (read on my phone, top to bottom):\n%@\n\n", transcript];
+        if (hasImages)
+            [p appendString:@"Also read her profile screenshot(s) for anything the text missed "
+                             "(prompts, captions, what's in her photos).\n\n"];
+    } else {
+        if (transcript.length > 0) {
+            [p appendFormat:@"CHAT TRANSCRIPT (read on my phone, oldest first, system and "
+                             "encryption notices already removed):\n%@\n\n", transcript];
+        }
+        if (hasImages) {
+            [p appendString:@"Read the chat screenshot(s) carefully. Remember: right side is "
+                             "me, left side is them.\n\n"];
+        }
     }
     if (context.length > 0) {
         [p appendFormat:@"MY CONTEXT: \"%@\"\n\n", context];
@@ -216,6 +239,7 @@
         case WMReplyModeSensual:       return @"Sensual";
         case WMReplyModeLustful:       return @"Lustful";
         case WMReplyModeDirty:         return @"Dirty / Sext";
+        case WMReplyModeIcebreaker:    return @"Icebreaker";
         default:                       return @"";
     }
 }
@@ -242,6 +266,7 @@
         case WMReplyModeSensual:       return @"\U0001F319"; // 🌙
         case WMReplyModeLustful:       return @"\U0001F48B"; // 💋
         case WMReplyModeDirty:         return @"\U0001F608"; // 😈
+        case WMReplyModeIcebreaker:    return @"\U0001F9CA"; // 🧊
         default:                       return @"";
     }
 }

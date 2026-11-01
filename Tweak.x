@@ -1,25 +1,41 @@
-/*  Tweak.x — Wingman Plus entry point.
+/*  Tweak.x — Wingman Plus entry point (SpringBoard only).
 
-    Loaded ONLY into com.apple.springboard (see WingmanPlus.plist). We hook
-    nothing in any dating app — this hook is on SpringBoard itself, to start the
-    floating bubble once SpringBoard's UI exists. A slow timer re-checks which
-    app is in front and shows/hides the bubble accordingly.                     */
+    No logos code-injection directive here on purpose: one drags in CydiaSubstrate
+    headers the RootHide Linux toolchain doesn't ship. We don't need it — a plain
+    constructor plus the app-launch notification is enough to start the bubble
+    once SpringBoard's UI is up. The dylib is only ever loaded into SpringBoard
+    (WingmanPlus.plist), never into a dating app.                              */
 
 #import "WPlus.h"
 
 static NSTimer *gVisTimer;
 
-%hook SpringBoard
-- (void)applicationDidFinishLaunching:(id)application {
-    %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        @try {
-            [[WPBubble shared] start];
-            gVisTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
-                @try { [[WPBubble shared] evaluateVisibility]; } @catch (__unused id e) {}
-            }];
-        } @catch (__unused id e) {}
-    });
+static void WPStart(void) {
+    if (gVisTimer) return;                                   // already running
+    NSString *bid = [NSBundle mainBundle].bundleIdentifier;
+    if (![bid isEqualToString:@"com.apple.springboard"]) return;
+    @try {
+        [[WPBubble shared] start];
+        gVisTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+            @try { [[WPBubble shared] evaluateVisibility]; } @catch (__unused id e) {}
+        }];
+    } @catch (__unused id e) {}
 }
-%end
+
+__attribute__((constructor))
+static void WPInit(void) {
+    @autoreleasepool {
+        // Start once SpringBoard finishes launching…
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:UIApplicationDidFinishLaunchingNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *n) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{ WPStart(); });
+        }];
+        // …or, if it had already launched before we loaded, start a bit later anyway.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{ WPStart(); });
+    }
+}

@@ -12,6 +12,7 @@ NSString *const kWPVersion = @"1.0.0";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
+    WMReplyModeIcebreaker,
     WMReplyModePlanDate, WMReplyModeRomance, WMReplyModeSeduce,
     WMReplyModeSensual,  WMReplyModeLustful, WMReplyModeDirty,
     WMReplyModeFlirty,   WMReplyModeFunny,   WMReplyModeChill
@@ -211,7 +212,7 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
 - (instancetype)initWithImage:(UIImage *)shot {
     if ((self = [super init])) {
         _frames = shot ? [NSMutableArray arrayWithObject:shot] : [NSMutableArray array];
-        _mode = WMReplyModePlanDate;
+        _mode = WMReplyModeIcebreaker;
         _length = WMReplyLengthShort;
     }
     return self;
@@ -259,6 +260,17 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
 
 - (void)_settings { [self.navigationController pushViewController:[WPSettingsVC new] animated:YES]; }
 
+- (NSString *)_genTitle { return _mode == WMReplyModeIcebreaker ? @"Write icebreaker" : @"Write 3 replies"; }
+
+- (void)_addScreen { [[WPBubble shared] beginAppendTo:self]; }
+
+- (void)dismissForAppend { gWPWindow.hidden = YES; }
+- (void)reshowAfterAppend {
+    gWPWindow.hidden = NO;
+    [gWPWindow makeKeyAndVisible];
+    [self _rebuild];                 // refresh the captured-screen count
+}
+
 - (void)_rebuild {
     for (UIView *v in _scroll.subviews) [v removeFromSuperview];
     CGFloat W = self.view.bounds.size.width, m = 16, y = 12;
@@ -305,6 +317,17 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
     [len addTarget:self action:@selector(_len:) forControlEvents:UIControlEventValueChanged];
     [_scroll addSubview:len]; y += 44;
 
+    // add another screen (scroll the profile, then tap the bubble again)
+    UIButton *add = [UIButton buttonWithType:UIButtonTypeSystem];
+    add.frame = CGRectMake(m, y, W-2*m, 40);
+    add.layer.borderColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1].CGColor;
+    add.layer.borderWidth = 1.5; add.layer.cornerRadius = 10;
+    [add setTitleColor:[UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1] forState:UIControlStateNormal];
+    add.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [add setTitle:@"➕  Add another screen (scroll first)" forState:UIControlStateNormal];
+    [add addTarget:self action:@selector(_addScreen) forControlEvents:UIControlEventTouchUpInside];
+    [_scroll addSubview:add]; y += 48;
+
     // generate
     _genBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     _genBtn.frame = CGRectMake(m, y, W-2*m, 48);
@@ -312,16 +335,18 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
     [_genBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     _genBtn.titleLabel.font = [UIFont boldSystemFontOfSize:17];
     _genBtn.layer.cornerRadius = 10;
-    [_genBtn setTitle:@"Write 3 replies" forState:UIControlStateNormal];
+    [_genBtn setTitle:[self _genTitle] forState:UIControlStateNormal];
     [_genBtn addTarget:self action:@selector(_generate) forControlEvents:UIControlEventTouchUpInside];
     _genBtn.enabled = hasKey;
     _genBtn.alpha = hasKey ? 1 : 0.5;
     [_scroll addSubview:_genBtn]; y += 58;
 
-    _status = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
+    _status = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 36)];
     _status.font = [UIFont systemFontOfSize:13]; _status.textColor = UIColor.secondaryLabelColor;
-    _status.text = [NSString stringWithFormat:@"%lu screen%@ captured", (unsigned long)_frames.count, _frames.count==1?@"":@"s"];
-    [_scroll addSubview:_status]; y += 28;
+    _status.numberOfLines = 2;
+    _status.text = [NSString stringWithFormat:@"%lu screen%@ captured. For a full profile, add screens top to bottom.",
+                    (unsigned long)_frames.count, _frames.count==1?@"":@"s"];
+    [_scroll addSubview:_status]; y += 44;
 
     _results = [[UIView alloc] initWithFrame:CGRectMake(0, y, W, 0)];
     [_scroll addSubview:_results];
@@ -335,6 +360,7 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
 - (void)_chip:(UIButton *)b {
     _mode = kWPModes[b.tag];
     for (UIButton *c in _chips) [self _styleChip:c selected:(kWPModes[c.tag] == _mode)];
+    [_genBtn setTitle:[self _genTitle] forState:UIControlStateNormal];
 }
 - (void)_len:(UISegmentedControl *)s { _length = s.selectedSegmentIndex == 1 ? WMReplyLengthLong : WMReplyLengthShort; }
 

@@ -17,6 +17,7 @@ static UIWindowLevel const kBubbleLevel = 100000;
 @property (nonatomic) CGPoint grabOffset;
 @property (nonatomic) BOOL capturing;
 @property (nonatomic) BOOL built;
+@property (nonatomic, weak) WPSheet *pendingSheet;   // set while adding screens to an open sheet
 @end
 
 @implementation WPBubble
@@ -91,6 +92,12 @@ static UIWindowLevel const kBubbleLevel = 100000;
 
 #pragma mark - tap -> capture -> sheet
 
+- (void)beginAppendTo:(WPSheet *)sheet {
+    _pendingSheet = sheet;
+    [sheet dismissForAppend];        // hide the sheet so the user can scroll the app
+    [self evaluateVisibility];       // make sure the bubble is back for the next tap
+}
+
 - (void)_tap {
     if (_capturing) return;
     _capturing = YES;
@@ -100,6 +107,14 @@ static UIWindowLevel const kBubbleLevel = 100000;
     _capturing = NO;
     if (!shot) {
         [self _toast:@"Couldn't read the screen. Try again."];
+        return;
+    }
+    // Adding another screen to a profile capture already in progress?
+    if (_pendingSheet) {
+        WPSheet *sheet = _pendingSheet;
+        _pendingSheet = nil;
+        [sheet appendImage:shot];
+        [sheet reshowAfterAppend];
         return;
     }
     WPSheet *sheet = [[WPSheet alloc] initWithImage:shot];
