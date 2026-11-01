@@ -76,7 +76,9 @@ static UIWindowLevel const kBubbleLevel = 100000;
 #pragma mark - visibility (driven by the frontmost app)
 
 - (void)evaluateVisibility {
-    BOOL wanted = [WPHost wingmanEnabledForFrontmost];
+    // DIAG (v1.0.1): force-show everywhere, even the home screen, to prove the tweak
+    // loads into SpringBoard. Normal build gates on [WPHost wingmanEnabledForFrontmost].
+    BOOL wanted = YES;
     if (!wanted) { _window.hidden = YES; return; }
 
     UIWindowScene *scene = WMActiveScene();
