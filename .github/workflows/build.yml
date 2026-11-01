@@ -4,7 +4,7 @@
 name: Build Wingman (RootHide)
 on:
   push:
-    branches: [main]
+    branches: [main, wingman-plus]
   workflow_dispatch:
 
 jobs:
@@ -51,10 +51,10 @@ jobs:
         run: python3 tests/test_wingman.py
 
       - name: Build the .deb
-        run: THEOS="$HOME/theos" bash tools/build_roothide_linux.sh
+        run: THEOS="$HOME/theos" bash tools/build_wingmanplus_linux.sh
 
       - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
-          name: wingman-roothide-deb
+          name: wingmanplus-roothide-deb
           path: "*.deb"

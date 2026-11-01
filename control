@@ -1,9 +1,9 @@
-Package: com.adarsh.wingman
-Name: Wingman
-Version: 1.8.1
+Package: com.adarsh.wingmanplus
+Name: Wingman Plus
+Version: 1.0.0
 Architecture: iphoneos-arm64e
-Description: Personal AI reply assistant for chat and dating apps. A floating bubble captures the chat (dropping the keyboard so earlier messages show), offers 5 editable quick replies per app, or writes 3 AI replies in one of 20 styles (incl. dating/flirt) using Claude or DeepSeek. Reads the chat on-device, remembers dating matches with a name-based gender guess and per-contact notes, and types the reply straight into the message box. API keys now sync across all apps.
+Description: Dating companion that works even in apps that block tweaks (Hinge). A floating bubble lives in SpringBoard - never injected into the dating app, so nothing crashes - captures the screen, reads the profile or chat on-device, and writes flirty/romantic/dating replies with Claude or DeepSeek. Tap a reply to copy it, then paste it in.
 Maintainer: Adarsh
 Author: Adarsh
 Section: Tweaks
-Depends: ellekit, preferenceloader, com.opa334.altlist
+Depends: ellekit
