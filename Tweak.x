@@ -22,9 +22,22 @@ static void WPStart(void) {
     } @catch (__unused id e) {}
 }
 
+// DIAG: drop a marker the instant the dylib is injected, so we can tell
+// "loaded but no UI" from "never loaded" without relying on any window.
+static void WPWriteLoadMarker(void) {
+    @try {
+        NSString *bid = [NSBundle mainBundle].bundleIdentifier ?: @"?";
+        NSString *line = [NSString stringWithFormat:@"WingmanPlus loaded into %@ at %@\n",
+                          bid, [NSDate date]];
+        NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"wingmanplus_loaded.txt"];
+        [line writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    } @catch (__unused id e) {}
+}
+
 __attribute__((constructor))
 static void WPInit(void) {
     @autoreleasepool {
+        WPWriteLoadMarker();
         // Start once SpringBoard finishes launching…
         [[NSNotificationCenter defaultCenter]
             addObserverForName:UIApplicationDidFinishLaunchingNotification

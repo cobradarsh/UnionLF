@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.1-DIAG";
+NSString *const kWPVersion = @"1.0.2-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -220,10 +220,9 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
 - (void)appendImage:(UIImage *)shot { if (shot) [_frames addObject:shot]; }
 
 - (void)presentGlobally {
-    UIWindowScene *scene = WMActiveScene();
-    if (!scene) return;
+    // Classic window (no scene) so it works reliably inside SpringBoard.
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self];
-    gWPWindow = [[UIWindow alloc] initWithWindowScene:scene];
+    gWPWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     gWPWindow.windowLevel = 100001;                 // just above the bubble
     gWPWindow.rootViewController = nav;
     [gWPWindow makeKeyAndVisible];

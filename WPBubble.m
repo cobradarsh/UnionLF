@@ -1,16 +1,16 @@
 /*  WPBubble.m — the floating Wingman bubble, owned by SpringBoard.
 
-    Because this window lives in SpringBoard (not the dating app) at a very high
-    window level, it composites ABOVE whatever app is in front — the same way the
-    volume HUD and notifications do — while the app underneath never sees it.
-    The window is only bubble-sized, so touches outside it still reach the app.  */
+    Uses a CLASSIC UIWindow (initWithFrame:, no UIWindowScene). In SpringBoard a
+    scene-based window can fail to find a usable scene; a plain high-level window
+    reliably composites over whatever app is in front, the same way the volume
+    HUD does, while the app underneath never sees it. The window is only
+    bubble-sized, so touches outside it still reach the app.                    */
 
 #import "WPlus.h"
 
 static CGFloat   const kBubbleSize = 52;
 static NSString *const kPosKey     = @"com.adarsh.wingmanplus.bubblePos";
-// Above the status bar / app, below nothing that matters to us.
-static UIWindowLevel const kBubbleLevel = 100000;
+static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
 @interface WPBubble ()
 @property (nonatomic, strong) UIView *dot;
@@ -30,17 +30,10 @@ static UIWindowLevel const kBubbleLevel = 100000;
 
 - (void)start { [self evaluateVisibility]; }
 
-#pragma mark - build
+#pragma mark - build (classic window, no scene)
 
-- (void)_buildInScene:(UIWindowScene *)scene {
-    CGRect screen = scene.coordinateSpace.bounds;
-
-    _window = [[UIWindow alloc] initWithWindowScene:scene];
-    _window.windowLevel = kBubbleLevel;
-    _window.backgroundColor = UIColor.clearColor;
-    _window.opaque = NO;
-    _window.rootViewController = [UIViewController new];
-    _window.rootViewController.view.backgroundColor = UIColor.clearColor;
+- (void)_build {
+    CGRect screen = [UIScreen mainScreen].bounds;
 
     CGFloat x = screen.size.width - kBubbleSize - 10;
     CGFloat y = screen.size.height * 0.4;
@@ -49,7 +42,13 @@ static UIWindowLevel const kBubbleLevel = 100000;
         CGPoint p = CGPointFromString(saved);
         if (CGRectContainsPoint(CGRectInset(screen, -2, -2), p)) { x = p.x; y = p.y; }
     }
-    _window.frame = CGRectMake(x, y, kBubbleSize, kBubbleSize);
+
+    _window = [[UIWindow alloc] initWithFrame:CGRectMake(x, y, kBubbleSize, kBubbleSize)];
+    _window.windowLevel = kBubbleLevel;
+    _window.backgroundColor = UIColor.clearColor;
+    _window.opaque = NO;
+    _window.rootViewController = [UIViewController new];
+    _window.rootViewController.view.backgroundColor = UIColor.clearColor;
 
     _dot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, kBubbleSize, kBubbleSize)];
     _dot.backgroundColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1.0]; // dating pink/red
@@ -61,34 +60,25 @@ static UIWindowLevel const kBubbleLevel = 100000;
     [_window.rootViewController.view addSubview:_dot];
 
     UILabel *heart = [[UILabel alloc] initWithFrame:_dot.bounds];
-    heart.text = @"♥";                 // ♥
+    heart.text = @"♥";
     heart.textColor = UIColor.whiteColor;
     heart.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
     heart.textAlignment = NSTextAlignmentCenter;
     [_dot addSubview:heart];
 
     [_dot addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_tap)]];
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_pan:)];
-    [_dot addGestureRecognizer:pan];
+    [_dot addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_pan:)]];
     _built = YES;
 }
 
-#pragma mark - visibility (driven by the frontmost app)
+#pragma mark - visibility
 
 - (void)evaluateVisibility {
-    // DIAG (v1.0.1): force-show everywhere, even the home screen, to prove the tweak
-    // loads into SpringBoard. Normal build gates on [WPHost wingmanEnabledForFrontmost].
+    // DIAG (v1.0.2): force-show everywhere, even the home screen, to prove the tweak
+    // loads. Normal build gates on [WPHost wingmanEnabledForFrontmost].
     BOOL wanted = YES;
     if (!wanted) { _window.hidden = YES; return; }
-
-    UIWindowScene *scene = WMActiveScene();
-    if (!scene) { _window.hidden = YES; return; }
-
-    if (!_built) {
-        [self _buildInScene:scene];
-    } else if (_window.windowScene != scene) {
-        _window.windowScene = scene;                 // SpringBoard handed us a new scene
-    }
+    if (!_built) [self _build];
     if (!_capturing) _window.hidden = NO;
 }
 
@@ -107,14 +97,9 @@ static UIWindowLevel const kBubbleLevel = 100000;
     UIImage *shot = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
                                            restore:^{ ws.window.hidden = NO; }];
     _capturing = NO;
-    if (!shot) {
-        [self _toast:@"Couldn't read the screen. Try again."];
-        return;
-    }
-    // Adding another screen to a profile capture already in progress?
+    if (!shot) { [self _toast:@"Couldn't read the screen. Try again."]; return; }
     if (_pendingSheet) {
-        WPSheet *sheet = _pendingSheet;
-        _pendingSheet = nil;
+        WPSheet *sheet = _pendingSheet; _pendingSheet = nil;
         [sheet appendImage:shot];
         [sheet reshowAfterAppend];
         return;
@@ -124,16 +109,14 @@ static UIWindowLevel const kBubbleLevel = 100000;
 }
 
 - (void)_toast:(NSString *)msg {
-    UIWindowScene *scene = _window.windowScene ?: WMActiveScene();
-    if (!scene) return;
+    CGRect b = [UIScreen mainScreen].bounds;
     UILabel *t = [[UILabel alloc] init];
     t.text = msg; t.textColor = UIColor.whiteColor;
     t.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
     t.font = [UIFont systemFontOfSize:14]; t.textAlignment = NSTextAlignmentCenter;
     t.numberOfLines = 0; t.layer.cornerRadius = 10; t.clipsToBounds = YES;
-    CGRect b = scene.coordinateSpace.bounds;
     t.frame = CGRectMake(40, b.size.height - 160, b.size.width - 80, 44);
-    UIWindow *w = [[UIWindow alloc] initWithWindowScene:scene];
+    UIWindow *w = [[UIWindow alloc] initWithFrame:b];
     w.windowLevel = kBubbleLevel + 1; w.backgroundColor = UIColor.clearColor;
     w.userInteractionEnabled = NO;
     w.rootViewController = [UIViewController new];
@@ -162,8 +145,7 @@ static UIWindowLevel const kBubbleLevel = 100000;
 }
 
 - (void)_snap {
-    UIWindowScene *sc = _window.windowScene;
-    CGRect screen = sc ? sc.coordinateSpace.bounds : UIScreen.mainScreen.bounds;
+    CGRect screen = [UIScreen mainScreen].bounds;
     CGRect f = _window.frame;
     CGFloat x = (CGRectGetMidX(f) < screen.size.width/2) ? 8 : screen.size.width - f.size.width - 8;
     CGFloat y = MAX(60, MIN(f.origin.y, screen.size.height - f.size.height - 80));
