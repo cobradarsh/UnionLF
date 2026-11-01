@@ -11,6 +11,8 @@
 
 #import "Wingman.h"
 
+@class WPSheet;   // defined below; WPBubble references it
+
 // ── host helpers (frontmost app, installed-app list, clipboard) ──
 @interface WPHost : NSObject
 + (NSString *)frontmostBundleID;                 // the app currently in front, or nil
