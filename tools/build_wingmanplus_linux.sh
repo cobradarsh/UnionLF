@@ -14,7 +14,9 @@ CLANG="${CLANG:-$T/toolchain/linux/iphone/bin/clang}"
 VER=$(grep '^Version:' $SRC/control | cut -d' ' -f2)
 
 rm -rf "$BUILD"; mkdir -p "$BUILD/obj"
-CFLAGS="-target arm64-apple-ios15.0 -isysroot $SDK -fobjc-arc -fno-modules -Wno-deprecated-declarations -I$T/vendor/include -I$SRC"
+# SpringBoard (our only injection target) is an arm64e platform binary on A12+.
+# An arm64 dylib cannot load into an arm64e process, so we build arm64e.
+CFLAGS="-target arm64e-apple-ios15.0 -isysroot $SDK -fobjc-arc -fno-modules -Wno-deprecated-declarations -I$T/vendor/include -I$SRC"
 
 echo "== Logos =="
 perl $T/bin/logos.pl "$SRC/Tweak.x" > "$BUILD/obj/Tweak_logos.m"
@@ -28,7 +30,7 @@ for f in "$BUILD/obj/Tweak_logos.m" \
 done
 
 echo "== Link + sign =="
-"${LD64:-ld64.lld-18}" -dylib -arch arm64 \
+"${LD64:-ld64.lld-18}" -dylib -arch arm64e \
   -install_name "@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/WingmanPlus.dylib" \
   -platform_version ios 15.0.0 16.5.0 -syslibroot "$SDK" \
   -L"$SDK/usr/lib" -F"$SDK/System/Library/Frameworks" -F"$PF" \
