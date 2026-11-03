@@ -73,12 +73,31 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
 #pragma mark - visibility
 
+// On iOS 13+ a UIWindow only actually displays when it belongs to a foreground
+// UIWindowScene. A bare initWithFrame: window (what 1.0.x used) stays invisible in
+// SpringBoard - which is why the bubble never appeared even though the dylib loaded
+// (confirmed by wingmanplus_loaded.txt). Attaching the window to the current scene
+// is what makes it render.
+- (UIWindowScene *)_activeScene {
+    UIWindowScene *fallback = nil;
+    for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+        if (![s isKindOfClass:UIWindowScene.class]) continue;
+        UIWindowScene *ws = (UIWindowScene *)s;
+        if (ws.activationState == UISceneActivationStateForegroundActive) return ws;
+        if (!fallback) fallback = ws;
+    }
+    return fallback;
+}
+
 - (void)evaluateVisibility {
     // DIAG (v1.0.2): force-show everywhere, even the home screen, to prove the tweak
     // loads. Normal build gates on [WPHost wingmanEnabledForFrontmost].
     BOOL wanted = YES;
     if (!wanted) { _window.hidden = YES; return; }
     if (!_built) [self _build];
+    // Attach to (or follow) the current foreground scene so the window renders.
+    UIWindowScene *scene = [self _activeScene];
+    if (scene && _window.windowScene != scene) _window.windowScene = scene;
     if (!_capturing) _window.hidden = NO;
 }
 

@@ -23,9 +23,17 @@ static void WPLoadSignal(void) {
 
 static void WPStart(void) {
     if (gVisTimer) return;                                   // already running
-    NSString *bid = [NSBundle mainBundle].bundleIdentifier;
+    NSString *bid = [NSBundle mainBundle].bundleIdentifier ?: @"(nil)";
+    // DIAG: prove WPStart actually ran, and in which process. If this file says
+    // com.apple.springboard, the bubble code below executed and any remaining
+    // "nothing shows" is purely windowing (handled by the scene attach in WPBubble).
+    @try {
+        [[NSString stringWithFormat:@"WPStart ran in %@ at %@\n", bid, [NSDate date]]
+            writeToFile:@"/var/mobile/wingmanplus_started.txt" atomically:YES
+               encoding:NSUTF8StringEncoding error:nil];
+    } @catch (__unused id e) {}
     if (![bid isEqualToString:@"com.apple.springboard"]) return;
-    WPLoadSignal(); // buzz + beep once SpringBoard's UI is up (reliable timing for audio)
+    WPLoadSignal(); // buzz + beep (best-effort; AudioServices is often silent in SpringBoard)
     @try {
         [[WPBubble shared] start];
         gVisTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
