@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.11-DIAG";
+NSString *const kWPVersion = @"1.0.12-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -370,6 +370,29 @@ static UIWindowScene *WPActiveScene(void) {
     [add addTarget:self action:@selector(_addScreen) forControlEvents:UIControlEventTouchUpInside];
     [_scroll addSubview:add]; y += 48;
 
+    // preview of what was captured, so you can see which part of the profile is in frame
+    if (_frames.count) {
+        UILabel *cap = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 18)];
+        cap.text = @"Captured (what Wingman is reading):";
+        cap.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        cap.textColor = UIColor.secondaryLabelColor;
+        [_scroll addSubview:cap]; y += 22;
+        CGFloat th = 170, tx = m, ty = y, rowBottom = ty;
+        for (UIImage *f in _frames) {
+            CGFloat ratio = (f.size.width > 0 && f.size.height > 0) ? (f.size.width / f.size.height) : 0.46;
+            CGFloat tw2 = th * ratio;
+            if (tx + tw2 > W - m && tx > m) { tx = m; ty = rowBottom + 8; }   // wrap
+            UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(tx, ty, tw2, th)];
+            iv.image = f; iv.contentMode = UIViewContentModeScaleAspectFit;
+            iv.backgroundColor = UIColor.secondarySystemBackgroundColor;
+            iv.clipsToBounds = YES; iv.layer.cornerRadius = 8;
+            iv.layer.borderColor = UIColor.separatorColor.CGColor; iv.layer.borderWidth = 1;
+            [_scroll addSubview:iv];
+            tx += tw2 + 8; rowBottom = MAX(rowBottom, ty + th);
+        }
+        y = rowBottom + 12;
+    }
+
     // generate
     _genBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     _genBtn.frame = CGRectMake(m, y, W-2*m, 48);
@@ -485,7 +508,10 @@ static UIWindowScene *WPActiveScene(void) {
     [WPHost copyToClipboard:txt.text];
     [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
     _status.textColor = UIColor.systemGreenColor;
-    _status.text = @"Copied — switch to the app and paste.";
+    _status.text = @"Copied — paste it in the app.";
+    // auto-close so the user lands straight back on the dating app to paste
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [self _close]; });
 }
 
 @end

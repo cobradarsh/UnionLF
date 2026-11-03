@@ -61,8 +61,11 @@ NSURLSession *WMPrivateSession(void) {
 }
 
 - (NSInteger)_maxTokensForMode:(WMReplyMode)mode length:(WMReplyLength)length {
-    NSInteger n = (length == WMReplyLengthShort) ? 400 : 900;
-    if (mode == WMReplyModeInMyFavor) n += 600;
+    // Headroom so the JSON array of 3 replies is never cut off mid-stream (which
+    // left the parser with an unterminated array). The parser also salvages partial
+    // JSON, but giving room avoids losing the 3rd reply in the first place.
+    NSInteger n = (length == WMReplyLengthShort) ? 800 : 1500;
+    if (mode == WMReplyModeInMyFavor) n += 800;
     return n;
 }
 
@@ -221,7 +224,28 @@ NSURLSession *WMPrivateSession(void) {
 }
 
 // ── parsing ───────────────────────────────────────────────
-// Accepts {"replies":[...]}, a bare [...], or numbered lines as a fallback.
+// Pull every COMPLETE double-quoted JSON string out of s (handles \" escapes). An
+// unterminated final string (truncated output) simply doesn't match, so we keep the
+// replies that did finish instead of dumping raw JSON into one card.
+static NSArray<NSString *> *WPExtractQuotedStrings(NSString *s) {
+    NSMutableArray *out = [NSMutableArray array];
+    static NSRegularExpression *re; static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        re = [NSRegularExpression regularExpressionWithPattern:@"\"((?:[^\"\\\\]|\\\\.)*)\"" options:0 error:nil];
+    });
+    [re enumerateMatchesInString:s options:0 range:NSMakeRange(0, s.length)
+                      usingBlock:^(NSTextCheckingResult *m, NSMatchingFlags f, BOOL *stop) {
+        NSString *v = [s substringWithRange:[m rangeAtIndex:1]];
+        v = [v stringByReplacingOccurrencesOfString:@"\\\"" withString:@"\""];
+        v = [v stringByReplacingOccurrencesOfString:@"\\n"  withString:@"\n"];
+        v = [v stringByReplacingOccurrencesOfString:@"\\/"  withString:@"/"];
+        v = [v stringByReplacingOccurrencesOfString:@"\\\\" withString:@"\\"];
+        if (v.length) [out addObject:v];
+    }];
+    return out;
+}
+
+// Accepts {"replies":[...]}, a bare [...], truncated JSON, or numbered lines.
 - (NSArray<NSString *> *)_parseReplies:(NSString *)raw {
     if (raw.length == 0) return @[];
     NSMutableArray *out = [NSMutableArray array];
@@ -238,6 +262,14 @@ NSURLSession *WMPrivateSession(void) {
         if (a.location != NSNotFound && b.location != NSNotFound && b.location > a.location) {
             NSString *js = [raw substringWithRange:NSMakeRange(a.location, b.location - a.location + 1)];
             obj = [NSJSONSerialization JSONObjectWithData:[js dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+        }
+    }
+    // salvage from truncated/partial JSON (array left unterminated past max_tokens)
+    if (![obj isKindOfClass:[NSArray class]]) {
+        NSRange lb = [raw rangeOfString:@"["];
+        if (lb.location != NSNotFound) {
+            NSArray *q = WPExtractQuotedStrings([raw substringFromIndex:lb.location]);
+            if (q.count) obj = q;
         }
     }
     if ([obj isKindOfClass:[NSArray class]]) {
