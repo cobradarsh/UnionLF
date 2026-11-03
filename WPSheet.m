@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.8-DIAG";
+NSString *const kWPVersion = @"1.0.9-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -20,6 +20,19 @@ static WMReplyMode const kWPModes[] = {
 static NSInteger const kWPModeCount = sizeof(kWPModes)/sizeof(kWPModes[0]);
 
 static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated while up
+
+// Same iOS 13+ rule as the bubble: a UIWindow only renders when it belongs to a
+// foreground UIWindowScene. The reply sheet needs this too, or it stays invisible.
+static UIWindowScene *WPActiveScene(void) {
+    UIWindowScene *fallback = nil;
+    for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+        if (![s isKindOfClass:UIWindowScene.class]) continue;
+        UIWindowScene *ws = (UIWindowScene *)s;
+        if (ws.activationState == UISceneActivationStateForegroundActive) return ws;
+        if (!fallback) fallback = ws;
+    }
+    return fallback;
+}
 
 #pragma mark - app picker
 
@@ -220,9 +233,11 @@ static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated whi
 - (void)appendImage:(UIImage *)shot { if (shot) [_frames addObject:shot]; }
 
 - (void)presentGlobally {
-    // Classic window (no scene) so it works reliably inside SpringBoard.
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self];
-    gWPWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    UIWindowScene *scene = WPActiveScene();
+    gWPWindow = scene ? [[UIWindow alloc] initWithWindowScene:scene]
+                      : [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    gWPWindow.frame = [UIScreen mainScreen].bounds;
     gWPWindow.windowLevel = 100001;                 // just above the bubble
     gWPWindow.rootViewController = nav;
     [gWPWindow makeKeyAndVisible];

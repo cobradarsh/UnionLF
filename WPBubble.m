@@ -135,7 +135,9 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     t.font = [UIFont systemFontOfSize:14]; t.textAlignment = NSTextAlignmentCenter;
     t.numberOfLines = 0; t.layer.cornerRadius = 10; t.clipsToBounds = YES;
     t.frame = CGRectMake(40, b.size.height - 160, b.size.width - 80, 44);
-    UIWindow *w = [[UIWindow alloc] initWithFrame:b];
+    UIWindowScene *scene = [self _activeScene];
+    UIWindow *w = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:b];
+    w.frame = b;
     w.windowLevel = kBubbleLevel + 1; w.backgroundColor = UIColor.clearColor;
     w.userInteractionEnabled = NO;
     w.rootViewController = [UIViewController new];
