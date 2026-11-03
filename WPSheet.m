@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.9-DIAG";
+NSString *const kWPVersion = @"1.0.10-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -33,6 +33,15 @@ static UIWindowScene *WPActiveScene(void) {
     }
     return fallback;
 }
+
+// A key-capable window: a plain overlay UIWindow in SpringBoard often won't bring up
+// the keyboard. canBecomeKeyWindow + makeKeyAndVisible lets text fields edit where
+// possible. (Key entry also has a clipboard "Paste" button that needs no keyboard.)
+@interface WPSheetWindow : UIWindow
+@end
+@implementation WPSheetWindow
+- (BOOL)canBecomeKeyWindow { return YES; }
+@end
 
 #pragma mark - app picker
 
@@ -112,6 +121,15 @@ static UIWindowScene *WPActiveScene(void) {
     _key.text = [s keyForProvider:s.provider];
     [sc addSubview:_key]; y += 48;
 
+    // The keyboard is unreliable in a SpringBoard overlay, so offer a no-keyboard
+    // path: copy the key anywhere (e.g. Notes), then tap this to paste it in.
+    UIButton *paste = [UIButton buttonWithType:UIButtonTypeSystem];
+    paste.frame = CGRectMake(m, y, W-2*m, 36);
+    paste.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    [paste setTitle:@"📋  Paste key from clipboard" forState:UIControlStateNormal];
+    [paste addTarget:self action:@selector(_pasteKey) forControlEvents:UIControlEventTouchUpInside];
+    [sc addSubview:paste]; y += 44;
+
     UIButton *verify = [UIButton buttonWithType:UIButtonTypeSystem];
     verify.frame = CGRectMake(m, y, W-2*m, 40);
     verify.backgroundColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1];
@@ -157,6 +175,18 @@ static UIWindowScene *WPActiveScene(void) {
     WMAPIProvider p = _provider.selectedSegmentIndex == 1 ? WMAPIProviderDeepSeek : WMAPIProviderClaude;
     _key.text = [s keyForProvider:p];
     _model.text = [NSString stringWithFormat:@"Model: %@", [s modelForProvider:p]];
+}
+- (void)_pasteKey {
+    NSString *c = [[UIPasteboard generalPasteboard].string
+                   stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (c.length) {
+        _key.text = c;
+        _status.textColor = UIColor.secondaryLabelColor;
+        _status.text = @"Pasted. Now tap Save & verify key.";
+    } else {
+        _status.textColor = UIColor.systemRedColor;
+        _status.text = @"Clipboard empty — copy your key (e.g. in Notes) first.";
+    }
 }
 - (WMAPIProvider)_p { return _provider.selectedSegmentIndex == 1 ? WMAPIProviderDeepSeek : WMAPIProviderClaude; }
 - (void)_verify {
@@ -235,8 +265,8 @@ static UIWindowScene *WPActiveScene(void) {
 - (void)presentGlobally {
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self];
     UIWindowScene *scene = WPActiveScene();
-    gWPWindow = scene ? [[UIWindow alloc] initWithWindowScene:scene]
-                      : [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    gWPWindow = scene ? [[WPSheetWindow alloc] initWithWindowScene:scene]
+                      : [[WPSheetWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     gWPWindow.frame = [UIScreen mainScreen].bounds;
     gWPWindow.windowLevel = 100001;                 // just above the bubble
     gWPWindow.rootViewController = nav;
