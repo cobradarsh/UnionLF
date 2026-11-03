@@ -50,11 +50,18 @@ jobs:
       - name: Run logic tests
         run: python3 tests/test_wingman.py
 
-      - name: Build the .deb
-        run: THEOS="$HOME/theos" bash tools/build_wingmanplus_linux.sh
+      - name: Build the .deb (proper Theos, arm64e with the correct ptrauth ABI)
+        run: |
+          export THEOS="$HOME/theos"
+          make clean || true
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide ARCHS=arm64e MESSAGES=yes 2>&1 | tee build.log
+          echo "=== produced debs ==="
+          ls -la packages/ || true
+          # surface the dylib arch so we can confirm arm64e
+          find . -name 'WingmanPlus.dylib' -exec sh -c 'echo "--- {} ---"; file "{}" 2>/dev/null || true' \;
 
       - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: wingmanplus-roothide-deb
-          path: "*.deb"
+          path: packages/*.deb
