@@ -16,6 +16,8 @@ on:
 jobs:
   build:
     runs-on: macos-14
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,18 +34,25 @@ jobs:
           echo "ldid: $(command -v ldid)  xz: $(command -v xz)  dpkg-deb: $(command -v dpkg-deb)"
           ldid -V || true
 
-      - name: Install RootHide Theos
+      - name: Install RootHide Theos (git clone; avoids install-theos SDK API call)
         run: |
           export THEOS=$HOME/theos
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos)"
+          # install-theos auto-downloads SDKs via api.github.com, which rate-limits
+          # on shared runner IPs (exit 8). A plain recursive clone is a complete,
+          # working theos; on macOS it uses Xcode's clang (versioned arm64e) with no
+          # separate toolchain. We provide the SDK ourselves in the next step.
+          git clone --recursive https://github.com/roothide/theos.git "$THEOS"
+          git -C "$THEOS" submodule update --init --recursive
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
       - name: Get iOS 16.5 SDK
         run: |
+          mkdir -p "$HOME/theos/sdks"
           cd "$HOME/theos/sdks"
-          curl -sLO https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          curl -fsSL -o iPhoneOS16.5.sdk.tar.xz \
+            https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
           tar xf iPhoneOS16.5.sdk.tar.xz
-          ls -d iPhoneOS*.sdk || true
+          ls -d iPhoneOS*.sdk
 
       - name: Run logic tests
         run: python3 tests/test_wingman.py
