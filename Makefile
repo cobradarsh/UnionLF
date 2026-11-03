@@ -14,9 +14,12 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = WingmanPlus
 
-WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPScroll.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
+# WPScroll.m (HID swipe synthesis) is intentionally left OUT: cross-process touch
+# injection from SpringBoard doesn't drive the app's scroll views on iOS 16, so we use
+# user-driven scroll-capture instead (hold to start, flick, tap to finish). The file is
+# kept in the tree for reference only.
+WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
 WingmanPlus_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-# IOKit: private IOHIDEvent* used by WPScroll to synthesize the auto-scroll swipe.
-WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision AudioToolbox IOKit
+WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision AudioToolbox
 
 include $(THEOS_MAKE_PATH)/tweak.mk

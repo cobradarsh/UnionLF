@@ -14,9 +14,16 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
 @interface WPBubble ()
 @property (nonatomic, strong) UIView *dot;
+@property (nonatomic, strong) UILabel *glyph;        // the ♥ (idle) / frame count (capturing)
 @property (nonatomic) CGPoint grabOffset;
 @property (nonatomic) BOOL capturing;
 @property (nonatomic) BOOL built;
+@property (nonatomic) BOOL scrolling;                // scroll-capture session active
+@property (nonatomic) BOOL busy;                     // re-entrancy guard for the tick
+@property (nonatomic, strong) NSMutableArray<UIImage *> *scrollFrames;
+@property (nonatomic, strong) NSData *lastTickSig;   // previous probe (to detect "at rest")
+@property (nonatomic, strong) NSData *lastSavedSig;  // last SAVED screen (to detect "new content")
+@property (nonatomic, strong) NSTimer *scrollTimer;
 @property (nonatomic, weak) WPSheet *pendingSheet;   // set while adding screens to an open sheet
 @end
 
@@ -59,18 +66,18 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     _dot.layer.shadowRadius = 5;
     [_window.rootViewController.view addSubview:_dot];
 
-    UILabel *heart = [[UILabel alloc] initWithFrame:_dot.bounds];
-    heart.text = @"♥";
-    heart.textColor = UIColor.whiteColor;
-    heart.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
-    heart.textAlignment = NSTextAlignmentCenter;
-    [_dot addSubview:heart];
+    _glyph = [[UILabel alloc] initWithFrame:_dot.bounds];
+    _glyph.text = @"♥";
+    _glyph.textColor = UIColor.whiteColor;
+    _glyph.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
+    _glyph.textAlignment = NSTextAlignmentCenter;
+    [_dot addSubview:_glyph];
 
     [_dot addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_tap)]];
     [_dot addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_pan:)]];
     UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc]
         initWithTarget:self action:@selector(_longPress:)];
-    lp.minimumPressDuration = 0.4;   // hold = auto-scroll the whole profile
+    lp.minimumPressDuration = 0.4;   // hold = start a scroll-capture session
     [_dot addGestureRecognizer:lp];
     _built = YES;
 }
@@ -115,6 +122,7 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
 - (void)_tap {
     if (_capturing) return;
+    if (_scrolling) { [self _finishScrollCapture]; return; }   // tap ends an active session
     _capturing = YES;
     __weak typeof(self) ws = self;
     UIImage *shot = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
@@ -131,42 +139,85 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     [sheet presentGlobally];
 }
 
-#pragma mark - hold -> auto-scroll the whole profile and capture every screen
+#pragma mark - hold to start, flick through, tap to finish (scroll-capture)
 
 - (void)_longPress:(UILongPressGestureRecognizer *)g {
-    if (g.state != UIGestureRecognizerStateBegan || _capturing) return;
-    [self _autoScrollCapture];
+    if (g.state != UIGestureRecognizerStateBegan) return;
+    if (_capturing || _scrolling) return;
+    [self _startScrollCapture];
 }
 
-- (void)_autoScrollCapture {
-    _capturing = YES;
-    _window.hidden = YES;   // keep the bubble out of every frame for the whole run
+- (void)_startScrollCapture {
+    _scrolling = YES;
+    _scrollFrames = [NSMutableArray array];
+    _lastTickSig = nil; _lastSavedSig = nil;
+    [self _setRecordingLook:YES];
     [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSMutableArray<UIImage *> *frames = [NSMutableArray array];
-        NSData *lastSig = nil;
-        const NSInteger maxFrames = 8;               // safety cap; most profiles are 3-6 screens
-        for (NSInteger i = 0; i < maxFrames; i++) {
-            __block UIImage *shot = nil;
-            dispatch_sync(dispatch_get_main_queue(), ^{ shot = [WPCapture captureNow]; });
-            if (!shot) break;
-            NSData *sig = [WPCapture signatureOf:shot];
-            if (lastSig && [WPCapture signature:sig matches:lastSig]) break;  // nothing moved => bottom reached
-            [frames addObject:shot];
-            lastSig = sig;
-            if (i == maxFrames - 1) break;
-            [WPScroll swipeUp];
-            usleep(650000);                          // let the scroll settle before the next shot
+    [self _toast:@"Capturing — scroll the profile, tap ♥ to finish."];
+    // grab the starting screen right away
+    __weak typeof(self) ws = self;
+    UIImage *first = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
+                                            restore:^{ ws.window.hidden = NO; }];
+    if (first) { [_scrollFrames addObject:first]; _lastSavedSig = [WPCapture signatureOf:first]; }
+    [self _updateCount];
+    _scrollTimer = [NSTimer scheduledTimerWithTimeInterval:0.35 target:self
+                                                  selector:@selector(_scrollTick) userInfo:nil repeats:YES];
+}
+
+// Each tick a quick probe (bubble left visible — its few pixels don't move the change
+// detector) tells us when the screen has come to REST on NEW content; only then do we
+// take one clean shot (bubble hidden) and keep it. So you get one frame per resting
+// position as you flick down, with almost no bubble flicker.
+- (void)_scrollTick {
+    if (!_scrolling || _busy) return;
+    if (_scrollFrames.count >= 10) { [self _finishScrollCapture]; return; }   // safety cap
+    _busy = YES;
+    UIImage *probe = [WPCapture captureNow];
+    if (probe) {
+        NSData *sig = [WPCapture signatureOf:probe];
+        BOOL stable = _lastTickSig && [WPCapture signature:sig matches:_lastTickSig];
+        BOOL isNew  = !_lastSavedSig || ![WPCapture signature:sig matches:_lastSavedSig];
+        if (stable && isNew) {
+            __weak typeof(self) ws = self;
+            UIImage *clean = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
+                                                    restore:^{ ws.window.hidden = NO; }];
+            if (clean) {
+                [_scrollFrames addObject:clean];
+                _lastSavedSig = sig;
+                [self _updateCount];
+                [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+            }
         }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self->_capturing = NO;
-            self->_window.hidden = NO;
-            if (frames.count == 0) { [self _toast:@"Couldn't read the screen. Try again."]; return; }
-            WPSheet *sheet = [[WPSheet alloc] initWithImage:frames.firstObject];
-            for (NSUInteger k = 1; k < frames.count; k++) [sheet appendImage:frames[k]];
-            [sheet presentGlobally];
-        });
-    });
+        _lastTickSig = sig;
+    }
+    _busy = NO;
+}
+
+- (void)_finishScrollCapture {
+    [_scrollTimer invalidate]; _scrollTimer = nil;
+    _scrolling = NO; _busy = NO;
+    [self _setRecordingLook:NO];
+    NSArray<UIImage *> *frames = [_scrollFrames copy]; _scrollFrames = nil;
+    if (frames.count == 0) { [self _toast:@"Nothing captured. Try again."]; return; }
+    WPSheet *sheet = [[WPSheet alloc] initWithImage:frames.firstObject];
+    for (NSUInteger k = 1; k < frames.count; k++) [sheet appendImage:frames[k]];
+    [sheet presentGlobally];
+}
+
+- (void)_setRecordingLook:(BOOL)on {
+    _dot.backgroundColor = on ? [UIColor colorWithRed:0.20 green:0.78 blue:0.35 alpha:1.0]   // green = capturing
+                              : [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1.0];  // pink = idle
+    [self _updateCount];
+}
+
+- (void)_updateCount {
+    if (_scrolling) {
+        _glyph.text = [NSString stringWithFormat:@"%lu", (unsigned long)_scrollFrames.count];
+        _glyph.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
+    } else {
+        _glyph.text = @"♥";
+        _glyph.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
+    }
 }
 
 - (void)_toast:(NSString *)msg {
