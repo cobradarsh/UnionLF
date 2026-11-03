@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.10-DIAG";
+NSString *const kWPVersion = @"1.0.11-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -329,10 +329,8 @@ static UIWindowScene *WPActiveScene(void) {
         [_scroll addSubview:note]; y += 52;
     }
 
-    // style chips
-    UIScrollView *chipRow = [[UIScrollView alloc] initWithFrame:CGRectMake(0, y, W, 44)];
-    chipRow.showsHorizontalScrollIndicator = NO;
-    CGFloat cx = m;
+    // vibe chips — wrapping grid so every vibe is visible at once (no scrolling)
+    CGFloat cx = m, cy = y, rowH = 36, gap = 8;
     NSMutableArray *chips = [NSMutableArray array];
     for (NSInteger i = 0; i < kWPModeCount; i++) {
         WMReplyMode md = kWPModes[i];
@@ -344,15 +342,15 @@ static UIWindowScene *WPActiveScene(void) {
         [b addTarget:self action:@selector(_chip:) forControlEvents:UIControlEventTouchUpInside];
         [b sizeToFit];
         CGFloat w = b.bounds.size.width + 24;
-        b.frame = CGRectMake(cx, 4, w, 36);
-        b.layer.cornerRadius = 18;
+        if (cx + w > W - m) { cx = m; cy += rowH + gap; }   // wrap to the next row
+        b.frame = CGRectMake(cx, cy, w, rowH);
+        b.layer.cornerRadius = rowH / 2;
         [self _styleChip:b selected:(md == _mode)];
-        [chipRow addSubview:b]; [chips addObject:b];
-        cx += w + 8;
+        [_scroll addSubview:b]; [chips addObject:b];
+        cx += w + gap;
     }
-    chipRow.contentSize = CGSizeMake(cx, 44);
     _chips = chips;
-    [_scroll addSubview:chipRow]; y += 52;
+    y = cy + rowH + 12;
 
     // length
     UISegmentedControl *len = [[UISegmentedControl alloc] initWithItems:@[@"Short", @"Longer"]];

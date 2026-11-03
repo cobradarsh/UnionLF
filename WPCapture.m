@@ -32,14 +32,40 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
     return img;
 }
 
+// The private API can hand back a UIImage that isn't a plain CGImage bitmap
+// (wide-gamut / IOSurface backing). Vision OCR and UIImageJPEGRepresentation both
+// reject that, so replies failed with "couldn't read the chat" even though a shot
+// was taken. Re-draw it into a standard opaque bitmap so OCR and JPEG always work.
++ (UIImage *)_normalize:(UIImage *)raw {
+    if (!raw) return nil;
+    CGSize sz = raw.size;
+    if ((sz.width < 1 || sz.height < 1) && raw.CGImage)
+        sz = CGSizeMake(CGImageGetWidth(raw.CGImage), CGImageGetHeight(raw.CGImage));
+    if (sz.width < 1 || sz.height < 1) return raw;
+    UIGraphicsImageRendererFormat *fmt = [UIGraphicsImageRendererFormat defaultFormat];
+    fmt.opaque = YES;
+    fmt.scale  = raw.scale > 0 ? raw.scale : [UIScreen mainScreen].scale;
+    UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:sz format:fmt];
+    UIImage *norm = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        [raw drawInRect:CGRectMake(0, 0, sz.width, sz.height)];
+    }];
+    return (norm && norm.CGImage) ? norm : raw;
+}
+
 + (UIImage *)captureScreenHiding:(void(^)(void))hide restore:(void(^)(void))show {
     if (hide) hide();
     // Let the hide land on screen before we snapshot, so the bubble isn't in it.
     // We're already on the main thread; spin the runloop briefly instead of an
     // async hop so the caller gets the image back synchronously.
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.08]];
-    UIImage *shot = [self _rawScreen];
+    UIImage *shot = [self _normalize:[self _rawScreen]];
     if (show) show();
+    // DIAG: save the last capture so we can see exactly what was grabbed
+    // (open /var/mobile/wingman_capture.jpg in Filza).
+    @try {
+        NSData *j = UIImageJPEGRepresentation(shot, 0.8);
+        if (j) [j writeToFile:@"/var/mobile/wingman_capture.jpg" atomically:YES];
+    } @catch (__unused id e) {}
     return shot;
 }
 

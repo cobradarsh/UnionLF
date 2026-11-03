@@ -101,7 +101,10 @@ NSURLSession *WMPrivateSession(void) {
         return;
     }
 
-    BOOL sendImages = s.claudeSendsScreenshot || transcript.length == 0;
+    // Claude is vision-capable and this is a dating tool where the photos ARE the
+    // context, so always send the screenshot when we have one (OCR text is still
+    // added below). This also means a reply is produced even if OCR comes back empty.
+    BOOL sendImages = frames.count > 0 || s.claudeSendsScreenshot || transcript.length == 0;
     NSMutableArray *content = [NSMutableArray array];
     if (sendImages) {
         for (UIImage *img in frames) {
