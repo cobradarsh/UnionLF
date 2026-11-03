@@ -14,8 +14,9 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = WingmanPlus
 
-WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
+WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPScroll.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
 WingmanPlus_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision AudioToolbox
+# IOKit: private IOHIDEvent* used by WPScroll to synthesize the auto-scroll swipe.
+WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision AudioToolbox IOKit
 
 include $(THEOS_MAKE_PATH)/tweak.mk

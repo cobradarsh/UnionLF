@@ -68,6 +68,10 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
     [_dot addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_tap)]];
     [_dot addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_pan:)]];
+    UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc]
+        initWithTarget:self action:@selector(_longPress:)];
+    lp.minimumPressDuration = 0.4;   // hold = auto-scroll the whole profile
+    [_dot addGestureRecognizer:lp];
     _built = YES;
 }
 
@@ -125,6 +129,44 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     }
     WPSheet *sheet = [[WPSheet alloc] initWithImage:shot];
     [sheet presentGlobally];
+}
+
+#pragma mark - hold -> auto-scroll the whole profile and capture every screen
+
+- (void)_longPress:(UILongPressGestureRecognizer *)g {
+    if (g.state != UIGestureRecognizerStateBegan || _capturing) return;
+    [self _autoScrollCapture];
+}
+
+- (void)_autoScrollCapture {
+    _capturing = YES;
+    _window.hidden = YES;   // keep the bubble out of every frame for the whole run
+    [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSMutableArray<UIImage *> *frames = [NSMutableArray array];
+        NSData *lastSig = nil;
+        const NSInteger maxFrames = 8;               // safety cap; most profiles are 3-6 screens
+        for (NSInteger i = 0; i < maxFrames; i++) {
+            __block UIImage *shot = nil;
+            dispatch_sync(dispatch_get_main_queue(), ^{ shot = [WPCapture captureNow]; });
+            if (!shot) break;
+            NSData *sig = [WPCapture signatureOf:shot];
+            if (lastSig && [WPCapture signature:sig matches:lastSig]) break;  // nothing moved => bottom reached
+            [frames addObject:shot];
+            lastSig = sig;
+            if (i == maxFrames - 1) break;
+            [WPScroll swipeUp];
+            usleep(650000);                          // let the scroll settle before the next shot
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self->_capturing = NO;
+            self->_window.hidden = NO;
+            if (frames.count == 0) { [self _toast:@"Couldn't read the screen. Try again."]; return; }
+            WPSheet *sheet = [[WPSheet alloc] initWithImage:frames.firstObject];
+            for (NSUInteger k = 1; k < frames.count; k++) [sheet appendImage:frames[k]];
+            [sheet presentGlobally];
+        });
+    });
 }
 
 - (void)_toast:(NSString *)msg {

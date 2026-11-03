@@ -69,4 +69,43 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
     return shot;
 }
 
+// Capture without toggling any overlay (used by auto-scroll, where the bubble is
+// already hidden for the whole run so it never appears in any frame).
++ (UIImage *)captureNow {
+    UIImage *shot = [self _normalize:[self _rawScreen]];
+    @try {
+        NSData *j = UIImageJPEGRepresentation(shot, 0.8);
+        if (j) [j writeToFile:@"/var/mobile/wingman_capture.jpg" atomically:YES];
+    } @catch (__unused id e) {}
+    return shot;
+}
+
+// A tiny grayscale fingerprint so we can tell when the screen stopped changing
+// (profile reached the bottom, so a swipe no longer moves it).
++ (NSData *)signatureOf:(UIImage *)img {
+    if (!img.CGImage) return nil;
+    const int W = 24, H = 48;
+    uint8_t *buf = calloc((size_t)(W * H), 1);
+    if (!buf) return nil;
+    CGColorSpaceRef gray = CGColorSpaceCreateDeviceGray();
+    CGContextRef ctx = CGBitmapContextCreate(buf, W, H, 8, W, gray, (CGBitmapInfo)kCGImageAlphaNone);
+    NSData *d = nil;
+    if (ctx) {
+        CGContextDrawImage(ctx, CGRectMake(0, 0, W, H), img.CGImage);
+        d = [NSData dataWithBytes:buf length:(NSUInteger)(W * H)];
+        CGContextRelease(ctx);
+    }
+    CGColorSpaceRelease(gray);
+    free(buf);
+    return d;
+}
+
++ (BOOL)signature:(NSData *)a matches:(NSData *)b {
+    if (!a || !b || a.length != b.length || a.length == 0) return NO;
+    const uint8_t *pa = a.bytes, *pb = b.bytes;
+    NSUInteger diff = 0, n = a.length;
+    for (NSUInteger i = 0; i < n; i++) if (abs((int)pa[i] - (int)pb[i]) > 12) diff++;
+    return diff < n / 20;   // <5% of cells changed => effectively the same screen
+}
+
 @end

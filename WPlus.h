@@ -26,6 +26,14 @@
 // One UIImage of the current screen (the front app), or nil. `hide`/`show`
 // blocks let the caller drop its own overlay so the bubble isn't in the shot.
 + (UIImage *)captureScreenHiding:(void(^)(void))hide restore:(void(^)(void))show;
++ (UIImage *)captureNow;                         // capture without toggling any overlay (bubble already hidden)
++ (NSData *)signatureOf:(UIImage *)img;          // tiny grayscale fingerprint for "did the screen change"
++ (BOOL)signature:(NSData *)a matches:(NSData *)b;  // YES if two frames are effectively the same (reached bottom)
+@end
+
+// ── synthesize touch so the app under SpringBoard scrolls itself ──
+@interface WPScroll : NSObject
++ (void)swipeUp;    // one swipe-up (content scrolls ~one screen down); best-effort, private HID
 @end
 
 // ── floating bubble (a SpringBoard window above the front app) ──
