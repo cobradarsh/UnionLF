@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.5-THEOS";
+NSString *const kWPVersion = @"1.0.6-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {

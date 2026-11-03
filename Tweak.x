@@ -7,13 +7,25 @@
     (WingmanPlus.plist), never into a dating app.                              */
 
 #import "WPlus.h"
+#import <AudioToolbox/AudioToolbox.h>
 
 static NSTimer *gVisTimer;
+
+// DIAG: an unmistakable "the dylib loaded" signal that depends on NEITHER files
+// NOR windowing — the phone vibrates and beeps. If you feel/hear this on respring,
+// the tweak is loading into SpringBoard; the problem is then only the UI.
+static void WPLoadSignal(void) {
+    @try {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate);
+        AudioServicesPlaySystemSound(1007); // a short notification tone
+    } @catch (__unused id e) {}
+}
 
 static void WPStart(void) {
     if (gVisTimer) return;                                   // already running
     NSString *bid = [NSBundle mainBundle].bundleIdentifier;
     if (![bid isEqualToString:@"com.apple.springboard"]) return;
+    WPLoadSignal(); // buzz + beep once SpringBoard's UI is up (reliable timing for audio)
     @try {
         [[WPBubble shared] start];
         gVisTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
@@ -22,16 +34,16 @@ static void WPStart(void) {
     } @catch (__unused id e) {}
 }
 
-// DIAG: drop a marker the instant the dylib is injected, so we can tell
-// "loaded but no UI" from "never loaded" without relying on any window.
+// DIAG: write the marker to SEVERAL paths, because on RootHide NSHomeDirectory() and
+// /var/mobile may be redirected and the file can land where you don't look.
 static void WPWriteLoadMarker(void) {
-    @try {
-        NSString *bid = [NSBundle mainBundle].bundleIdentifier ?: @"?";
-        NSString *line = [NSString stringWithFormat:@"WingmanPlus loaded into %@ at %@\n",
-                          bid, [NSDate date]];
-        NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"wingmanplus_loaded.txt"];
-        [line writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    } @catch (__unused id e) {}
+    NSString *line = [NSString stringWithFormat:@"WingmanPlus loaded at %@\n", [NSDate date]];
+    for (NSString *dir in @[NSHomeDirectory(), @"/var/mobile", NSTemporaryDirectory(), @"/var/tmp"]) {
+        @try {
+            [line writeToFile:[dir stringByAppendingPathComponent:@"wingmanplus_loaded.txt"]
+                   atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        } @catch (__unused id e) {}
+    }
 }
 
 __attribute__((constructor))

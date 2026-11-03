@@ -12,6 +12,6 @@ TWEAK_NAME = WingmanPlus
 
 WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
 WingmanPlus_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision
+WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision AudioToolbox
 
 include $(THEOS_MAKE_PATH)/tweak.mk
