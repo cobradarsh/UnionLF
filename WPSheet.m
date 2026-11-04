@@ -8,14 +8,14 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.15-DIAG";
+NSString *const kWPVersion = @"1.0.16-DIAG";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
-    WMReplyModeIcebreaker,
-    WMReplyModePlanDate, WMReplyModeRomance, WMReplyModeSeduce,
-    WMReplyModeSensual,  WMReplyModeLustful, WMReplyModeDirty,
-    WMReplyModeFlirty,   WMReplyModeFunny,   WMReplyModeChill
+    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeReviver,
+    WMReplyModePlanDate,   WMReplyModeRomance,     WMReplyModeSeduce,   WMReplyModeAlphaPower,
+    WMReplyModeSensual,    WMReplyModeLustful,     WMReplyModeDirty,
+    WMReplyModeFlirty,     WMReplyModeFunny,       WMReplyModeChill
 };
 static NSInteger const kWPModeCount = sizeof(kWPModes)/sizeof(kWPModes[0]);
 
@@ -107,9 +107,9 @@ static UIWindowScene *WPActiveScene(void) {
     [self.view addSubview:sc];
     CGFloat W = self.view.bounds.size.width, m = 16, y = 16;
 
-    _provider = [[UISegmentedControl alloc] initWithItems:@[@"Claude", @"DeepSeek"]];
+    _provider = [[UISegmentedControl alloc] initWithItems:@[@"Claude", @"DeepSeek", @"Kimi"]];
     _provider.frame = CGRectMake(m, y, W-2*m, 34);
-    _provider.selectedSegmentIndex = (s.provider == WMAPIProviderDeepSeek) ? 1 : 0;
+    _provider.selectedSegmentIndex = (NSInteger)s.provider;
     [_provider addTarget:self action:@selector(_providerChanged) forControlEvents:UIControlEventValueChanged];
     [sc addSubview:_provider]; y += 48;
 
@@ -172,9 +172,11 @@ static UIWindowScene *WPActiveScene(void) {
 }
 - (void)_providerChanged {
     WMSettings *s = [WMSettings shared];
-    WMAPIProvider p = _provider.selectedSegmentIndex == 1 ? WMAPIProviderDeepSeek : WMAPIProviderClaude;
+    WMAPIProvider p = [self _p];
+    [s saveProvider:p];                 // the segmented control IS the active-provider picker
     _key.text = [s keyForProvider:p];
     _model.text = [NSString stringWithFormat:@"Model: %@", [s modelForProvider:p]];
+    _status.text = @"";
 }
 - (void)_pasteKey {
     NSString *c = [[UIPasteboard generalPasteboard].string
@@ -188,7 +190,7 @@ static UIWindowScene *WPActiveScene(void) {
         _status.text = @"Clipboard empty — copy your key (e.g. in Notes) first.";
     }
 }
-- (WMAPIProvider)_p { return _provider.selectedSegmentIndex == 1 ? WMAPIProviderDeepSeek : WMAPIProviderClaude; }
+- (WMAPIProvider)_p { return (WMAPIProvider)_provider.selectedSegmentIndex; }
 - (void)_verify {
     [_key resignFirstResponder];
     WMAPIProvider p = [self _p];

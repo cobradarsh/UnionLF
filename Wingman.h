@@ -39,6 +39,9 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeLustful,
     WMReplyModeDirty,
     WMReplyModeIcebreaker,   // opener written from a dating profile (not a chat)
+    WMReplyModePhotoOpener,  // opener from HER PHOTOS (appreciate her in the moment)
+    WMReplyModeReviver,      // re-ignite a cooled conversation (attraction principles)
+    WMReplyModeAlphaPower,   // commanding alpha-male persona (Massimo / Christian Grey)
     WMReplyModeCount
 };
 
@@ -51,7 +54,8 @@ typedef NS_ENUM(NSInteger, WMReplyLength) {
 
 typedef NS_ENUM(NSInteger, WMAPIProvider) {
     WMAPIProviderClaude = 0,
-    WMAPIProviderDeepSeek
+    WMAPIProviderDeepSeek,
+    WMAPIProviderKimi        // Moonshot Kimi (OpenAI-compatible, HAS vision)
 };
 
 typedef NS_ENUM(NSInteger, WMAppKind) {
@@ -93,6 +97,10 @@ static NSInteger const kWMQuickReplyCount = 5;
 @property (nonatomic, readonly) BOOL bubbleOnRight;
 @property (nonatomic, readonly) CGFloat bubbleAlpha;
 @property (nonatomic, readonly, copy) NSString *deepseekBaseURL;  // without /chat/completions
+@property (nonatomic, readonly, copy) NSString *kimiKey;
+@property (nonatomic, readonly, copy) NSString *kimiModel;
+@property (nonatomic, readonly, copy) NSString *kimiBaseURL;      // without /chat/completions
+@property (nonatomic, readonly, copy) NSString *kimiEndpoint;     // full .../chat/completions URL
 
 - (void)reload;
 - (NSString *)diagnostics;        // which stores were readable, what was found

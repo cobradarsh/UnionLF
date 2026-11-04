@@ -56,6 +56,8 @@ NSURLSession *WMPrivateSession(void) {
     [s reload];
     if (provider == WMAPIProviderDeepSeek)
         [self _deepseekTranscript:transcript context:context mode:mode length:length settings:s completion:done];
+    else if (provider == WMAPIProviderKimi)
+        [self _kimiFrames:frames transcript:transcript context:context mode:mode length:length settings:s completion:done];
     else
         [self _claudeFrames:frames transcript:transcript context:context mode:mode length:length settings:s completion:done];
 }
@@ -224,6 +226,80 @@ NSURLSession *WMPrivateSession(void) {
 }
 
 // ── parsing ───────────────────────────────────────────────
+// ── Kimi / Moonshot (OpenAI-compatible, HAS vision) ───────
+- (void)_kimiFrames:(NSArray<UIImage *> *)frames
+         transcript:(NSString *)transcript
+            context:(NSString *)context
+               mode:(WMReplyMode)mode
+             length:(WMReplyLength)length
+           settings:(WMSettings *)s
+         completion:(void(^)(NSArray<NSString *> *, NSError *))done {
+
+    if (s.kimiKey.length == 0) {
+        done(nil, [self _err:@"No Kimi API key yet. Tap the key button on this page to paste and verify it."]);
+        return;
+    }
+
+    // Kimi has vision, and for a dating tool the photos ARE the context, so always send
+    // the screenshot(s) when we have them. OpenAI multimodal content array.
+    NSMutableArray *content = [NSMutableArray array];
+    [content addObject:@{ @"type": @"text",
+                          @"text": [WMPrompts userPromptForMode:mode length:length context:context
+                                                     transcript:transcript hasImages:(frames.count > 0)] }];
+    for (UIImage *img in frames) {
+        NSData *jpeg = UIImageJPEGRepresentation(img, 0.7);
+        if (!jpeg) continue;
+        NSString *dataURL = [@"data:image/jpeg;base64,"
+            stringByAppendingString:[jpeg base64EncodedStringWithOptions:0]];
+        [content addObject:@{ @"type": @"image_url", @"image_url": @{ @"url": dataURL } }];
+    }
+    BOOL hasImages = content.count > 1;
+    if (!hasImages && transcript.length == 0 && context.length == 0) {
+        done(nil, [self _err:@"Couldn't read the chat. Type the context and try again."]);
+        return;
+    }
+
+    NSMutableDictionary *body = [@{
+        @"model":      s.kimiModel,
+        @"max_tokens": @([self _maxTokensForMode:mode length:length]),
+        @"messages": @[
+            @{ @"role": @"system", @"content": [WMPrompts systemPromptWithSoundLikeMe:s.soundLikeMe] },
+            @{ @"role": @"user",   @"content": content }
+        ]
+    } mutableCopy];
+    if (![s.kimiModel.lowercaseString containsString:@"thinking"])   // reasoning models reject it
+        body[@"response_format"] = @{ @"type": @"json_object" };
+
+    NSURL *url = [NSURL URLWithString:s.kimiEndpoint];
+    if (!url) { done(nil, [self _err:@"Kimi URL in Settings looks invalid."]); return; }
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+    req.HTTPMethod = @"POST";
+    [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [req setValue:[@"Bearer " stringByAppendingString:s.kimiKey] forHTTPHeaderField:@"Authorization"];
+    req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    req.timeoutInterval = 90;
+
+    [[WMPrivateSession() dataTaskWithRequest:req
+      completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+        NSArray *replies = nil; NSError *e = err;
+        if (!e) {
+            id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            NSString *text = nil;
+            if ([json isKindOfClass:[NSDictionary class]]) {
+                NSArray *ch = json[@"choices"];
+                if ([ch isKindOfClass:[NSArray class]] && ch.count &&
+                    [ch[0] isKindOfClass:[NSDictionary class]]) {
+                    id c = ch[0][@"message"][@"content"];
+                    if ([c isKindOfClass:[NSString class]]) text = c;
+                }
+            }
+            replies = [self _parseReplies:text ?: @""];
+            if (replies.count == 0) e = [self _httpError:resp json:json provider:@"Kimi"];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ done(e ? nil : replies, e); });
+    }] resume];
+}
+
 // Pull every COMPLETE double-quoted JSON string out of s (handles \" escapes). An
 // unterminated final string (truncated output) simply doesn't match, so we keep the
 // replies that did finish instead of dumping raw JSON into one card.

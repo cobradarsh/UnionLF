@@ -158,6 +158,45 @@
                     "in getting to know her, not a pickup artist. No cheesy pickup lines, no "
                     "generic 'hey how's it going', no empty compliments on looks, no "
                     "negging, no over-the-top flattery. Organic, specific and sincere.";
+        case WMReplyModePhotoOpener:
+            return @"PHOTO OPENER (opening message from her photos). Look CLOSELY at her actual "
+                    "PHOTOS: the setting and surroundings, the colours, the light, the mood, what "
+                    "she's doing, AND her, her expression, her energy, how she fits that scene. "
+                    "Write an opener that does two things at once: notice something specific and "
+                    "real in the picture, AND give her genuine, earned appreciation of HER in it. "
+                    "Don't just ask about the place, and don't drop a flat 'you're gorgeous'. "
+                    "Validate her beauty THROUGH the context so it feels sincere: how she's in her "
+                    "element there, how she stands out against that backdrop, the way her smile "
+                    "fits the moment, the glow of her against that light or place. She should feel "
+                    "I saw the whole picture and her in it, not just a pretty face. Warm, "
+                    "confident, a little magnetic, never creepy or objectifying. Make the three "
+                    "about THREE DIFFERENT photos.";
+        case WMReplyModeReviver:
+            return @"REVIVER. The conversation has cooled off or her interest dipped. Read the "
+                    "WHOLE chat and find where her energy dropped (shorter or slower replies, "
+                    "one-word answers, a dead-end topic, or me over-investing while she pulled "
+                    "back). Then write ONE message that reignites it and rebuilds attraction using "
+                    "real attraction principles, tastefully: reopen an earlier loop or call back "
+                    "something she said, add intrigue or a playful challenge (push-pull), light "
+                    "teasing, a confident pivot to a topic she'll actually want to answer, or a "
+                    "bit of mystery that makes her curious and want to invest again. NEVER needy "
+                    "or try-hard: no 'hey, you still there?', no 'did I say something wrong?', no "
+                    "double-texting, no long paragraphs. Short, confident, intriguing, the kind of "
+                    "text that makes her want to reply right now. Make the three three genuinely "
+                    "different angles to revive it.";
+        case WMReplyModeAlphaPower:
+            return @"ALPHA POWER. Reply in the persona of a classic alpha-male romantic lead, the "
+                    "commanding, magnetic energy of a Massimo or a Christian Grey: dominant, "
+                    "decisive, completely self-assured and protective. Reassuring yet commanding, "
+                    "seductively firm. Lead the conversation and set the frame, a man who knows "
+                    "exactly what he wants and says it plainly. Calm authority and certainty, warm "
+                    "possessiveness that makes her feel wanted and safe at once, never cold or "
+                    "anxious. Short, controlled, intense lines with a pull to them. Flirty, "
+                    "sensual or boldly suggestive is fine. Everything stays between consenting "
+                    "adults: confident and commanding, but NEVER coercive, threatening, "
+                    "controlling of her choices, or dismissive of a no; a real man's strength "
+                    "includes respect. Make the three three different flavours of that alpha "
+                    "energy.";
         default:
             return @"";
     }
@@ -176,12 +215,16 @@
         kind == WMAppKindDating ? @" (a dating app: keep it engaging, confident and "
                                    "respectful, and keep the conversation going)" : @""];
 
-    if (mode == WMReplyModeIcebreaker) {
+    if (mode == WMReplyModeIcebreaker || mode == WMReplyModePhotoOpener) {
         [p appendString:@"WHAT THIS IS: her DATING PROFILE, captured top to bottom (photos, "
                          "prompt answers, bio, interests) — NOT a conversation. There are no "
                          "messages from me, and no left/right bubbles. Ignore the chat-layout "
                          "rules. Read everything she actually shared, then write my opening "
                          "message to her.\n\n"];
+        if (mode == WMReplyModePhotoOpener)
+            [p appendString:@"For THIS opener, base it on what you can SEE in her PHOTOS (the "
+                             "place, the setting, colours, light, mood, what she's doing and how "
+                             "she looks in it), not on the written prompts.\n\n"];
         if (transcript.length > 0)
             [p appendFormat:@"HER PROFILE TEXT (read on my phone, top to bottom):\n%@\n\n", transcript];
         if (hasImages)
@@ -240,6 +283,9 @@
         case WMReplyModeLustful:       return @"Lustful";
         case WMReplyModeDirty:         return @"Dirty / Sext";
         case WMReplyModeIcebreaker:    return @"Icebreaker";
+        case WMReplyModePhotoOpener:   return @"Photo Opener";
+        case WMReplyModeReviver:       return @"Reviver";
+        case WMReplyModeAlphaPower:    return @"Alpha Power";
         default:                       return @"";
     }
 }
@@ -267,6 +313,9 @@
         case WMReplyModeLustful:       return @"\U0001F48B"; // 💋
         case WMReplyModeDirty:         return @"\U0001F608"; // 😈
         case WMReplyModeIcebreaker:    return @"\U0001F9CA"; // 🧊
+        case WMReplyModePhotoOpener:   return @"\U0001F4F8"; // 📸
+        case WMReplyModeReviver:       return @"\U0001F4AB"; // 💫
+        case WMReplyModeAlphaPower:    return @"\U0001F451"; // 👑
         default:                       return @"";
     }
 }

@@ -189,17 +189,25 @@ static NSString *WMStr(id v, NSString *fallback) {
     return fallback;
 }
 
-- (WMAPIProvider)provider { return [_prefs[@"apiProvider"] integerValue] == 1 ? WMAPIProviderDeepSeek : WMAPIProviderClaude; }
+- (WMAPIProvider)provider {
+    NSInteger v = [_prefs[@"apiProvider"] integerValue];
+    return (v == WMAPIProviderDeepSeek || v == WMAPIProviderKimi) ? (WMAPIProvider)v : WMAPIProviderClaude;
+}
 - (NSString *)claudeKey   { return WMStr(_prefs[@"claudeAPIKey"], @""); }
 - (NSString *)deepseekKey { return WMStr(_prefs[@"deepseekAPIKey"], @""); }
+- (NSString *)kimiKey     { return WMStr(_prefs[@"kimiAPIKey"], @""); }
 - (NSString *)soundLikeMe { return WMStr(_prefs[@"soundLikeMe"], @""); }
 - (BOOL)claudeSendsScreenshot { return [_prefs[@"claudeReads"] integerValue] == 1; }
 
 - (NSString *)keyForProvider:(WMAPIProvider)p {
-    return p == WMAPIProviderDeepSeek ? self.deepseekKey : self.claudeKey;
+    if (p == WMAPIProviderDeepSeek) return self.deepseekKey;
+    if (p == WMAPIProviderKimi)     return self.kimiKey;
+    return self.claudeKey;
 }
 - (NSString *)keyPrefKeyForProvider:(WMAPIProvider)p {
-    return p == WMAPIProviderDeepSeek ? @"deepseekAPIKey" : @"claudeAPIKey";
+    if (p == WMAPIProviderDeepSeek) return @"deepseekAPIKey";
+    if (p == WMAPIProviderKimi)     return @"kimiAPIKey";
+    return @"claudeAPIKey";
 }
 
 // base URL with no path
@@ -213,14 +221,29 @@ static NSString *WMStr(id v, NSString *fallback) {
 }
 - (NSString *)deepseekEndpoint { return [self.deepseekBaseURL stringByAppendingString:@"/chat/completions"]; }
 
+// Kimi / Moonshot — OpenAI-compatible, so same shape as DeepSeek, different default host.
+- (NSString *)kimiBaseURL {
+    NSString *b = WMStr(_prefs[@"kimiBaseURL"], @"https://api.moonshot.ai/v1");
+    if (![b hasPrefix:@"http://"] && ![b hasPrefix:@"https://"]) b = [@"https://" stringByAppendingString:b];
+    while ([b hasSuffix:@"/"]) b = [b substringToIndex:b.length - 1];
+    if ([b hasSuffix:@"/chat/completions"]) b = [b substringToIndex:b.length - @"/chat/completions".length];
+    while ([b hasSuffix:@"/"]) b = [b substringToIndex:b.length - 1];
+    return b;
+}
+- (NSString *)kimiEndpoint { return [self.kimiBaseURL stringByAppendingString:@"/chat/completions"]; }
+
 #pragma mark - models
 
 static NSString *WMModelKey(WMAPIProvider p) {
-    return p == WMAPIProviderDeepSeek ? @"deepseekModel" : @"claudeModel";
+    if (p == WMAPIProviderDeepSeek) return @"deepseekModel";
+    if (p == WMAPIProviderKimi)     return @"kimiModel";
+    return @"claudeModel";
 }
 
 - (NSString *)modelForProvider:(WMAPIProvider)p {
-    NSString *def = p == WMAPIProviderDeepSeek ? @"deepseek-chat" : @"claude-sonnet-4-5-20250929";
+    NSString *def = @"claude-sonnet-4-5-20250929";
+    if (p == WMAPIProviderDeepSeek) def = @"deepseek-chat";
+    else if (p == WMAPIProviderKimi) def = @"kimi-latest";   // vision-capable Moonshot model
     return WMStr(_prefs[WMModelKey(p)], def);
 }
 - (BOOL)hasChosenModelForProvider:(WMAPIProvider)p {
@@ -231,7 +254,7 @@ static NSString *WMModelKey(WMAPIProvider p) {
     return [self setValue:modelID forSettingKey:WMModelKey(p)];
 }
 - (BOOL)saveProvider:(WMAPIProvider)p {
-    return [self setValue:@(p == WMAPIProviderDeepSeek ? 1 : 0) forSettingKey:@"apiProvider"];
+    return [self setValue:@((NSInteger)p) forSettingKey:@"apiProvider"];
 }
 
 - (BOOL)saveKey:(NSString *)key forProvider:(WMAPIProvider)p {
@@ -241,6 +264,7 @@ static NSString *WMModelKey(WMAPIProvider p) {
 
 - (NSString *)claudeModel   { return [self modelForProvider:WMAPIProviderClaude]; }
 - (NSString *)deepseekModel { return [self modelForProvider:WMAPIProviderDeepSeek]; }
+- (NSString *)kimiModel     { return [self modelForProvider:WMAPIProviderKimi]; }
 
 #pragma mark - apps
 

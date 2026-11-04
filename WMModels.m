@@ -45,7 +45,8 @@ static NSMutableDictionary *gCache;       // "provider|key" -> @{ "at": date, "m
                    force:(BOOL)force
               completion:(void(^)(NSArray<NSDictionary *> *models, NSError *err))done {
     WMSettings *s = [WMSettings shared];
-    NSString *name = (p == WMAPIProviderDeepSeek) ? @"DeepSeek" : @"Claude";
+    NSString *name = (p == WMAPIProviderDeepSeek) ? @"DeepSeek"
+                   : (p == WMAPIProviderKimi) ? @"Kimi" : @"Claude";
     NSString *key = explicitKey.length
         ? [explicitKey stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]
         : ([s reload], [s keyForProvider:p]);
@@ -75,10 +76,10 @@ static NSMutableDictionary *gCache;       // "provider|key" -> @{ "at": date, "m
         });
     };
 
-    if (p == WMAPIProviderDeepSeek) {
-        NSString *base = s.deepseekBaseURL;
+    if (p == WMAPIProviderDeepSeek || p == WMAPIProviderKimi) {
+        NSString *base = (p == WMAPIProviderKimi) ? s.kimiBaseURL : s.deepseekBaseURL;
         NSURL *url = [NSURL URLWithString:[base stringByAppendingString:@"/models"]];
-        if (!url) { done(nil, [self _err:@"DeepSeek Base URL looks invalid."]); return; }
+        if (!url) { done(nil, [self _err:[NSString stringWithFormat:@"%@ Base URL looks invalid.", name]]); return; }
         NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
         [req setValue:[@"Bearer " stringByAppendingString:key] forHTTPHeaderField:@"Authorization"];
         req.timeoutInterval = 20;
@@ -95,7 +96,7 @@ static NSMutableDictionary *gCache;       // "provider|key" -> @{ "at": date, "m
                     NSString *nm = [m[@"name"] isKindOfClass:[NSString class]] && [m[@"name"] length] ? m[@"name"] : m[@"id"];
                     [all addObject:@{ @"id": m[@"id"], @"name": nm }];
                 }
-            finish(all.count ? nil : [self _err:@"DeepSeek returned no models for this key."]);
+            finish(all.count ? nil : [self _err:[NSString stringWithFormat:@"%@ returned no models for this key.", name]]);
         }] resume];
         return;
     }
