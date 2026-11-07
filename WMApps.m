@@ -67,14 +67,28 @@
     return NO;
 }
 
+// Same idea for chat apps: TrollStore / sideloaded builds (dual installs, tweaked IPAs) often carry a
+// changed bundle id, so an exact-id list misses them even though the app's name is right there in it.
++ (BOOL)_looksLikeChat:(NSString *)bid {
+    NSString *b = bid.lowercaseString;
+    for (NSString *t in @[@"whatsapp", @"telegra", @"instagram", @"messenger", @"snapchat", @"signal",
+                          @"discord", @"reddit", @"tiktok", @"musically", @"viber", @"wechat", @"tencent.xin",
+                          @"slack", @"chatlyio", @"skype", @"tweetie", @"twitter", @"linkedin", @"facebook",
+                          @"naver.line", @"hinge", @"bumble"]) {
+        if ([b containsString:t]) return YES;
+    }
+    return NO;
+}
+
 + (WMAppKind)kindForBundleID:(NSString *)bid {
     if (bid.length == 0) return WMAppKindNone;
     WMSettings *s = [WMSettings shared];
-
-    if ([s.manualApps containsObject:bid]) return WMAppKindManual;
-    if (!s.autoDetectApps) return WMAppKindNone;
+    // Apps you picked yourself are ADDED to the built-in lists. (They used to REPLACE them: tapping Done in
+    // the picker switched auto-detection off, so one extra pick silently hid the bubble everywhere else.)
+    for (NSString *m in s.manualApps)
+        if ([m caseInsensitiveCompare:bid] == NSOrderedSame) return WMAppKindManual;
     if ([[self _datingApps] containsObject:bid] || [self _looksLikeDating:bid]) return WMAppKindDating;
-    if ([[self _chatApps] containsObject:bid]) return WMAppKindChat;
+    if ([[self _chatApps] containsObject:bid] || [self _looksLikeChat:bid]) return WMAppKindChat;
     return WMAppKindNone;
 }
 

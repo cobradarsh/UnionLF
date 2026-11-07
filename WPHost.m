@@ -18,6 +18,11 @@
 - (NSArray<LSApplicationProxy *> *)allApplications;
 @end
 
+// The last few third-party bundle ids SpringBoard reported in front (newest first). The app picker
+// lists them so an app can be enabled by the EXACT id the detector sees, even an unusual one
+// (TrollStore builds, dual installs). Main thread only (the 1 s timer and the picker).
+static NSMutableArray<NSString *> *gRecentFront;
+
 @implementation WPHost
 
 + (NSString *)frontmostBundleID {
@@ -27,15 +32,31 @@
         if (![app respondsToSelector:sel]) return nil;
         id front = ((id(*)(id, SEL))objc_msgSend)(app, sel);
         if (!front) return nil;                       // home screen / SpringBoard itself
-        if ([front respondsToSelector:@selector(bundleIdentifier)])
-            return [front bundleIdentifier];
+        NSString *bid = nil;
+        if ([front respondsToSelector:@selector(bundleIdentifier)]) bid = [front bundleIdentifier];
+        // some SBApplication builds only expose it as displayIdentifier
+        if (bid.length == 0 && [front respondsToSelector:NSSelectorFromString(@"displayIdentifier")])
+            bid = (NSString *)[front valueForKey:@"displayIdentifier"];
+        return bid.length ? bid : nil;
     } @catch (__unused id e) {}
     return nil;
 }
 
++ (void)_noteFront:(NSString *)bid {
+    if (bid.length == 0 || [bid hasPrefix:@"com.apple."]) return;
+    if (!gRecentFront) gRecentFront = [NSMutableArray array];
+    if ([gRecentFront.firstObject isEqualToString:bid]) return;
+    [gRecentFront removeObject:bid];
+    [gRecentFront insertObject:bid atIndex:0];
+    while (gRecentFront.count > 10) [gRecentFront removeLastObject];
+}
+
++ (NSArray<NSString *> *)recentFrontmostApps { return gRecentFront ? [gRecentFront copy] : @[]; }
+
 + (BOOL)wingmanEnabledForFrontmost {
     NSString *bid = [self frontmostBundleID];
     if (bid.length == 0) return NO;                   // nothing in front -> no bubble
+    [self _noteFront:bid];
     return [WMApps kindForBundleID:bid] != WMAppKindNone;
 }
 

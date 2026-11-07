@@ -18,6 +18,7 @@
 + (NSString *)frontmostBundleID;                 // the app currently in front, or nil
 + (BOOL)wingmanEnabledForFrontmost;              // YES if the front app should show the bubble
 + (NSArray<NSDictionary *> *)installedApps;      // @[ @{ @"id":bundleID, @"name":display } ], user apps, A–Z
++ (NSArray<NSString *> *)recentFrontmostApps;    // bundle ids recently seen in front, newest first (exact)
 + (void)copyToClipboard:(NSString *)text;        // puts a reply on the general pasteboard
 @end
 

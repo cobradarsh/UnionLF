@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.20";
+NSString *const kWPVersion = @"1.0.21";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -91,12 +91,15 @@ static UIWindowScene *WPActiveScene(void) {
 @end
 @implementation WPAppPickerVC {
     NSArray<NSDictionary *> *_apps;
+    NSArray<NSString *> *_recent;          // exact bundle ids SpringBoard recently reported in front
     NSMutableSet<NSString *> *_chosen;
 }
+- (instancetype)init { return [super initWithStyle:UITableViewStyleInsetGrouped]; }
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Show bubble over…";
     _apps = [WPHost installedApps];
+    _recent = [WPHost recentFrontmostApps];
     _chosen = [NSMutableSet setWithArray:[WMSettings shared].manualApps];
     self.navigationItem.rightBarButtonItem =
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
@@ -104,24 +107,45 @@ static UIWindowScene *WPActiveScene(void) {
 }
 - (void)_done {
     [[WMSettings shared] setValue:_chosen.allObjects forSettingKey:@"manualApps"];
-    [[WMSettings shared] setValue:@NO forSettingKey:@"autoDetectApps"]; // explicit list only
+    // Your picks ADD to the built-in chat/dating list. (This used to switch auto-detection OFF, so picking
+    // one extra app silently hid the bubble everywhere else.)
+    [[WMSettings shared] setValue:@YES forSettingKey:@"autoDetectApps"];
     [self.navigationController popViewControllerAnimated:YES];
 }
-- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return _apps.count; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)t { return 2; }
+- (NSString *)tableView:(UITableView *)t titleForHeaderInSection:(NSInteger)s {
+    return s == 0 ? @"Recently in front" : @"All apps";
+}
+- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s {
+    if (s != 0) return @"A grey tick means the bubble already shows there by itself.";
+    return _recent.count
+        ? @"Exactly as SpringBoard reports them. If an app doesn't get the bubble, open it, come back here and tick it in this list: that works whatever its bundle ID is (TrollStore and dual builds often have unusual ones)."
+        : @"Nothing yet. Open the app once, then come back here and tick it.";
+}
+- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return s == 0 ? _recent.count : _apps.count; }
+- (NSString *)_bidAt:(NSIndexPath *)ip { return ip.section == 0 ? _recent[ip.row] : _apps[ip.row][@"id"]; }
+- (NSString *)_nameFor:(NSString *)bid {
+    for (NSDictionary *a in _apps) if ([a[@"id"] isEqualToString:bid]) return a[@"name"];
+    return bid;
+}
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
     UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c"]
         ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"c"];
-    NSDictionary *a = _apps[ip.row];
-    c.textLabel.text = a[@"name"];
-    c.detailTextLabel.text = a[@"id"];
+    NSString *bid = [self _bidAt:ip];
+    BOOL picked = [_chosen containsObject:bid];
+    WMAppKind kind = [WMApps kindForBundleID:bid];
+    BOOL builtIn = !picked && (kind == WMAppKindChat || kind == WMAppKindDating);
+    c.textLabel.text = [self _nameFor:bid];
+    c.detailTextLabel.text = builtIn ? [bid stringByAppendingString:@"   ·  built-in"] : bid;
     c.detailTextLabel.textColor = WP_SUBTEXT;
-    c.accessoryType = [_chosen containsObject:a[@"id"]] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    c.accessoryType = (picked || builtIn) ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    c.tintColor = builtIn ? WP_SUBTEXT : WP_ACCENT;      // grey tick = on by itself, purple = your pick
     return c;
 }
 - (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip {
-    NSString *bid = _apps[ip.row][@"id"];
+    NSString *bid = [self _bidAt:ip];
     if ([_chosen containsObject:bid]) [_chosen removeObject:bid]; else [_chosen addObject:bid];
-    [t reloadRowsAtIndexPaths:@[ip] withRowAnimation:UITableViewRowAnimationNone];
+    [t reloadData];                       // the same app can appear in both sections
     [t deselectRowAtIndexPath:ip animated:YES];
 }
 @end
