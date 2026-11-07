@@ -1,6 +1,6 @@
 Package: com.adarsh.wingmanplus
 Name: Wingman Plus
-Version: 1.0.17
+Version: 1.0.18
 Architecture: iphoneos-arm64e
 Description: Dating companion that works even in apps that block tweaks (Hinge). A floating bubble lives in SpringBoard - never injected into the dating app, so nothing crashes - captures the screen, reads the profile or chat on-device, and writes flirty/romantic/dating replies with Claude or DeepSeek. Tap a reply to copy it, then paste it in.
 Maintainer: Adarsh

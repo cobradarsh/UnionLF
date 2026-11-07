@@ -66,7 +66,7 @@ NSURLSession *WMPrivateSession(void) {
     // Headroom so the JSON array of 3 replies is never cut off mid-stream (which
     // left the parser with an unterminated array). The parser also salvages partial
     // JSON, but giving room avoids losing the 3rd reply in the first place.
-    NSInteger n = (length == WMReplyLengthShort) ? 800 : 1500;
+    NSInteger n = (length == WMReplyLengthShort) ? 1200 : 2000;
     if (mode == WMReplyModeInMyFavor) n += 800;
     return n;
 }
@@ -191,10 +191,6 @@ NSURLSession *WMPrivateSession(void) {
                                                                 transcript:transcript hasImages:NO] }
         ]
     } mutableCopy];
-    // JSON mode on chat models; reasoning models don't accept it
-    if (![s.deepseekModel.lowercaseString containsString:@"reasoner"])
-        body[@"response_format"] = @{ @"type": @"json_object" };
-
     NSURL *url = [NSURL URLWithString:s.deepseekEndpoint];
     if (!url) { done(nil, [self _err:@"DeepSeek URL in Settings looks invalid."]); return; }
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
@@ -267,9 +263,6 @@ NSURLSession *WMPrivateSession(void) {
             @{ @"role": @"user",   @"content": content }
         ]
     } mutableCopy];
-    if (![s.kimiModel.lowercaseString containsString:@"thinking"])   // reasoning models reject it
-        body[@"response_format"] = @{ @"type": @"json_object" };
-
     NSURL *url = [NSURL URLWithString:s.kimiEndpoint];
     if (!url) { done(nil, [self _err:@"Kimi URL in Settings looks invalid."]); return; }
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
@@ -321,40 +314,60 @@ static NSArray<NSString *> *WPExtractQuotedStrings(NSString *s) {
     return out;
 }
 
-// Accepts {"replies":[...]}, a bare [...], truncated JSON, or numbered lines.
+// Prefers the robust ~~~-separated format, falls back to JSON (whole, bare array, or
+// truncated), then to plain lines. NEVER surfaces raw JSON scaffolding as a reply.
 - (NSArray<NSString *> *)_parseReplies:(NSString *)raw {
     if (raw.length == 0) return @[];
     NSMutableArray *out = [NSMutableArray array];
 
-    id obj = nil;
-    NSRange a = [raw rangeOfString:@"{"], b = [raw rangeOfString:@"}" options:NSBackwardsSearch];
-    if (a.location != NSNotFound && b.location != NSNotFound && b.location > a.location) {
-        NSString *js = [raw substringWithRange:NSMakeRange(a.location, b.location - a.location + 1)];
-        obj = [NSJSONSerialization JSONObjectWithData:[js dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
-        if ([obj isKindOfClass:[NSDictionary class]]) obj = obj[@"replies"];
+    // 1) Preferred: three replies separated by lines of ~~~. Degrades gracefully on a
+    //    cut-off response — you still get the complete replies before the break.
+    if ([raw rangeOfString:@"~~~"].location != NSNotFound) {
+        for (NSString *part in [raw componentsSeparatedByString:@"~~~"]) {
+            NSString *t = [part stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (t.length > 1) [out addObject:t];
+        }
     }
-    if (![obj isKindOfClass:[NSArray class]]) {
-        a = [raw rangeOfString:@"["]; b = [raw rangeOfString:@"]" options:NSBackwardsSearch];
+
+    // 2) Fallback: a model that still answered in JSON.
+    if (out.count == 0) {
+        id obj = nil;
+        NSRange a = [raw rangeOfString:@"{"], b = [raw rangeOfString:@"}" options:NSBackwardsSearch];
         if (a.location != NSNotFound && b.location != NSNotFound && b.location > a.location) {
             NSString *js = [raw substringWithRange:NSMakeRange(a.location, b.location - a.location + 1)];
             obj = [NSJSONSerialization JSONObjectWithData:[js dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+            if ([obj isKindOfClass:[NSDictionary class]]) obj = obj[@"replies"];
         }
-    }
-    // salvage from truncated/partial JSON (array left unterminated past max_tokens)
-    if (![obj isKindOfClass:[NSArray class]]) {
-        NSRange lb = [raw rangeOfString:@"["];
-        if (lb.location != NSNotFound) {
-            NSArray *q = WPExtractQuotedStrings([raw substringFromIndex:lb.location]);
-            if (q.count) obj = q;
+        if (![obj isKindOfClass:[NSArray class]]) {
+            a = [raw rangeOfString:@"["]; b = [raw rangeOfString:@"]" options:NSBackwardsSearch];
+            if (a.location != NSNotFound && b.location != NSNotFound && b.location > a.location) {
+                NSString *js = [raw substringWithRange:NSMakeRange(a.location, b.location - a.location + 1)];
+                obj = [NSJSONSerialization JSONObjectWithData:[js dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+            }
         }
+        if (![obj isKindOfClass:[NSArray class]]) {   // salvage COMPLETE strings from a truncated array
+            NSRange lb = [raw rangeOfString:@"["];
+            if (lb.location != NSNotFound) {
+                NSArray *q = WPExtractQuotedStrings([raw substringFromIndex:lb.location]);
+                if (q.count) obj = q;
+            }
+        }
+        if ([obj isKindOfClass:[NSArray class]])
+            for (id r in obj) if ([r isKindOfClass:[NSString class]]) [out addObject:r];
     }
-    if ([obj isKindOfClass:[NSArray class]]) {
-        for (id r in obj) if ([r isKindOfClass:[NSString class]]) [out addObject:r];
-    } else {
-        NSCharacterSet *junk = [NSCharacterSet characterSetWithCharactersInString:@"0123456789.)-*\"' \t"];
-        for (NSString *line in [raw componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]]) {
-            NSString *t = [line stringByTrimmingCharactersInSet:junk];
-            if (t.length > 1) [out addObject:t];
+
+    // 3) Last resort: plain lines — but ONLY if the text isn't JSON scaffolding, so a
+    //    truncated {"replies":[...] can never become a reply card.
+    if (out.count == 0) {
+        NSString *trim = [raw stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        BOOL jsonish = [trim hasPrefix:@"{"] || [trim hasPrefix:@"["] ||
+                       [raw rangeOfString:@"\"replies\""].location != NSNotFound;
+        if (!jsonish) {
+            NSCharacterSet *junk = [NSCharacterSet characterSetWithCharactersInString:@"0123456789.)-*\"' \t"];
+            for (NSString *line in [raw componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]]) {
+                NSString *t = [line stringByTrimmingCharactersInSet:junk];
+                if (t.length > 1) [out addObject:t];
+            }
         }
     }
 

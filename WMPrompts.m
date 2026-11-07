@@ -63,8 +63,9 @@
       "7. Make the replies genuinely different from each other, not rewordings.\n\n"
 
       "OUTPUT FORMAT:\n"
-      "Return ONLY valid JSON, nothing before or after it:\n"
-      "{\"replies\": [\"reply one\", \"reply two\", \"reply three\"]}\n"];
+      "Output EXACTLY three replies. Put a line containing only ~~~ between them (not "
+      "before the first and not after the last). No numbering, no labels, no JSON, no "
+      "quotation marks around a reply, nothing else before or after.\n"];
 
     if (style.length > 0) {
         [sys appendFormat:
@@ -257,8 +258,8 @@
                          "style is Formal).\n\n"];
     }
 
-    [p appendFormat:@"Write exactly %ld different replies and return them as the JSON "
-                     "object described.", (long)kWMRepliesPerCall];
+    [p appendFormat:@"Write exactly %ld different replies, separated by a line containing "
+                     "only ~~~ as described above.", (long)kWMRepliesPerCall];
     return [p copy];
 }
 
