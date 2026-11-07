@@ -79,3 +79,31 @@ jobs:
         with:
           name: wingmanplus-roothide-deb
           path: packages/*.deb
+
+      # ---- Wingman Keyboard (separate package: container app + keyboard extension) ----
+      - name: Build the Wingman Keyboard .deb (app + extension)
+        run: |
+          export THEOS="$HOME/theos"
+          cd keyboard
+          make clean || true
+          set -o pipefail
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" 2>&1 | tee kb-build.log
+          echo "=== staged WingmanKB.app tree ==="
+          find . -path '*WingmanKB.app*' 2>/dev/null | sort || true
+          echo "=== produced debs ==="
+          ls -la packages/ || true
+          test -n "$(ls packages/*.deb 2>/dev/null)" || { echo 'NO KEYBOARD DEB PRODUCED'; exit 1; }
+
+      - name: Upload Wingman Keyboard build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wingmankb-build-log
+          path: keyboard/kb-build.log
+          if-no-files-found: ignore
+
+      - name: Upload Wingman Keyboard .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: wingmankb-roothide-deb
+          path: keyboard/packages/*.deb

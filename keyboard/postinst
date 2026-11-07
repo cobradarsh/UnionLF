@@ -1,0 +1,4 @@
+#!/bin/sh
+# Register the container app so iOS lists the keyboard under Settings > General > Keyboard.
+uicache -p "/Applications/WingmanKB.app" 2>/dev/null || uicache -a 2>/dev/null || true
+exit 0

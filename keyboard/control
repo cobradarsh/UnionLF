@@ -1,0 +1,9 @@
+Package: com.adarsh.wingmankb
+Name: Wingman Keyboard
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: One-tap Wingman keyboard. Shows the replies Wingman Plus just generated as buttons - tap one to type it straight into the dating app, no copy-and-paste. Switch to it with the globe key inside any chat. Needs "Allow Full Access" so it can read the replies Wingman wrote.
+Maintainer: Adarsh
+Author: Adarsh
+Section: Keyboards
+Depends: firmware (>= 15.0)
