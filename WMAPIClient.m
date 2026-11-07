@@ -6,6 +6,27 @@
 
 #import "Wingman.h"
 
+// Claude reads best at <=1568 px on the long edge / ~1.15 MP and shrinks anything bigger
+// server-side anyway, so a 3x Retina screenshot (~3 MP) only costs upload time on mobile data.
+// Shrink first: roughly a third of the bytes per frame, same quality to the model.
+static NSData *WPFrameJPEG(UIImage *img) {
+    if (!img) return nil;
+    CGFloat w = img.size.width * img.scale, h = img.size.height * img.scale;   // pixels
+    if (w < 1 || h < 1) return UIImageJPEGRepresentation(img, 0.82);
+    CGFloat s = MIN(1.0, MIN(1568.0 / MAX(w, h), sqrt(1150000.0 / (w * h))));
+    UIImage *out = img;
+    if (s < 1.0) {
+        CGSize sz = CGSizeMake(floor(w * s), floor(h * s));
+        UIGraphicsImageRendererFormat *fmt = [UIGraphicsImageRendererFormat defaultFormat];
+        fmt.scale = 1; fmt.opaque = YES;
+        UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:sz format:fmt];
+        out = [r imageWithActions:^(UIGraphicsImageRendererContext *c) {
+            [img drawInRect:CGRectMake(0, 0, sz.width, sz.height)];
+        }];
+    }
+    return UIImageJPEGRepresentation(out, 0.82);
+}
+
 // Private session, created once, fully isolated from the host app (WhatsApp).
 //
 // An EPHEMERAL configuration is the key: it gives us our own in-memory cookie
@@ -113,11 +134,14 @@ NSURLSession *WMPrivateSession(void) {
     NSMutableArray *content = [NSMutableArray array];
     if (sendImages) {
         for (UIImage *img in frames) {
-            NSData *jpeg = UIImageJPEGRepresentation(img, 0.7);
+            NSData *jpeg = WPFrameJPEG(img);
             if (!jpeg) continue;
-            [content addObject:@{ @"type": @"image",
+            NSMutableDictionary *block = [@{ @"type": @"image",
                                   @"source": @{ @"type": @"base64", @"media_type": @"image/jpeg",
-                                                @"data": [jpeg base64EncodedStringWithOptions:0] } }];
+                                                @"data": [jpeg base64EncodedStringWithOptions:0] } } mutableCopy];
+            // Cache the screenshots too: "3 more" or another vibe on the same capture re-reads them at ~10%.
+            if (img == frames.lastObject) block[@"cache_control"] = @{ @"type": @"ephemeral" };
+            [content addObject:block];
         }
     }
     BOOL hasImages = content.count > 0;
@@ -132,7 +156,11 @@ NSURLSession *WMPrivateSession(void) {
     NSMutableDictionary *body = [@{
         @"model":      s.claudeModel,
         @"max_tokens": @([self _maxTokensForMode:mode length:length]),
-        @"system":     [WMPrompts systemPromptWithSoundLikeMe:s.soundLikeMe],
+        // Sent as a cached content block: identical on every call, so it's a stable prefix that hits
+        // across every chat and profile (not just re-gens of one capture) at ~10% of the input price.
+        @"system":     @[ @{ @"type": @"text",
+                             @"text": [WMPrompts systemPromptWithSoundLikeMe:s.soundLikeMe],
+                             @"cache_control": @{ @"type": @"ephemeral" } } ],
         @"messages":   @[ @{ @"role": @"user", @"content": content } ]
     } mutableCopy];
     if (mode == WMReplyModeInMyFavor)
@@ -243,7 +271,7 @@ NSURLSession *WMPrivateSession(void) {
                           @"text": [WMPrompts userPromptForMode:mode length:length context:context
                                                      transcript:transcript hasImages:(frames.count > 0)] }];
     for (UIImage *img in frames) {
-        NSData *jpeg = UIImageJPEGRepresentation(img, 0.7);
+        NSData *jpeg = WPFrameJPEG(img);
         if (!jpeg) continue;
         NSString *dataURL = [@"data:image/jpeg;base64,"
             stringByAppendingString:[jpeg base64EncodedStringWithOptions:0]];

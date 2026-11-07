@@ -8,7 +8,28 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.19";
+NSString *const kWPVersion = @"1.0.20";
+
+// ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
+static UIColor *WPHex(uint32_t rgb) {
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0 green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0 alpha:1];
+}
+static UIColor *WPDyn(uint32_t dark, uint32_t light) {
+    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
+        return WPHex(tc.userInterfaceStyle == UIUserInterfaceStyleDark ? dark : light);
+    }];
+}
+#define WP_ACCENT  WPHex(0x7C5CFF)
+#define WP_SHEET   WPDyn(0x17171F, 0xFFFFFF)
+#define WP_CARD    WPDyn(0x242432, 0xF3F1FA)
+#define WP_FIELD   WPDyn(0x1F1F2A, 0xF4F4F8)
+#define WP_TEXT    WPDyn(0xF2F2F7, 0x15151C)
+#define WP_SUBTEXT WPDyn(0xA3A3B5, 0x6A6A7A)
+#define WP_ERROR   WPDyn(0xFF8A80, 0xC62828)
+#define WP_OK      WPDyn(0x7BE495, 0x2E7D32)
+#define WP_STROKE  [UIColor colorWithRed:0x80/255.0 green:0x80/255.0 blue:0x98/255.0 alpha:0x33/255.0]
+static CGFloat const kWPSheetTopPad = 14;
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -93,7 +114,7 @@ static UIWindowScene *WPActiveScene(void) {
     NSDictionary *a = _apps[ip.row];
     c.textLabel.text = a[@"name"];
     c.detailTextLabel.text = a[@"id"];
-    c.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    c.detailTextLabel.textColor = WP_SUBTEXT;
     c.accessoryType = [_chosen containsObject:a[@"id"]] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     return c;
 }
@@ -118,7 +139,7 @@ static UIWindowScene *WPActiveScene(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Settings";
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = WP_SHEET;
     WMSettings *s = [WMSettings shared]; [s reload];
 
     UIScrollView *sc = [[UIScrollView alloc] initWithFrame:self.view.bounds];
@@ -153,7 +174,7 @@ static UIWindowScene *WPActiveScene(void) {
 
     UIButton *verify = [UIButton buttonWithType:UIButtonTypeSystem];
     verify.frame = CGRectMake(m, y, W-2*m, 40);
-    verify.backgroundColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1];
+    verify.backgroundColor = WP_ACCENT;
     [verify setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     verify.layer.cornerRadius = 8;
     [verify setTitle:@"Save & verify key" forState:UIControlStateNormal];
@@ -161,19 +182,19 @@ static UIWindowScene *WPActiveScene(void) {
     [sc addSubview:verify]; y += 48;
 
     _model = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
-    _model.font = [UIFont systemFontOfSize:13]; _model.textColor = UIColor.secondaryLabelColor;
+    _model.font = [UIFont systemFontOfSize:13]; _model.textColor = WP_SUBTEXT;
     _model.text = [NSString stringWithFormat:@"Model: %@", [s modelForProvider:s.provider]];
     [sc addSubview:_model]; y += 28;
 
     _status = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
-    _status.font = [UIFont systemFontOfSize:13]; _status.textColor = UIColor.secondaryLabelColor;
+    _status.font = [UIFont systemFontOfSize:13]; _status.textColor = WP_SUBTEXT;
     [sc addSubview:_status]; y += 28;
 
     UILabel *sl = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
     sl.text = @"Sound like me (optional)"; sl.font = [UIFont boldSystemFontOfSize:14];
     [sc addSubview:sl]; y += 26;
     _style = [[UITextView alloc] initWithFrame:CGRectMake(m, y, W-2*m, 80)];
-    _style.layer.borderColor = UIColor.separatorColor.CGColor; _style.layer.borderWidth = 1;
+    _style.layer.borderColor = WP_STROKE.CGColor; _style.layer.borderWidth = 1;
     _style.layer.cornerRadius = 8; _style.font = [UIFont systemFontOfSize:15];
     _style.text = s.soundLikeMe;
     [sc addSubview:_style]; y += 92;
@@ -191,6 +212,10 @@ static UIWindowScene *WPActiveScene(void) {
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                                                       target:self action:@selector(_save)];
 }
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self.navigationController setNavigationBarHidden:NO animated:animated];   // the sheet hides it
+}
 - (void)_providerChanged {
     WMSettings *s = [WMSettings shared];
     WMAPIProvider p = [self _p];
@@ -204,10 +229,10 @@ static UIWindowScene *WPActiveScene(void) {
                    stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (c.length) {
         _key.text = c;
-        _status.textColor = UIColor.secondaryLabelColor;
+        _status.textColor = WP_SUBTEXT;
         _status.text = @"Pasted. Now tap Save & verify key.";
     } else {
-        _status.textColor = UIColor.systemRedColor;
+        _status.textColor = WP_ERROR;
         _status.text = @"Clipboard empty — copy your key (e.g. in Notes) first.";
     }
 }
@@ -218,17 +243,17 @@ static UIWindowScene *WPActiveScene(void) {
     WMSettings *s = [WMSettings shared];
     [s saveProvider:p];
     [s saveKey:_key.text forProvider:p];
-    _status.textColor = UIColor.secondaryLabelColor;
+    _status.textColor = WP_SUBTEXT;
     _status.text = @"Verifying…";
     [WMModels fetchForProvider:p force:YES completion:^(NSArray<NSDictionary *> *models, NSError *err) {
         if (err || models.count == 0) {
-            self->_status.textColor = UIColor.systemRedColor;
+            self->_status.textColor = WP_ERROR;
             self->_status.text = err ? err.localizedDescription : @"No models returned.";
             return;
         }
         // auto-pick the first model if none chosen yet
         if (![s hasChosenModelForProvider:p]) [s saveModel:models.firstObject[@"id"] forProvider:p];
-        self->_status.textColor = UIColor.systemGreenColor;
+        self->_status.textColor = WP_OK;
         self->_status.text = [NSString stringWithFormat:@"Key OK — %lu models.", (unsigned long)models.count];
         self->_model.text = [NSString stringWithFormat:@"Model: %@", [s modelForProvider:p]];
         [self _pickModel:models provider:p];
@@ -262,7 +287,7 @@ static UIWindowScene *WPActiveScene(void) {
 
 #pragma mark - main sheet
 
-@interface WPSheet ()
+@interface WPSheet () <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) NSMutableArray<UIImage *> *frames;
 @property (nonatomic) WMReplyMode mode;
 @property (nonatomic) WMReplyLength length;
@@ -274,6 +299,11 @@ static UIWindowScene *WPActiveScene(void) {
 @property (nonatomic, strong) UIButton *genBtn;
 @property (nonatomic, strong) NSArray<UIButton *> *chips;
 @property (nonatomic, strong) NSArray<UIButton *> *photoChips;
+@property (nonatomic, strong) UIView *sheet;                           // the bottom sheet itself
+@property (nonatomic, strong) UIButton *shortChip, *longChip;
+@property (nonatomic) BOOL appeared, animatingIn;
+@property (nonatomic) CGFloat builtWidth;
+@property (nonatomic) CGRect lastBounds;
 @end
 
 @implementation WPSheet
@@ -307,27 +337,63 @@ static UIWindowScene *WPActiveScene(void) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
-    self.title = [NSString stringWithFormat:@"Wingman Plus %@", kWPVersion];
-    self.navigationItem.leftBarButtonItem =
-        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
-                                                      target:self action:@selector(_close)];
-    self.navigationItem.rightBarButtonItem =
-        [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"gearshape"]
-                                         style:UIBarButtonItemStylePlain target:self action:@selector(_settings)];
+    // A bottom sheet over a dimmed view of the app, like the Android version: the dating app stays
+    // visible behind it, and a tap outside the sheet closes it.
+    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.45];
+    self.navigationController.view.backgroundColor = UIColor.clearColor;
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_close)];
+    tap.delegate = self;
+    [self.view addGestureRecognizer:tap];
 
-    _scroll = [[UIScrollView alloc] initWithFrame:self.view.bounds];
-    _scroll.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    _scroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAlways;
-    [self.view addSubview:_scroll];
+    _sheet = [[UIView alloc] initWithFrame:CGRectZero];
+    _sheet.backgroundColor = WP_SHEET;
+    _sheet.layer.cornerRadius = 26;
+    _sheet.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    _sheet.clipsToBounds = YES;
+    [self.view addSubview:_sheet];
+
+    _scroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
+    _scroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    _scroll.alwaysBounceVertical = YES;
+    _scroll.showsVerticalScrollIndicator = NO;
+    [_sheet addSubview:_scroll];
     [self _rebuild];
+}
+
+// only taps on the dimmed backdrop close the sheet, never taps inside it
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
+    return ![touch.view isDescendantOfView:_sheet];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self.navigationController setNavigationBarHidden:YES animated:animated];   // the sheet draws its own header
     // returning from settings: refresh the "add key" hint / button state
     [[WMSettings shared] reload];
     [self _rebuild];
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (_appeared) return;
+    _appeared = YES;
+    // slide up from the bottom edge
+    CGRect end = _sheet.frame;
+    _sheet.frame = CGRectOffset(end, 0, end.size.height);
+    _animatingIn = YES;
+    [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.9 initialSpringVelocity:0.4
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{ self->_sheet.frame = end; }
+                     completion:^(BOOL done) { self->_animatingIn = NO; }];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (CGRectEqualToRect(self.view.bounds, _lastBounds)) return;
+    _lastBounds = self.view.bounds;
+    // first real layout (bounds were empty in viewDidLoad) or a rotation: chip wrapping depends on the width
+    if (fabs(self.view.bounds.size.width - _builtWidth) > 0.5) [self _rebuild];
+    else [self _layoutSheet:NO];
 }
 
 - (void)_settings { [self.navigationController pushViewController:[WPSettingsVC new] animated:YES]; }
@@ -345,140 +411,224 @@ static UIWindowScene *WPActiveScene(void) {
 
 - (void)_rebuild {
     for (UIView *v in _scroll.subviews) [v removeFromSuperview];
-    CGFloat W = self.view.bounds.size.width, m = 16, y = 12;
+    CGFloat W = self.view.bounds.size.width, m = 20, y = 2;
+    _builtWidth = W;
+    if (W < 1) return;
     WMSettings *s = [WMSettings shared];
     BOOL hasKey = [s keyForProvider:s.provider].length > 0;
+    NSString *providerName = @[@"Claude", @"DeepSeek", @"Kimi"][MIN((NSUInteger)s.provider, (NSUInteger)2)];
 
-    if (!hasKey) {
-        UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 44)];
-        note.numberOfLines = 0; note.font = [UIFont systemFontOfSize:14];
-        note.textColor = UIColor.systemRedColor;
-        note.text = @"Tap the gear to add your API key first.";
-        [_scroll addSubview:note]; y += 52;
+    // ── header: 🪽 Wingman · provider chip (opens settings) · ✕
+    UIButton *x = [UIButton buttonWithType:UIButtonTypeCustom];
+    [x setTitle:@"✕" forState:UIControlStateNormal];
+    [x setTitleColor:WP_SUBTEXT forState:UIControlStateNormal];
+    x.titleLabel.font = [UIFont systemFontOfSize:20];
+    x.frame = CGRectMake(W - m - 24, y, 32, 36);
+    [x addTarget:self action:@selector(_close) forControlEvents:UIControlEventTouchUpInside];
+    [_scroll addSubview:x];
+
+    UIButton *prov = [self _makeChip:providerName size:14];
+    [self _styleChip:prov selected:NO];
+    [prov addTarget:self action:@selector(_settings) forControlEvents:UIControlEventTouchUpInside];
+    prov.frame = CGRectMake(CGRectGetMinX(x.frame) - 6 - prov.bounds.size.width, y, prov.bounds.size.width, 36);
+    [_scroll addSubview:prov];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(m, y, CGRectGetMinX(prov.frame) - m - 8, 36)];
+    title.text = @"🪽  Wingman";
+    title.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+    title.textColor = WP_TEXT;
+    [_scroll addSubview:title];
+    y += 44;
+
+    // ── what was captured
+    UILabel *cap = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 18)];
+    cap.font = [UIFont systemFontOfSize:13];
+    cap.textColor = hasKey ? WP_SUBTEXT : WP_ERROR;
+    cap.numberOfLines = 2;
+    cap.text = hasKey
+        ? [NSString stringWithFormat:@"%lu screen%@ captured. For a whole profile, add screens top to bottom.",
+           (unsigned long)_frames.count, _frames.count == 1 ? @"" : @"s"]
+        : [NSString stringWithFormat:@"Tap %@ above to add your API key first.", providerName];
+    CGSize cs = [cap sizeThatFits:CGSizeMake(W-2*m, 60)];
+    cap.frame = CGRectMake(m, y, W-2*m, MAX(18, cs.height));
+    [_scroll addSubview:cap];
+    y += cap.frame.size.height + 10;
+
+    // thumbnails of every captured screen, so you can see what Wingman is reading
+    if (_frames.count) {
+        CGFloat th = 100, tx = 0;
+        UIScrollView *strip = [[UIScrollView alloc] initWithFrame:CGRectMake(m, y, W-2*m, th)];
+        strip.showsHorizontalScrollIndicator = NO;
+        for (UIImage *f in _frames) {
+            CGFloat ratio = (f.size.width > 0 && f.size.height > 0) ? (f.size.width / f.size.height) : 0.46;
+            UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(tx, 0, th * ratio, th)];
+            iv.image = f; iv.contentMode = UIViewContentModeScaleAspectFit;
+            iv.backgroundColor = WP_FIELD; iv.clipsToBounds = YES; iv.layer.cornerRadius = 10;
+            [strip addSubview:iv];
+            tx += th * ratio + 8;
+        }
+        strip.contentSize = CGSizeMake(tx, th);
+        [_scroll addSubview:strip];
+        y += th + 12;
     }
 
-    // vibe chips — wrapping grid so every vibe is visible at once (no scrolling)
+    // ── actions
+    UIButton *add = [self _makeChip:@"➕  Add another screen" size:14];
+    [self _styleChip:add selected:NO];
+    [add addTarget:self action:@selector(_addScreen) forControlEvents:UIControlEventTouchUpInside];
+    add.frame = CGRectMake(m, y, add.bounds.size.width, 36);
+    [_scroll addSubview:add];
+    y += 36 + 14;
+
+    // ── length
+    y = [self _sectionLabel:@"How long?" at:y width:W];
+    _shortChip = [self _makeChip:@"Short" size:14];
+    _longChip  = [self _makeChip:@"Longer" size:14];
+    [_shortChip addTarget:self action:@selector(_pickShort) forControlEvents:UIControlEventTouchUpInside];
+    [_longChip  addTarget:self action:@selector(_pickLong)  forControlEvents:UIControlEventTouchUpInside];
+    _shortChip.frame = CGRectMake(m, y, _shortChip.bounds.size.width, 36);
+    _longChip.frame  = CGRectMake(CGRectGetMaxX(_shortChip.frame) + 8, y, _longChip.bounds.size.width, 36);
+    [self _styleLength];
+    [_scroll addSubview:_shortChip];
+    [_scroll addSubview:_longChip];
+    y += 36 + 14;
+
+    // ── vibes: wrapping grid so every vibe is visible at once (no scrolling)
+    y = [self _sectionLabel:@"Pick a vibe" at:y width:W];
     CGFloat cx = m, cy = y, rowH = 36, gap = 8;
     NSMutableArray *chips = [NSMutableArray array];
     for (NSInteger i = 0; i < kWPModeCount; i++) {
         WMReplyMode md = kWPModes[i];
-        NSString *title = [NSString stringWithFormat:@"%@ %@", [WMPrompts emojiForMode:md], [WMPrompts labelForMode:md]];
-        UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
-        [b setTitle:title forState:UIControlStateNormal];
-        b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        NSString *t = [NSString stringWithFormat:@"%@ %@", [WMPrompts emojiForMode:md], [WMPrompts labelForMode:md]];
+        UIButton *b = [self _makeChip:t size:14];
         b.tag = i;
         [b addTarget:self action:@selector(_chip:) forControlEvents:UIControlEventTouchUpInside];
-        [b sizeToFit];
-        CGFloat w = b.bounds.size.width + 24;
-        if (cx + w > W - m) { cx = m; cy += rowH + gap; }   // wrap to the next row
+        CGFloat w = b.bounds.size.width;
+        if (cx + w > W - m && cx > m) { cx = m; cy += rowH + gap; }   // wrap to the next row
         b.frame = CGRectMake(cx, cy, w, rowH);
-        b.layer.cornerRadius = rowH / 2;
         [self _styleChip:b selected:(md == _mode)];
-        [_scroll addSubview:b]; [chips addObject:b];
+        [_scroll addSubview:b];
+        [chips addObject:b];
         cx += w + gap;
     }
     _chips = chips;
-    y = cy + rowH + 12;
+    y = cy + rowH + 14;
 
-    // Photo Opener sub-style — a little sub-menu shown only when Photo Opener is picked
+    // ── Photo Opener sub-style, only when Photo Opener is picked
     _photoChips = nil;
     if (_mode == WMReplyModePhotoOpener) {
-        UILabel *pl = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 18)];
-        pl.text = @"Photo style"; pl.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-        pl.textColor = UIColor.secondaryLabelColor;
-        [_scroll addSubview:pl]; y += 22;
-        CGFloat px = m, py = y, rowH2 = 32, gap2 = 8;
+        y = [self _sectionLabel:@"Photo style" at:y width:W];
+        CGFloat px = m, py = y, rowH2 = 32;
         NSMutableArray *pchips = [NSMutableArray array];
         for (NSInteger i = 0; i < kWPPhotoStyleCount; i++) {
-            UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
-            [b setTitle:kWPPhotoStyleLabels[i] forState:UIControlStateNormal];
-            b.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+            UIButton *b = [self _makeChip:kWPPhotoStyleLabels[i] size:13];
             b.tag = i;
             [b addTarget:self action:@selector(_photoChip:) forControlEvents:UIControlEventTouchUpInside];
-            [b sizeToFit];
-            CGFloat w = b.bounds.size.width + 22;
-            if (px + w > W - m && px > m) { px = m; py += rowH2 + gap2; }
+            CGFloat w = b.bounds.size.width;
+            if (px + w > W - m && px > m) { px = m; py += rowH2 + gap; }
             b.frame = CGRectMake(px, py, w, rowH2);
             b.layer.cornerRadius = rowH2 / 2;
             [self _styleChip:b selected:(i == _photoStyle)];
-            [_scroll addSubview:b]; [pchips addObject:b];
-            px += w + gap2;
+            [_scroll addSubview:b];
+            [pchips addObject:b];
+            px += w + gap;
         }
         _photoChips = pchips;
-        y = py + rowH2 + 12;
+        y = py + rowH2 + 14;
     }
 
-    // length
-    UISegmentedControl *len = [[UISegmentedControl alloc] initWithItems:@[@"Short", @"Longer"]];
-    len.frame = CGRectMake(m, y, W-2*m, 32);
-    len.selectedSegmentIndex = (_length == WMReplyLengthLong) ? 1 : 0;
-    [len addTarget:self action:@selector(_len:) forControlEvents:UIControlEventValueChanged];
-    [_scroll addSubview:len]; y += 44;
-
-    // add another screen (scroll the profile, then tap the bubble again)
-    UIButton *add = [UIButton buttonWithType:UIButtonTypeSystem];
-    add.frame = CGRectMake(m, y, W-2*m, 40);
-    add.layer.borderColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1].CGColor;
-    add.layer.borderWidth = 1.5; add.layer.cornerRadius = 10;
-    [add setTitleColor:[UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1] forState:UIControlStateNormal];
-    add.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    [add setTitle:@"➕  Add another screen (scroll first)" forState:UIControlStateNormal];
-    [add addTarget:self action:@selector(_addScreen) forControlEvents:UIControlEventTouchUpInside];
-    [_scroll addSubview:add]; y += 48;
-
-    // preview of what was captured, so you can see which part of the profile is in frame
-    if (_frames.count) {
-        UILabel *cap = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 18)];
-        cap.text = @"Captured (what Wingman is reading):";
-        cap.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-        cap.textColor = UIColor.secondaryLabelColor;
-        [_scroll addSubview:cap]; y += 22;
-        CGFloat th = 170, tx = m, ty = y, rowBottom = ty;
-        for (UIImage *f in _frames) {
-            CGFloat ratio = (f.size.width > 0 && f.size.height > 0) ? (f.size.width / f.size.height) : 0.46;
-            CGFloat tw2 = th * ratio;
-            if (tx + tw2 > W - m && tx > m) { tx = m; ty = rowBottom + 8; }   // wrap
-            UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(tx, ty, tw2, th)];
-            iv.image = f; iv.contentMode = UIViewContentModeScaleAspectFit;
-            iv.backgroundColor = UIColor.secondarySystemBackgroundColor;
-            iv.clipsToBounds = YES; iv.layer.cornerRadius = 8;
-            iv.layer.borderColor = UIColor.separatorColor.CGColor; iv.layer.borderWidth = 1;
-            [_scroll addSubview:iv];
-            tx += tw2 + 8; rowBottom = MAX(rowBottom, ty + th);
-        }
-        y = rowBottom + 12;
-    }
-
-    // generate
-    _genBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    // ── generate
+    _genBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     _genBtn.frame = CGRectMake(m, y, W-2*m, 48);
-    _genBtn.backgroundColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1];
+    _genBtn.backgroundColor = WP_ACCENT;
     [_genBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    _genBtn.titleLabel.font = [UIFont boldSystemFontOfSize:17];
-    _genBtn.layer.cornerRadius = 10;
+    _genBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
+    _genBtn.layer.cornerRadius = 24;
     [_genBtn setTitle:[self _genTitle] forState:UIControlStateNormal];
     [_genBtn addTarget:self action:@selector(_generate) forControlEvents:UIControlEventTouchUpInside];
     _genBtn.enabled = hasKey;
     _genBtn.alpha = hasKey ? 1 : 0.5;
-    [_scroll addSubview:_genBtn]; y += 58;
+    [_scroll addSubview:_genBtn];
+    y += 56;
 
-    _status = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 36)];
-    _status.font = [UIFont systemFontOfSize:13]; _status.textColor = UIColor.secondaryLabelColor;
+    _status = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 34)];
+    _status.font = [UIFont systemFontOfSize:13];
+    _status.textColor = WP_SUBTEXT;
     _status.numberOfLines = 2;
-    _status.text = [NSString stringWithFormat:@"%lu screen%@ captured. For a full profile, add screens top to bottom.",
-                    (unsigned long)_frames.count, _frames.count==1?@"":@"s"];
-    [_scroll addSubview:_status]; y += 44;
+    _status.text = [NSString stringWithFormat:@"%@ · Wingman Plus %@", providerName, kWPVersion];
+    [_scroll addSubview:_status];
+    y += 38;
 
     _results = [[UIView alloc] initWithFrame:CGRectMake(0, y, W, 0)];
     [_scroll addSubview:_results];
-    _scroll.contentSize = CGSizeMake(W, y + 20);
+    _scroll.contentSize = CGSizeMake(W, y + 8);
     if (_allReplies.count) [self _showReplies:_allReplies];   // keep accumulated replies on screen
+    else [self _layoutSheet:NO];
+}
+
+// pill chip sized to its title (Android: 14sp, 14x9 padding, radius 20)
+- (UIButton *)_makeChip:(NSString *)t size:(CGFloat)size {
+    UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+    [b setTitle:t forState:UIControlStateNormal];
+    b.titleLabel.font = [UIFont systemFontOfSize:size weight:UIFontWeightMedium];
+    [b sizeToFit];
+    b.bounds = CGRectMake(0, 0, ceil(b.bounds.size.width) + 28, 36);
+    b.layer.cornerRadius = 18;
+    return b;
+}
+
+- (CGFloat)_sectionLabel:(NSString *)t at:(CGFloat)y width:(CGFloat)W {
+    UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(20, y, W - 40, 16)];
+    l.text = t;
+    l.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+    l.textColor = WP_SUBTEXT;
+    [_scroll addSubview:l];
+    return y + 22;
 }
 
 - (void)_styleChip:(UIButton *)b selected:(BOOL)sel {
-    b.backgroundColor = sel ? [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1] : UIColor.secondarySystemBackgroundColor;
-    [b setTitleColor:(sel ? UIColor.whiteColor : UIColor.labelColor) forState:UIControlStateNormal];
+    b.backgroundColor = sel ? WP_ACCENT : WP_CARD;
+    [b setTitleColor:(sel ? UIColor.whiteColor : WP_TEXT) forState:UIControlStateNormal];
+    b.layer.borderWidth = sel ? 0 : 1;
+    b.layer.borderColor = WP_STROKE.CGColor;
 }
+- (void)_styleLength {
+    [self _styleChip:_shortChip selected:(_length == WMReplyLengthShort)];
+    [self _styleChip:_longChip  selected:(_length == WMReplyLengthLong)];
+}
+- (void)_pickShort { _length = WMReplyLengthShort; [self _styleLength]; }
+- (void)_pickLong  { _length = WMReplyLengthLong;  [self _styleLength]; }
+
+// Size the sheet to its content: grows as replies arrive, capped at 88% of the screen (then scrolls).
+- (void)_layoutSheet:(BOOL)animated {
+    if (_animatingIn) return;
+    CGRect b = self.view.bounds;
+    if (b.size.width < 1) return;
+    CGFloat bottomSafe = self.view.safeAreaInsets.bottom;
+    CGFloat maxH = floor(b.size.height * 0.88);
+    CGFloat want = kWPSheetTopPad + _scroll.contentSize.height + bottomSafe + 8;
+    CGFloat h = MIN(maxH, MAX(want, 240));
+    CGRect f = CGRectMake(0, b.size.height - h, b.size.width, h);
+    _scroll.contentInset = UIEdgeInsetsMake(0, 0, bottomSafe + 8, 0);
+    void (^apply)(void) = ^{
+        self->_sheet.frame = f;
+        self->_scroll.frame = CGRectMake(0, kWPSheetTopPad, f.size.width, f.size.height - kWPSheetTopPad);
+    };
+    if (animated && !CGRectEqualToRect(_sheet.frame, f))
+        [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:apply completion:nil];
+    else apply();
+}
+
+// New replies may start below the fold of a capped sheet: scroll them into view once it has resized.
+- (void)_revealResults {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.28 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        CGFloat maxOff = MAX(0, self->_scroll.contentSize.height + self->_scroll.contentInset.bottom
+                                - self->_scroll.bounds.size.height);
+        CGFloat target = MIN(maxOff, MAX(0, self->_results.frame.origin.y - 56));
+        [self->_scroll setContentOffset:CGPointMake(0, target) animated:YES];
+    });
+}
+
 - (void)_chip:(UIButton *)b {
     _mode = kWPModes[b.tag];
     [self _rebuild];                 // re-render so the Photo Opener sub-menu shows/hides
@@ -495,7 +645,7 @@ static UIWindowScene *WPActiveScene(void) {
     WMSettings *s = [WMSettings shared];
     if ([s keyForProvider:s.provider].length == 0) { [self _settings]; return; }
     _genBtn.enabled = NO; _genBtn.alpha = 0.5;
-    _status.textColor = UIColor.secondaryLabelColor;
+    _status.textColor = WP_SUBTEXT;
     _status.text = @"Reading the screen…";
 
     // the photo sub-style only applies to Photo Opener (cleared otherwise)
@@ -503,7 +653,10 @@ static UIWindowScene *WPActiveScene(void) {
         (_mode == WMReplyModePhotoOpener) ? WPPhotoStyleBrief(_photoStyle) : nil;
 
     NSArray<UIImage *> *frames = [_frames copy];
-    [WMOCR transcriptFromFrames:frames completion:^(NSString *transcript, NSInteger count) {
+    // Claude / Kimi see the frames themselves, so the OCR text is only a ME/THEM hint there: use Vision's
+    // fast recognizer (several times quicker on a multi-screen capture). DeepSeek is text-only: accurate.
+    BOOL fastOCR = (s.provider != WMAPIProviderDeepSeek) && frames.count > 0;
+    [WMOCR transcriptFromFrames:frames fast:fastOCR completion:^(NSString *transcript, NSInteger count) {
         self->_status.text = @"Writing replies…";
         @try {
             [[WMAPIClient shared] generateRepliesWithProvider:s.provider
@@ -515,11 +668,11 @@ static UIWindowScene *WPActiveScene(void) {
                                                    completion:^(NSArray<NSString *> *replies, NSError *err) {
                 self->_genBtn.enabled = YES; self->_genBtn.alpha = 1;
                 if (err || replies.count == 0) {
-                    self->_status.textColor = UIColor.systemRedColor;
+                    self->_status.textColor = WP_ERROR;
                     self->_status.text = err ? err.localizedDescription : @"No replies — try again.";
                     return;
                 }
-                self->_status.textColor = UIColor.secondaryLabelColor;
+                self->_status.textColor = WP_SUBTEXT;
                 self->_status.text = @"Tap a reply to copy it.";
                 if (!self->_allReplies) self->_allReplies = [NSMutableArray array];
                 // newest batch on top, older replies kept below
@@ -527,10 +680,11 @@ static UIWindowScene *WPActiveScene(void) {
                     atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, replies.count)]];
                 while (self->_allReplies.count > 30) [self->_allReplies removeLastObject];
                 [self _showReplies:self->_allReplies];
+                [self _revealResults];
             }];
         } @catch (id e) {
             self->_genBtn.enabled = YES; self->_genBtn.alpha = 1;
-            self->_status.textColor = UIColor.systemRedColor;
+            self->_status.textColor = WP_ERROR;
             self->_status.text = @"Something went wrong generating. Try again.";
         }
     }];
@@ -538,35 +692,36 @@ static UIWindowScene *WPActiveScene(void) {
 
 - (void)_showReplies:(NSArray<NSString *> *)replies {
     for (UIView *v in _results.subviews) [v removeFromSuperview];
-    CGFloat W = self.view.bounds.size.width, m = 16, y = 0;
+    CGFloat W = self.view.bounds.size.width, m = 20, y = 0;
     for (NSString *r in replies) {
-        CGFloat tw = W - 2*m - 24;
+        CGFloat tw = W - 2*m - 28;
         CGRect box = [r boundingRectWithSize:CGSizeMake(tw, CGFLOAT_MAX)
                                      options:NSStringDrawingUsesLineFragmentOrigin
-                                  attributes:@{NSFontAttributeName:[UIFont systemFontOfSize:16]} context:nil];
-        CGFloat h = ceil(box.size.height) + 44;
-        UIButton *card = [UIButton buttonWithType:UIButtonTypeSystem];
+                                  attributes:@{NSFontAttributeName:[UIFont systemFontOfSize:15]} context:nil];
+        CGFloat textH = ceil(box.size.height), h = 12 + textH + 8 + 16 + 14;   // pad, text, gap, hint, pad
+        UIButton *card = [UIButton buttonWithType:UIButtonTypeCustom];
         card.frame = CGRectMake(m, y, W-2*m, h);
-        card.backgroundColor = UIColor.secondarySystemBackgroundColor;
-        card.layer.cornerRadius = 12;
+        card.backgroundColor = WP_CARD;
+        card.layer.cornerRadius = 16;
         [card addTarget:self action:@selector(_copyCard:) forControlEvents:UIControlEventTouchUpInside];
 
-        UILabel *txt = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, tw, ceil(box.size.height))];
-        txt.numberOfLines = 0; txt.font = [UIFont systemFontOfSize:16]; txt.textColor = UIColor.labelColor;
+        UILabel *txt = [[UILabel alloc] initWithFrame:CGRectMake(14, 12, tw, textH)];
+        txt.numberOfLines = 0; txt.font = [UIFont systemFontOfSize:15]; txt.textColor = WP_TEXT;
         txt.text = r; txt.userInteractionEnabled = NO;
         [card addSubview:txt];
 
-        UILabel *copy = [[UILabel alloc] initWithFrame:CGRectMake(12, h-26, tw, 18)];
-        copy.text = @"Tap to copy"; copy.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-        copy.textColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1];
-        copy.userInteractionEnabled = NO;
-        [card addSubview:copy];
+        UILabel *hint = [[UILabel alloc] initWithFrame:CGRectMake(14, h - 14 - 16, tw, 16)];
+        hint.text = @"Tap to copy";
+        hint.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        hint.textColor = WP_ACCENT; hint.userInteractionEnabled = NO;
+        [card addSubview:hint];
 
         [_results addSubview:card];
         y += h + 10;
     }
     _results.frame = CGRectMake(0, _results.frame.origin.y, W, y);
-    _scroll.contentSize = CGSizeMake(W, _results.frame.origin.y + y + 20);
+    _scroll.contentSize = CGSizeMake(W, _results.frame.origin.y + y + 8);
+    [self _layoutSheet:YES];
 }
 
 - (void)_copyCard:(UIButton *)card {
@@ -575,7 +730,7 @@ static UIWindowScene *WPActiveScene(void) {
     if (!txt.text.length) return;
     [WPHost copyToClipboard:txt.text];
     [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
-    _status.textColor = UIColor.systemGreenColor;
+    _status.textColor = WP_OK;
     _status.text = @"Copied — paste it in the app.";
     // auto-close so the user lands straight back on the dating app to paste
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),

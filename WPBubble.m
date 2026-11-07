@@ -8,13 +8,17 @@
 
 #import "WPlus.h"
 
+// Same bubble as the Android app: a deep-night disc with a purple ring and the 🪽 glyph.
+static UIColor *WPBubbleAccent(void) { return [UIColor colorWithRed:0x7C/255.0 green:0x5C/255.0 blue:0xFF/255.0 alpha:1]; }
+static UIColor *WPBubbleIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 green:0x1B/255.0 blue:0x26/255.0 alpha:0.93]; }
+
 static CGFloat   const kBubbleSize = 52;
 static NSString *const kPosKey     = @"com.adarsh.wingmanplus.bubblePos";
 static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
 @interface WPBubble ()
 @property (nonatomic, strong) UIView *dot;
-@property (nonatomic, strong) UILabel *glyph;        // the ♥ (idle) / frame count (capturing)
+@property (nonatomic, strong) UILabel *glyph;        // the 🪽 (idle) / frame count (capturing)
 @property (nonatomic) CGPoint grabOffset;
 @property (nonatomic) BOOL capturing;
 @property (nonatomic) BOOL built;
@@ -58,7 +62,9 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     _window.rootViewController.view.backgroundColor = UIColor.clearColor;
 
     _dot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, kBubbleSize, kBubbleSize)];
-    _dot.backgroundColor = [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1.0]; // dating pink/red
+    _dot.backgroundColor = WPBubbleIdle();
+    _dot.layer.borderWidth = 2;
+    _dot.layer.borderColor = WPBubbleAccent().CGColor;
     _dot.layer.cornerRadius = kBubbleSize / 2;
     _dot.layer.shadowColor = UIColor.blackColor.CGColor;
     _dot.layer.shadowOffset = CGSizeMake(0, 2);
@@ -67,9 +73,9 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     [_window.rootViewController.view addSubview:_dot];
 
     _glyph = [[UILabel alloc] initWithFrame:_dot.bounds];
-    _glyph.text = @"♥";
+    _glyph.text = @"🪽";
     _glyph.textColor = UIColor.whiteColor;
-    _glyph.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
+    _glyph.font = [UIFont systemFontOfSize:24];
     _glyph.textAlignment = NSTextAlignmentCenter;
     [_dot addSubview:_glyph];
 
@@ -154,7 +160,7 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
     _lastTickSig = nil; _lastSavedSig = nil;
     [self _setRecordingLook:YES];
     [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
-    [self _toast:@"Capturing — scroll the profile, tap ♥ to finish."];
+    [self _toast:@"Capturing — scroll the profile, tap 🪽 to finish."];
     // grab the starting screen right away
     __weak typeof(self) ws = self;
     UIImage *first = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
@@ -206,8 +212,8 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 }
 
 - (void)_setRecordingLook:(BOOL)on {
-    _dot.backgroundColor = on ? [UIColor colorWithRed:0.20 green:0.78 blue:0.35 alpha:1.0]   // green = capturing
-                              : [UIColor colorWithRed:0.95 green:0.26 blue:0.45 alpha:1.0];  // pink = idle
+    _dot.backgroundColor = on ? WPBubbleAccent() : WPBubbleIdle();        // purple = capturing, night = idle
+    _dot.layer.borderColor = (on ? UIColor.whiteColor : WPBubbleAccent()).CGColor;
     [self _updateCount];
 }
 
@@ -216,8 +222,8 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
         _glyph.text = [NSString stringWithFormat:@"%lu", (unsigned long)_scrollFrames.count];
         _glyph.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
     } else {
-        _glyph.text = @"♥";
-        _glyph.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
+        _glyph.text = @"🪽";
+        _glyph.font = [UIFont systemFontOfSize:24];
     }
 }
 

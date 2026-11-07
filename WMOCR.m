@@ -85,12 +85,12 @@ typedef NS_ENUM(NSInteger, WMSpeaker) { WMSpeakerThem, WMSpeakerMe, WMSpeakerNot
 
 typedef struct { CGFloat minX, maxX, top, bottom; } WMBox;
 
-+ (NSArray<NSDictionary *> *)_messagesInImage:(UIImage *)img {
++ (NSArray<NSDictionary *> *)_messagesInImage:(UIImage *)img fast:(BOOL)fast {
     CGImageRef cg = img.CGImage;
     if (!cg) return @[];
 
     VNRecognizeTextRequest *req = [[VNRecognizeTextRequest alloc] init];
-    req.recognitionLevel = VNRequestTextRecognitionLevelAccurate;
+    req.recognitionLevel = fast ? VNRequestTextRecognitionLevelFast : VNRequestTextRecognitionLevelAccurate;
     req.usesLanguageCorrection = NO;            // keep Hinglish as typed
     req.recognitionLanguages = @[@"en-US"];
     VNImageRequestHandler *h = [[VNImageRequestHandler alloc] initWithCGImage:cg options:@{}];
@@ -186,10 +186,26 @@ typedef struct { CGFloat minX, maxX, top, bottom; } WMBox;
 
 + (void)transcriptFromFrames:(NSArray<UIImage *> *)frames
                   completion:(void(^)(NSString *, NSInteger))done {
+    [self transcriptFromFrames:frames fast:NO completion:done];
+}
+
+// fast = the model will SEE these frames itself (Claude / Kimi vision), so the OCR text is only a
+// ME/THEM hint and Vision's fast recognizer is plenty; accurate stays for text-only models.
+// Frames are recognised in parallel and merged back in their original order.
++ (void)transcriptFromFrames:(NSArray<UIImage *> *)frames
+                        fast:(BOOL)fast
+                  completion:(void(^)(NSString *, NSInteger))done {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSUInteger n = frames.count;
+        NSMutableArray<NSArray *> *perFrame = [NSMutableArray arrayWithCapacity:n];
+        for (NSUInteger i = 0; i < n; i++) [perFrame addObject:@[]];
+        dispatch_apply(n, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^(size_t i) {
+            NSArray *msgs = [self _messagesInImage:frames[i] fast:fast];
+            @synchronized (perFrame) { perFrame[i] = msgs ?: @[]; }
+        });
         NSMutableArray<NSString *> *out = [NSMutableArray array];
-        for (UIImage *f in frames) {                       // oldest first
-            for (NSDictionary *m in [self _messagesInImage:f]) {
+        for (NSArray *msgs in perFrame) {                   // oldest first
+            for (NSDictionary *m in msgs) {
                 NSString *line = [NSString stringWithFormat:@"%@: %@",
                                   [m[@"who"] integerValue] == WMSpeakerMe ? @"ME" : @"THEM", m[@"t"]];
                 // frames overlap a little when scrolling: skip recent duplicates

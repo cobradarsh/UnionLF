@@ -152,6 +152,9 @@ static NSInteger const kWMQuickReplyCount = 5;
 // "THEM: ... / ME: ..." transcript, system + encryption notices removed.
 // Returns nil if nothing usable was read.
 + (void)transcriptFromFrames:(NSArray<UIImage *> *)frames
+                        fast:(BOOL)fast
+                  completion:(void(^)(NSString *, NSInteger))done;
++ (void)transcriptFromFrames:(NSArray<UIImage *> *)frames
                   completion:(void(^)(NSString *transcript, NSInteger messageCount))done;
 // the ignore ruleset (also used by the prompt)
 + (BOOL)isSystemNotice:(NSString *)line;
