@@ -76,7 +76,7 @@
 }
 
 // ── per-style instruction ─────────────────────────────────
-+ (NSString *)_instructionForMode:(WMReplyMode)mode {
++ (NSString *)_instructionForMode:(WMReplyMode)mode canSearch:(BOOL)canSearch {
     switch (mode) {
         case WMReplyModeAggressive:
             return @"AGGRESSIVE. Direct, firm and unapologetic. Stand my ground, no "
@@ -88,9 +88,17 @@
             return @"ROASTED TO HELL. All-out devastating wit, maximum verbal firepower. "
                     "Pure wit only, none of the forbidden attack topics.";
         case WMReplyModeInMyFavor:
-            return @"IN MY FAVOR. Use web search for the latest news, facts and figures on "
-                    "the topic, then build a persuasive reply that backs my position with "
-                    "specifics. Still sounds like a text, not an essay.";
+            if (!canSearch)   // DeepSeek / Kimi can't look anything up: never let them invent "news"
+                return @"IN MY FAVOR. Win this with facts and sharp logic. You can't look anything up, "
+                        "so use only facts you're sure are true and not recent news. Never invent "
+                        "numbers, dates, headlines or quotes; if you're unsure of a fact, win it with "
+                        "reasoning instead.";
+            return @"IN MY FAVOR. Win this with facts. First use web_search (one or two searches) for "
+                    "the latest news, data or developments on what we're discussing, then build a "
+                    "persuasive reply that settles it in my favour, working in one or two specific "
+                    "recent facts (a number, a date, who said what) naturally, like someone who just "
+                    "read about it. If there's genuinely nothing to search, win it with sharp logic. "
+                    "Still sounds like a text, not an essay.";
         case WMReplyModeDefendMe:
             return @"DEFEND ME. Address the points raised against me with calm, firm "
                     "counter-reasoning. Empathize where needed, then make my position "
@@ -124,6 +132,31 @@
                     "flirty, Gen Z, lyrical, excited, chill, emojify, decent roast, defend me. "
                     "For example reply 1 funny + chill, reply 2 flirty + emojify, reply 3 "
                     "Gen Z + light roast. Pick the mixes that suit this chat best.";
+        case WMReplyModeThankful:
+            return @"THANKFUL. Genuinely grateful and warm. Thank them for the specific thing they "
+                    "did or said (name it), say what it meant to me, and keep it sincere, never "
+                    "gushing or performative. A real person saying thanks, not a greeting card.";
+        case WMReplyModeWishing:
+            return @"WISHING. Warm wishes that fit the occasion in the chat or my context (birthday, "
+                    "festival, exam, trip, new job, recovery, anniversary). Specific to them and the "
+                    "moment, heartfelt and a little personal; no generic 'best wishes' template, and "
+                    "emojis only if the chat uses them.";
+        case WMReplyModeFacts:
+            if (!canSearch)
+                return @"FACTS. Explain or answer with valid facts you are sure of. You can't look "
+                        "anything up, so stick to well-established facts, give the specifics you know "
+                        "(numbers, dates, names) and a brief why, and say plainly when something is "
+                        "uncertain or too recent to confirm. Never invent figures, quotes or headlines.";
+            return @"FACTS. Explain or answer with valid, checkable facts. First use web_search (one or "
+                    "two searches) to confirm the key facts and get current figures, then reply "
+                    "plainly with the specifics (numbers, dates, names, what actually happened) and a "
+                    "brief why. Accurate first, concise second; still reads like a text, not an essay. "
+                    "If something can't be confirmed, say so rather than guess.";
+        case WMReplyModeBackhand:
+            return @"BACKHANDED COMPLIMENT. A compliment with a sting hidden inside, delivered sweetly: "
+                    "praise on the surface, a playful dig underneath ('you look great for someone who "
+                    "slept three hours'). Clever and cheeky, obviously tongue-in-cheek, never genuinely "
+                    "hurtful and none of the forbidden attack topics.";
         case WMReplyModePlanDate:
             return @"PLAN A DATE. Suggest an actual date. Read the chat for what they're into, "
                     "then propose one concrete, doable plan (a place or activity, a rough day "
@@ -210,7 +243,8 @@
                          length:(WMReplyLength)length
                         context:(NSString *)context
                      transcript:(NSString *)transcript
-                      hasImages:(BOOL)hasImages {
+                      hasImages:(BOOL)hasImages
+                      canSearch:(BOOL)canSearch {
 
     NSMutableString *p = [NSMutableString string];
 
@@ -248,7 +282,7 @@
         [p appendFormat:@"MY CONTEXT: \"%@\"\n\n", context];
     }
 
-    [p appendFormat:@"STYLE: %@\n\n", [self _instructionForMode:mode]];
+    [p appendFormat:@"STYLE: %@\n\n", [self _instructionForMode:mode canSearch:canSearch]];
 
     if (length == WMReplyLengthShort) {
         [p appendString:@"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
@@ -280,6 +314,10 @@
         case WMReplyModeChill:         return @"Chill";
         case WMReplyModeEmojify:       return @"Emojify";
         case WMReplyModeRemix:         return @"Remix of All";
+        case WMReplyModeThankful:      return @"Thankful";
+        case WMReplyModeWishing:       return @"Wishing";
+        case WMReplyModeFacts:         return @"Facts";
+        case WMReplyModeBackhand:      return @"Backhand Compliment";
         case WMReplyModePlanDate:      return @"Plan a Date";
         case WMReplyModeRomance:       return @"Romance Her";
         case WMReplyModeSeduce:        return @"Seduce (Bond)";
@@ -310,6 +348,10 @@
         case WMReplyModeChill:         return @"\U0001F60E"; // 😎
         case WMReplyModeEmojify:       return @"\U0001F308"; // 🌈
         case WMReplyModeRemix:         return @"\U0001F3B2"; // 🎲
+        case WMReplyModeThankful:      return @"\U0001F64F"; // 🙏
+        case WMReplyModeWishing:       return @"\U0001F389"; // 🎉
+        case WMReplyModeFacts:         return @"\U0001F4DA"; // 📚
+        case WMReplyModeBackhand:      return @"\U0001F3AD"; // 🎭
         case WMReplyModePlanDate:      return @"\U0001F4C5"; // 📅
         case WMReplyModeRomance:       return @"\U0001F339"; // 🌹
         case WMReplyModeSeduce:        return @"\U0001F576"; // 🕶

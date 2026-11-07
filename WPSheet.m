@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.21";
+NSString *const kWPVersion = @"1.0.22";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -31,14 +31,22 @@ static UIColor *WPDyn(uint32_t dark, uint32_t light) {
 #define WP_STROKE  [UIColor colorWithRed:0x80/255.0 green:0x80/255.0 blue:0x98/255.0 alpha:0x33/255.0]
 static CGFloat const kWPSheetTopPad = 14;
 
-// dating-first style order for the chips
-static WMReplyMode const kWPModes[] = {
+// Two chip sections, like the Android sheet: dating & flirt first (this is a dating tool), then every
+// general vibe. A chip's tag is the WMReplyMode value itself.
+static WMReplyMode const kWPDatingModes[] = {
     WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeReviver,
     WMReplyModePlanDate,   WMReplyModeRomance,     WMReplyModeSeduce,   WMReplyModeAlphaPower,
-    WMReplyModeSensual,    WMReplyModeLustful,     WMReplyModeDirty,
-    WMReplyModeFlirty,     WMReplyModeFunny,       WMReplyModeChill
+    WMReplyModeFlirty,     WMReplyModeSensual,     WMReplyModeLustful,  WMReplyModeDirty
 };
-static NSInteger const kWPModeCount = sizeof(kWPModes)/sizeof(kWPModes[0]);
+static WMReplyMode const kWPGeneralModes[] = {
+    WMReplyModeAggressive, WMReplyModeDecentRoast, WMReplyModeRoastedToHell,
+    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeFunny,    WMReplyModeGenZ,
+    WMReplyModeLyrical,    WMReplyModeExcited,     WMReplyModeThankful, WMReplyModeWishing,
+    WMReplyModeFormal,     WMReplyModeChill,       WMReplyModeEmojify,  WMReplyModeRemix,
+    WMReplyModeFacts,      WMReplyModeBackhand
+};
+static NSInteger const kWPDatingCount  = sizeof(kWPDatingModes)/sizeof(kWPDatingModes[0]);
+static NSInteger const kWPGeneralCount = sizeof(kWPGeneralModes)/sizeof(kWPGeneralModes[0]);
 
 // Photo Opener sub-styles — a little sub-menu under the vibe when Photo Opener is picked.
 // The brief is appended to the Photo Opener prompt via WMSettings.photoStyleExtra.
@@ -311,7 +319,7 @@ static UIWindowScene *WPActiveScene(void) {
 
 #pragma mark - main sheet
 
-@interface WPSheet () <UIGestureRecognizerDelegate>
+@interface WPSheet () <UIGestureRecognizerDelegate, UITextViewDelegate>
 @property (nonatomic, strong) NSMutableArray<UIImage *> *frames;
 @property (nonatomic) WMReplyMode mode;
 @property (nonatomic) WMReplyLength length;
@@ -328,6 +336,10 @@ static UIWindowScene *WPActiveScene(void) {
 @property (nonatomic) BOOL appeared, animatingIn;
 @property (nonatomic) CGFloat builtWidth;
 @property (nonatomic) CGRect lastBounds;
+@property (nonatomic, strong) UITextView *contextBox;                  // optional situation / what I want to say
+@property (nonatomic, strong) UILabel *contextHint;
+@property (nonatomic, copy)   NSString *contextText;                   // survives _rebuild (chip taps rebuild)
+@property (nonatomic) CGFloat kbHeight;                                // keyboard overlap while typing context
 @end
 
 @implementation WPSheet
@@ -381,8 +393,12 @@ static UIWindowScene *WPActiveScene(void) {
     _scroll.alwaysBounceVertical = YES;
     _scroll.showsVerticalScrollIndicator = NO;
     [_sheet addSubview:_scroll];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_kbChange:)
+                                                 name:UIKeyboardWillChangeFrameNotification object:nil];
     [self _rebuild];
 }
+
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 
 // only taps on the dimmed backdrop close the sheet, never taps inside it
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
@@ -504,6 +520,32 @@ static UIWindowScene *WPActiveScene(void) {
     [_scroll addSubview:add];
     y += 36 + 14;
 
+    // ── context (optional): the situation for Defend Me / In My Favor / Wishing, or anything I want said.
+    // The keyboard can be flaky in a SpringBoard overlay, so there's a Paste button too.
+    CGFloat pasteW = 92;
+    _contextBox = [[UITextView alloc] initWithFrame:CGRectMake(m, y, W - 2*m - 8 - pasteW, 44)];
+    _contextBox.backgroundColor = WP_FIELD;
+    _contextBox.layer.cornerRadius = 12;
+    _contextBox.font = [UIFont systemFontOfSize:14];
+    _contextBox.textColor = WP_TEXT;
+    _contextBox.textContainerInset = UIEdgeInsetsMake(12, 10, 12, 10);
+    _contextBox.delegate = self;
+    _contextBox.text = _contextText ?: @"";
+    [_scroll addSubview:_contextBox];
+    _contextHint = [[UILabel alloc] initWithFrame:CGRectMake(m + 15, y, W - 2*m - 8 - pasteW - 30, 44)];
+    _contextHint.text = @"Context (optional): the situation, what I want to say…";
+    _contextHint.font = [UIFont systemFontOfSize:14];
+    _contextHint.textColor = WP_SUBTEXT;
+    _contextHint.userInteractionEnabled = NO;
+    _contextHint.hidden = _contextBox.text.length > 0;
+    [_scroll addSubview:_contextHint];
+    UIButton *paste = [self _makeChip:@"📋 Paste" size:13];
+    [self _styleChip:paste selected:NO];
+    [paste addTarget:self action:@selector(_pasteContext) forControlEvents:UIControlEventTouchUpInside];
+    paste.frame = CGRectMake(W - m - pasteW, y + 4, pasteW, 36);
+    [_scroll addSubview:paste];
+    y += 44 + 14;
+
     // ── length
     y = [self _sectionLabel:@"How long?" at:y width:W];
     _shortChip = [self _makeChip:@"Short" size:14];
@@ -517,26 +559,12 @@ static UIWindowScene *WPActiveScene(void) {
     [_scroll addSubview:_longChip];
     y += 36 + 14;
 
-    // ── vibes: wrapping grid so every vibe is visible at once (no scrolling)
-    y = [self _sectionLabel:@"Pick a vibe" at:y width:W];
-    CGFloat cx = m, cy = y, rowH = 36, gap = 8;
+    // ── vibes: two wrapping grids so every vibe is visible at once (no horizontal scrolling)
     NSMutableArray *chips = [NSMutableArray array];
-    for (NSInteger i = 0; i < kWPModeCount; i++) {
-        WMReplyMode md = kWPModes[i];
-        NSString *t = [NSString stringWithFormat:@"%@ %@", [WMPrompts emojiForMode:md], [WMPrompts labelForMode:md]];
-        UIButton *b = [self _makeChip:t size:14];
-        b.tag = i;
-        [b addTarget:self action:@selector(_chip:) forControlEvents:UIControlEventTouchUpInside];
-        CGFloat w = b.bounds.size.width;
-        if (cx + w > W - m && cx > m) { cx = m; cy += rowH + gap; }   // wrap to the next row
-        b.frame = CGRectMake(cx, cy, w, rowH);
-        [self _styleChip:b selected:(md == _mode)];
-        [_scroll addSubview:b];
-        [chips addObject:b];
-        cx += w + gap;
-    }
+    y = [self _chipSection:@"Dating & flirt" modes:kWPDatingModes count:kWPDatingCount at:y width:W into:chips];
+    y = [self _chipSection:@"Pick a vibe"    modes:kWPGeneralModes count:kWPGeneralCount at:y width:W into:chips];
     _chips = chips;
-    y = cy + rowH + 14;
+    CGFloat gap = 8;
 
     // ── Photo Opener sub-style, only when Photo Opener is picked
     _photoChips = nil;
@@ -623,6 +651,60 @@ static UIWindowScene *WPActiveScene(void) {
 - (void)_pickShort { _length = WMReplyLengthShort; [self _styleLength]; }
 - (void)_pickLong  { _length = WMReplyLengthLong;  [self _styleLength]; }
 
+// One labelled, wrapping grid of vibe chips. Returns the y below it.
+- (CGFloat)_chipSection:(NSString *)title modes:(const WMReplyMode *)modes count:(NSInteger)n
+                     at:(CGFloat)y width:(CGFloat)W into:(NSMutableArray *)chips {
+    CGFloat m = 20, rowH = 36, gap = 8;
+    y = [self _sectionLabel:title at:y width:W];
+    CGFloat cx = m, cy = y;
+    for (NSInteger i = 0; i < n; i++) {
+        WMReplyMode md = modes[i];
+        NSString *t = [NSString stringWithFormat:@"%@ %@", [WMPrompts emojiForMode:md], [WMPrompts labelForMode:md]];
+        UIButton *b = [self _makeChip:t size:14];
+        b.tag = md;
+        [b addTarget:self action:@selector(_chip:) forControlEvents:UIControlEventTouchUpInside];
+        CGFloat w = b.bounds.size.width;
+        if (cx + w > W - m && cx > m) { cx = m; cy += rowH + gap; }   // wrap to the next row
+        b.frame = CGRectMake(cx, cy, w, rowH);
+        [self _styleChip:b selected:(md == _mode)];
+        [_scroll addSubview:b];
+        [chips addObject:b];
+        cx += w + gap;
+    }
+    return cy + rowH + 14;
+}
+
+- (void)textViewDidChange:(UITextView *)tv {
+    _contextText = tv.text;
+    _contextHint.hidden = tv.text.length > 0;
+}
+
+- (void)_pasteContext {
+    NSString *c = [[UIPasteboard generalPasteboard].string
+                   stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!c.length) {
+        _status.textColor = WP_ERROR;
+        _status.text = @"Clipboard is empty — copy the context first.";
+        return;
+    }
+    _contextText = c;
+    _contextBox.text = c;
+    _contextHint.hidden = YES;
+    _status.textColor = WP_SUBTEXT;
+    _status.text = @"Context pasted.";
+}
+
+// Keep the context box reachable above the keyboard: the overlap becomes extra scroll inset.
+- (void)_kbChange:(NSNotification *)n {
+    CGRect end = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGRect inView = [self.view convertRect:end fromView:nil];
+    BOOL hidden = CGRectGetMinY(inView) >= CGRectGetMaxY(self.view.bounds) - 1;
+    _kbHeight = hidden ? 0 : MAX(0, CGRectGetMaxY(_sheet.frame) - CGRectGetMinY(inView));
+    [self _layoutSheet:NO];
+    if (_kbHeight > 0 && _contextBox)
+        [_scroll scrollRectToVisible:CGRectInset(_contextBox.frame, 0, -40) animated:YES];
+}
+
 // Size the sheet to its content: grows as replies arrive, capped at 88% of the screen (then scrolls).
 - (void)_layoutSheet:(BOOL)animated {
     if (_animatingIn) return;
@@ -633,7 +715,7 @@ static UIWindowScene *WPActiveScene(void) {
     CGFloat want = kWPSheetTopPad + _scroll.contentSize.height + bottomSafe + 8;
     CGFloat h = MIN(maxH, MAX(want, 240));
     CGRect f = CGRectMake(0, b.size.height - h, b.size.width, h);
-    _scroll.contentInset = UIEdgeInsetsMake(0, 0, bottomSafe + 8, 0);
+    _scroll.contentInset = UIEdgeInsetsMake(0, 0, bottomSafe + 8 + _kbHeight, 0);
     void (^apply)(void) = ^{
         self->_sheet.frame = f;
         self->_scroll.frame = CGRectMake(0, kWPSheetTopPad, f.size.width, f.size.height - kWPSheetTopPad);
@@ -654,7 +736,7 @@ static UIWindowScene *WPActiveScene(void) {
 }
 
 - (void)_chip:(UIButton *)b {
-    _mode = kWPModes[b.tag];
+    _mode = (WMReplyMode)b.tag;
     [self _rebuild];                 // re-render so the Photo Opener sub-menu shows/hides
 }
 - (void)_photoChip:(UIButton *)b {
@@ -668,6 +750,7 @@ static UIWindowScene *WPActiveScene(void) {
 - (void)_generate {
     WMSettings *s = [WMSettings shared];
     if ([s keyForProvider:s.provider].length == 0) { [self _settings]; return; }
+    [self.view endEditing:YES];
     _genBtn.enabled = NO; _genBtn.alpha = 0.5;
     _status.textColor = WP_SUBTEXT;
     _status.text = @"Reading the screen…";
@@ -686,7 +769,7 @@ static UIWindowScene *WPActiveScene(void) {
             [[WMAPIClient shared] generateRepliesWithProvider:s.provider
                                                        frames:frames
                                                    transcript:transcript ?: @""
-                                                      context:@""
+                                                      context:(self->_contextText ?: @"")
                                                          mode:self->_mode
                                                        length:self->_length
                                                    completion:^(NSArray<NSString *> *replies, NSError *err) {

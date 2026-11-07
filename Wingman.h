@@ -31,6 +31,10 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeChill,
     WMReplyModeEmojify,
     WMReplyModeRemix,
+    WMReplyModeThankful,
+    WMReplyModeWishing,
+    WMReplyModeFacts,        // explain with valid, checkable facts (web search where available)
+    WMReplyModeBackhand,     // backhanded compliment
     // dating / flirt styles (consenting adults)
     WMReplyModePlanDate,
     WMReplyModeRomance,
@@ -205,7 +209,8 @@ static NSInteger const kWMQuickReplyCount = 5;
                          length:(WMReplyLength)length
                         context:(NSString *)context
                      transcript:(NSString *)transcript
-                      hasImages:(BOOL)hasImages;
+                      hasImages:(BOOL)hasImages
+                      canSearch:(BOOL)canSearch;    // the model has web_search (Claude): In My Favor / Facts use it
 + (NSString *)labelForMode:(WMReplyMode)mode;
 + (NSString *)emojiForMode:(WMReplyMode)mode;
 @end

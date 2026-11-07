@@ -88,7 +88,7 @@ NSURLSession *WMPrivateSession(void) {
     // left the parser with an unterminated array). The parser also salvages partial
     // JSON, but giving room avoids losing the 3rd reply in the first place.
     NSInteger n = (length == WMReplyLengthShort) ? 1200 : 2000;
-    if (mode == WMReplyModeInMyFavor) n += 800;
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts) n += 800;   // room for searched facts
     return n;
 }
 
@@ -151,7 +151,7 @@ NSURLSession *WMPrivateSession(void) {
     }
     [content addObject:@{ @"type": @"text",
                           @"text": [WMPrompts userPromptForMode:mode length:length context:context
-                                                     transcript:transcript hasImages:hasImages] }];
+                                                     transcript:transcript hasImages:hasImages canSearch:YES] }];
 
     NSMutableDictionary *body = [@{
         @"model":      s.claudeModel,
@@ -163,7 +163,7 @@ NSURLSession *WMPrivateSession(void) {
                              @"cache_control": @{ @"type": @"ephemeral" } } ],
         @"messages":   @[ @{ @"role": @"user", @"content": content } ]
     } mutableCopy];
-    if (mode == WMReplyModeInMyFavor)
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts)
         body[@"tools"] = @[ @{ @"type": @"web_search_20250305", @"name": @"web_search", @"max_uses": @2 } ];
 
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:
@@ -216,7 +216,7 @@ NSURLSession *WMPrivateSession(void) {
         @"messages": @[
             @{ @"role": @"system", @"content": [WMPrompts systemPromptWithSoundLikeMe:s.soundLikeMe] },
             @{ @"role": @"user",   @"content": [WMPrompts userPromptForMode:mode length:length context:context
-                                                                transcript:transcript hasImages:NO] }
+                                                                transcript:transcript hasImages:NO canSearch:NO] }
         ]
     } mutableCopy];
     NSURL *url = [NSURL URLWithString:s.deepseekEndpoint];
@@ -269,7 +269,7 @@ NSURLSession *WMPrivateSession(void) {
     NSMutableArray *content = [NSMutableArray array];
     [content addObject:@{ @"type": @"text",
                           @"text": [WMPrompts userPromptForMode:mode length:length context:context
-                                                     transcript:transcript hasImages:(frames.count > 0)] }];
+                                                     transcript:transcript hasImages:(frames.count > 0) canSearch:NO] }];
     for (UIImage *img in frames) {
         NSData *jpeg = WPFrameJPEG(img);
         if (!jpeg) continue;
