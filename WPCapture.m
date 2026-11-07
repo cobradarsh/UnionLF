@@ -60,24 +60,13 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.08]];
     UIImage *shot = [self _normalize:[self _rawScreen]];
     if (show) show();
-    // DIAG: save the last capture so we can see exactly what was grabbed
-    // (open /var/mobile/wingman_capture.jpg in Filza).
-    @try {
-        NSData *j = UIImageJPEGRepresentation(shot, 0.8);
-        if (j) [j writeToFile:@"/var/mobile/wingman_capture.jpg" atomically:YES];
-    } @catch (__unused id e) {}
     return shot;
 }
 
-// Capture without toggling any overlay (used by auto-scroll, where the bubble is
-// already hidden for the whole run so it never appears in any frame).
+// Capture without toggling any overlay (used by scroll-capture, where the bubble is
+// hidden only for the clean shot so it never appears in a saved frame).
 + (UIImage *)captureNow {
-    UIImage *shot = [self _normalize:[self _rawScreen]];
-    @try {
-        NSData *j = UIImageJPEGRepresentation(shot, 0.8);
-        if (j) [j writeToFile:@"/var/mobile/wingman_capture.jpg" atomically:YES];
-    } @catch (__unused id e) {}
-    return shot;
+    return [self _normalize:[self _rawScreen]];
 }
 
 // A tiny grayscale fingerprint so we can tell when the screen stopped changing

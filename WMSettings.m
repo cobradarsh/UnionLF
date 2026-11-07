@@ -57,6 +57,7 @@ static NSArray<NSString *> *WMGlobalPaths(void) {
     NSDictionary *_global;       // what the global store gave us
     NSString     *_diag;
 }
+@synthesize photoStyleExtra = _photoStyleExtra;   // transient, not persisted
 
 + (instancetype)shared {
     static WMSettings *s;

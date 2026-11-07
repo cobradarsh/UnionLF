@@ -101,15 +101,16 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 }
 
 - (void)evaluateVisibility {
-    // DIAG (v1.0.2): force-show everywhere, even the home screen, to prove the tweak
-    // loads. Normal build gates on [WPHost wingmanEnabledForFrontmost].
-    BOOL wanted = YES;
-    if (!wanted) { _window.hidden = YES; return; }
+    // Show only over the apps that should get Wingman (dating + chat auto-detected,
+    // plus anything picked in Settings); hidden on the home screen and everywhere else.
+    // Stay visible during a scroll-capture session (it's in a dating app anyway).
+    BOOL wanted = _scrolling || [WPHost wingmanEnabledForFrontmost];
+    if (!wanted) { if (_built) _window.hidden = YES; return; }
     if (!_built) [self _build];
     // Attach to (or follow) the current foreground scene so the window renders.
     UIWindowScene *scene = [self _activeScene];
     if (scene && _window.windowScene != scene) _window.windowScene = scene;
-    if (!_capturing) _window.hidden = NO;
+    if (!_capturing && !_busy) _window.hidden = NO;   // don't un-hide mid clean shot
 }
 
 #pragma mark - tap -> capture -> sheet

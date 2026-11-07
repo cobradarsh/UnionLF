@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.16-DIAG";
+NSString *const kWPVersion = @"1.0.17";
 
 // dating-first style order for the chips
 static WMReplyMode const kWPModes[] = {
@@ -18,6 +18,27 @@ static WMReplyMode const kWPModes[] = {
     WMReplyModeFlirty,     WMReplyModeFunny,       WMReplyModeChill
 };
 static NSInteger const kWPModeCount = sizeof(kWPModes)/sizeof(kWPModes[0]);
+
+// Photo Opener sub-styles — a little sub-menu under the vibe when Photo Opener is picked.
+// The brief is appended to the Photo Opener prompt via WMSettings.photoStyleExtra.
+static NSString *const kWPPhotoStyleLabels[] = { @"Combination", @"Classy", @"Bold", @"Flirty" };
+static NSInteger const kWPPhotoStyleCount = 4;
+static NSString *WPPhotoStyleBrief(NSInteger i) {
+    switch (i) {
+        case 1: return @"FLAVOUR — refined and eloquent: finesse, class and a captivating turn of "
+                        "phrase, a line that feels rare and considered, well above average. "
+                        "Appreciate her beauty with elegance, never cliche.";
+        case 2: return @"FLAVOUR — bold and alpha: confidently admire her figure and the way she "
+                        "carries her body, a little daring, owning the compliment with magnetic "
+                        "self-assurance. Tasteful and adult, never crude, creepy or objectifying.";
+        case 3: return @"FLAVOUR — flirty and teasing: weave in playful flirtation and a little "
+                        "tease so it's charged and fun, the kind of line that makes her smile and reply.";
+        default: return @"FLAVOUR — the full blend: a classy, eloquent observation of the scene, "
+                        "genuine appreciation of HER and the shape and grace of her figure, and a "
+                        "touch of flirt and tease. Go well beyond what an average guy sends ('you "
+                        "look beautiful'); make it stand out so it earns a reply.";
+    }
+}
 
 static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated while up
 
@@ -245,11 +266,14 @@ static UIWindowScene *WPActiveScene(void) {
 @property (nonatomic, strong) NSMutableArray<UIImage *> *frames;
 @property (nonatomic) WMReplyMode mode;
 @property (nonatomic) WMReplyLength length;
+@property (nonatomic) NSInteger photoStyle;                       // Photo Opener sub-style
+@property (nonatomic, strong) NSMutableArray<NSString *> *allReplies;  // accumulated, newest first
 @property (nonatomic, strong) UIScrollView *scroll;
 @property (nonatomic, strong) UIView *results;
 @property (nonatomic, strong) UILabel *status;
 @property (nonatomic, strong) UIButton *genBtn;
 @property (nonatomic, strong) NSArray<UIButton *> *chips;
+@property (nonatomic, strong) NSArray<UIButton *> *photoChips;
 @end
 
 @implementation WPSheet
@@ -257,8 +281,10 @@ static UIWindowScene *WPActiveScene(void) {
 - (instancetype)initWithImage:(UIImage *)shot {
     if ((self = [super init])) {
         _frames = shot ? [NSMutableArray arrayWithObject:shot] : [NSMutableArray array];
+        _allReplies = [NSMutableArray array];
         _mode = WMReplyModeIcebreaker;
         _length = WMReplyLengthShort;
+        _photoStyle = 0;   // Combination
     }
     return self;
 }
@@ -354,6 +380,34 @@ static UIWindowScene *WPActiveScene(void) {
     _chips = chips;
     y = cy + rowH + 12;
 
+    // Photo Opener sub-style — a little sub-menu shown only when Photo Opener is picked
+    _photoChips = nil;
+    if (_mode == WMReplyModePhotoOpener) {
+        UILabel *pl = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 18)];
+        pl.text = @"Photo style"; pl.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        pl.textColor = UIColor.secondaryLabelColor;
+        [_scroll addSubview:pl]; y += 22;
+        CGFloat px = m, py = y, rowH2 = 32, gap2 = 8;
+        NSMutableArray *pchips = [NSMutableArray array];
+        for (NSInteger i = 0; i < kWPPhotoStyleCount; i++) {
+            UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+            [b setTitle:kWPPhotoStyleLabels[i] forState:UIControlStateNormal];
+            b.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+            b.tag = i;
+            [b addTarget:self action:@selector(_photoChip:) forControlEvents:UIControlEventTouchUpInside];
+            [b sizeToFit];
+            CGFloat w = b.bounds.size.width + 22;
+            if (px + w > W - m && px > m) { px = m; py += rowH2 + gap2; }
+            b.frame = CGRectMake(px, py, w, rowH2);
+            b.layer.cornerRadius = rowH2 / 2;
+            [self _styleChip:b selected:(i == _photoStyle)];
+            [_scroll addSubview:b]; [pchips addObject:b];
+            px += w + gap2;
+        }
+        _photoChips = pchips;
+        y = py + rowH2 + 12;
+    }
+
     // length
     UISegmentedControl *len = [[UISegmentedControl alloc] initWithItems:@[@"Short", @"Longer"]];
     len.frame = CGRectMake(m, y, W-2*m, 32);
@@ -418,6 +472,7 @@ static UIWindowScene *WPActiveScene(void) {
     _results = [[UIView alloc] initWithFrame:CGRectMake(0, y, W, 0)];
     [_scroll addSubview:_results];
     _scroll.contentSize = CGSizeMake(W, y + 20);
+    if (_allReplies.count) [self _showReplies:_allReplies];   // keep accumulated replies on screen
 }
 
 - (void)_styleChip:(UIButton *)b selected:(BOOL)sel {
@@ -426,8 +481,11 @@ static UIWindowScene *WPActiveScene(void) {
 }
 - (void)_chip:(UIButton *)b {
     _mode = kWPModes[b.tag];
-    for (UIButton *c in _chips) [self _styleChip:c selected:(kWPModes[c.tag] == _mode)];
-    [_genBtn setTitle:[self _genTitle] forState:UIControlStateNormal];
+    [self _rebuild];                 // re-render so the Photo Opener sub-menu shows/hides
+}
+- (void)_photoChip:(UIButton *)b {
+    _photoStyle = b.tag;
+    for (UIButton *c in _photoChips) [self _styleChip:c selected:(c.tag == _photoStyle)];
 }
 - (void)_len:(UISegmentedControl *)s { _length = s.selectedSegmentIndex == 1 ? WMReplyLengthLong : WMReplyLengthShort; }
 
@@ -439,7 +497,10 @@ static UIWindowScene *WPActiveScene(void) {
     _genBtn.enabled = NO; _genBtn.alpha = 0.5;
     _status.textColor = UIColor.secondaryLabelColor;
     _status.text = @"Reading the screen…";
-    for (UIView *v in _results.subviews) [v removeFromSuperview];
+
+    // the photo sub-style only applies to Photo Opener (cleared otherwise)
+    [WMSettings shared].photoStyleExtra =
+        (_mode == WMReplyModePhotoOpener) ? WPPhotoStyleBrief(_photoStyle) : nil;
 
     NSArray<UIImage *> *frames = [_frames copy];
     [WMOCR transcriptFromFrames:frames completion:^(NSString *transcript, NSInteger count) {
@@ -460,7 +521,12 @@ static UIWindowScene *WPActiveScene(void) {
                 }
                 self->_status.textColor = UIColor.secondaryLabelColor;
                 self->_status.text = @"Tap a reply to copy it.";
-                [self _showReplies:replies];
+                if (!self->_allReplies) self->_allReplies = [NSMutableArray array];
+                // newest batch on top, older replies kept below
+                [self->_allReplies insertObjects:replies
+                    atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, replies.count)]];
+                while (self->_allReplies.count > 30) [self->_allReplies removeLastObject];
+                [self _showReplies:self->_allReplies];
             }];
         } @catch (id e) {
             self->_genBtn.enabled = YES; self->_genBtn.alpha = 1;

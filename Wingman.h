@@ -92,6 +92,7 @@ static NSInteger const kWMQuickReplyCount = 5;
 @property (nonatomic, readonly, copy) NSString *deepseekModel;
 @property (nonatomic, readonly, copy) NSString *deepseekEndpoint; // full .../chat/completions URL
 @property (nonatomic, readonly, copy) NSString *soundLikeMe;
+@property (nonatomic, copy) NSString *photoStyleExtra;   // transient: Photo Opener sub-style brief
 @property (nonatomic, readonly) BOOL autoDetectApps;
 @property (nonatomic, readonly, copy) NSArray<NSString *> *manualApps;
 @property (nonatomic, readonly) BOOL bubbleOnRight;

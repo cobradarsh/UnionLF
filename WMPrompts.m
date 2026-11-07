@@ -158,8 +158,8 @@
                     "in getting to know her, not a pickup artist. No cheesy pickup lines, no "
                     "generic 'hey how's it going', no empty compliments on looks, no "
                     "negging, no over-the-top flattery. Organic, specific and sincere.";
-        case WMReplyModePhotoOpener:
-            return @"PHOTO OPENER (opening message from her photos). Look CLOSELY at her actual "
+        case WMReplyModePhotoOpener: {
+            NSString *base = @"PHOTO OPENER (opening message from her photos). Look CLOSELY at her actual "
                     "PHOTOS: the setting and surroundings, the colours, the light, the mood, what "
                     "she's doing, AND her, her expression, her energy, how she fits that scene. "
                     "Write an opener that does two things at once: notice something specific and "
@@ -171,6 +171,9 @@
                     "I saw the whole picture and her in it, not just a pretty face. Warm, "
                     "confident, a little magnetic, never creepy or objectifying. Make the three "
                     "about THREE DIFFERENT photos.";
+            NSString *extra = [WMSettings shared].photoStyleExtra;
+            return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
+        }
         case WMReplyModeReviver:
             return @"REVIVER. The conversation has cooled off or her interest dipped. Read the "
                     "WHOLE chat and find where her energy dropped (shorter or slower replies, "
