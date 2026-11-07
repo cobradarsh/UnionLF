@@ -45,9 +45,14 @@
         Class cls = NSClassFromString(@"LSApplicationWorkspace");
         LSApplicationWorkspace *ws = [cls defaultWorkspace];
         for (LSApplicationProxy *p in [ws allApplications]) {
-            if (![p.applicationType isEqualToString:@"User"]) continue;     // skip Apple/system apps
             NSString *bid = p.applicationIdentifier, *nm = p.localizedName;
             if (bid.length == 0) continue;
+            BOOL isApple = [bid hasPrefix:@"com.apple."];
+            BOOL isUser  = [p.applicationType isEqualToString:@"User"];
+            // Keep normal App Store apps (type "User") AND TrollStore / sideloaded apps
+            // (TrollStore registers them as "System" for persistence, but they are never
+            // com.apple.*). Skip only genuine Apple system apps.
+            if (!isUser && isApple) continue;
             [out addObject:@{ @"id": bid, @"name": nm.length ? nm : bid }];
         }
     } @catch (__unused id e) {}
