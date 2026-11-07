@@ -81,7 +81,7 @@
     NSString *t = b.currentTitle;
     if (t.length) [self.textDocumentProxy insertText:t];
 }
-- (void)nextKeyboard { [self advanceToNextInputViewController]; }
+- (void)nextKeyboard { [self advanceToNextInputMode]; }
 - (void)backspace { [self.textDocumentProxy deleteBackward]; }
 
 @end
