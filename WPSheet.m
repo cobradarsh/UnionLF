@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.22";
+NSString *const kWPVersion = @"1.0.23";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -84,14 +84,24 @@ static UIWindowScene *WPActiveScene(void) {
     return fallback;
 }
 
-// A key-capable window: a plain overlay UIWindow in SpringBoard often won't bring up
-// the keyboard. canBecomeKeyWindow + makeKeyAndVisible lets text fields edit where
-// possible. (Key entry also has a clipboard "Paste" button that needs no keyboard.)
+// A key-capable window: a plain overlay UIWindow in SpringBoard won't bring up the
+// keyboard. canBecomeKeyWindow + makeKeyAndVisible makes it key, and WPFocus asks
+// SpringBoard for keyboard focus while the sheet is up (without that the app in front
+// keeps the keyboard). The clipboard "Paste" buttons stay as a fallback.
 @interface WPSheetWindow : UIWindow
 @end
 @implementation WPSheetWindow
 - (BOOL)canBecomeKeyWindow { return YES; }
 @end
+
+// Ask SpringBoard for keyboard focus on the next run-loop turn, once the sheet window is
+// really on screen; skipped if the sheet was closed or hidden again in the meantime.
+static void WPTakeKeyboardSoon(void) {
+    UIWindow *w = gWPWindow;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (w && gWPWindow == w && !w.hidden) [WPFocus takeKeyboardForWindow:w];
+    });
+}
 
 #pragma mark - app picker
 
@@ -365,8 +375,11 @@ static UIWindowScene *WPActiveScene(void) {
     gWPWindow.windowLevel = 100001;                 // just above the bubble
     gWPWindow.rootViewController = nav;
     [gWPWindow makeKeyAndVisible];
+    WPTakeKeyboardSoon();                            // so the context and key boxes get a keyboard
 }
 - (void)_close {
+    [gWPWindow endEditing:YES];
+    [WPFocus giveKeyboardBack];                      // the app in front gets its keyboard back
     gWPWindow.hidden = YES;
     gWPWindow = nil;                                 // let it deallocate
 }
@@ -442,10 +455,15 @@ static UIWindowScene *WPActiveScene(void) {
 
 - (void)_addScreen { [[WPBubble shared] beginAppendTo:self]; }
 
-- (void)dismissForAppend { gWPWindow.hidden = YES; }
+- (void)dismissForAppend {
+    [gWPWindow endEditing:YES];
+    [WPFocus giveKeyboardBack];      // the app is used while the sheet is hidden
+    gWPWindow.hidden = YES;
+}
 - (void)reshowAfterAppend {
     gWPWindow.hidden = NO;
     [gWPWindow makeKeyAndVisible];
+    WPTakeKeyboardSoon();
     [self _rebuild];                 // refresh the captured-screen count
 }
 

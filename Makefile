@@ -18,7 +18,7 @@ TWEAK_NAME = WingmanPlus
 # injection from SpringBoard doesn't drive the app's scroll views on iOS 16, so we use
 # user-driven scroll-capture instead (hold to start, flick, tap to finish). The file is
 # kept in the tree for reference only.
-WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
+WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPFocus.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
 WingmanPlus_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision
 

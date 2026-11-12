@@ -14,17 +14,22 @@ static NSData *WPFrameJPEG(UIImage *img) {
     CGFloat w = img.size.width * img.scale, h = img.size.height * img.scale;   // pixels
     if (w < 1 || h < 1) return UIImageJPEGRepresentation(img, 0.82);
     CGFloat s = MIN(1.0, MIN(1568.0 / MAX(w, h), sqrt(1150000.0 / (w * h))));
-    UIImage *out = img;
-    if (s < 1.0) {
-        CGSize sz = CGSizeMake(floor(w * s), floor(h * s));
-        UIGraphicsImageRendererFormat *fmt = [UIGraphicsImageRendererFormat defaultFormat];
-        fmt.scale = 1; fmt.opaque = YES;
-        UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:sz format:fmt];
-        out = [r imageWithActions:^(UIGraphicsImageRendererContext *c) {
-            [img drawInRect:CGRectMake(0, 0, sz.width, sz.height)];
-        }];
+    NSData *jpeg = nil;
+    @autoreleasepool {                        // free each resized copy now, not after the whole request
+        UIImage *out = img;
+        if (s < 1.0) {
+            CGSize sz = CGSizeMake(floor(w * s), floor(h * s));
+            UIGraphicsImageRendererFormat *fmt = [UIGraphicsImageRendererFormat defaultFormat];
+            fmt.scale = 1; fmt.opaque = YES;
+            fmt.preferredRange = UIGraphicsImageRendererFormatRangeStandard;   // 8-bit: half the memory; JPEG is 8-bit anyway
+            UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:sz format:fmt];
+            out = [r imageWithActions:^(UIGraphicsImageRendererContext *c) {
+                [img drawInRect:CGRectMake(0, 0, sz.width, sz.height)];
+            }];
+        }
+        jpeg = UIImageJPEGRepresentation(out, 0.82);
     }
-    return UIImageJPEGRepresentation(out, 0.82);
+    return jpeg;
 }
 
 // Private session, created once, fully isolated from the host app (WhatsApp).

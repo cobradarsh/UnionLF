@@ -15,6 +15,7 @@ static UIColor *WPBubbleIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 g
 static CGFloat   const kBubbleSize = 52;
 static NSString *const kPosKey     = @"com.adarsh.wingmanplus.bubblePos";
 static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
+static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-capture finishes by itself
 
 @interface WPBubble ()
 @property (nonatomic, strong) UIView *dot;
@@ -28,6 +29,7 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 @property (nonatomic, strong) NSData *lastTickSig;   // previous probe (to detect "at rest")
 @property (nonatomic, strong) NSData *lastSavedSig;  // last SAVED screen (to detect "new content")
 @property (nonatomic, strong) NSTimer *scrollTimer;
+@property (nonatomic) CFAbsoluteTime scrollStart;    // when the scroll-capture session began
 @property (nonatomic, weak) WPSheet *pendingSheet;   // set while adding screens to an open sheet
 @end
 
@@ -156,6 +158,7 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 
 - (void)_startScrollCapture {
     _scrolling = YES;
+    _scrollStart = CFAbsoluteTimeGetCurrent();
     _scrollFrames = [NSMutableArray array];
     _lastTickSig = nil; _lastSavedSig = nil;
     [self _setRecordingLook:YES];
@@ -178,10 +181,10 @@ static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
 - (void)_scrollTick {
     if (!_scrolling || _busy) return;
     if (_scrollFrames.count >= 10) { [self _finishScrollCapture]; return; }   // safety cap
+    if (CFAbsoluteTimeGetCurrent() - _scrollStart > kScrollMaxSeconds) { [self _finishScrollCapture]; return; }
     _busy = YES;
-    UIImage *probe = [WPCapture captureNow];
-    if (probe) {
-        NSData *sig = [WPCapture signatureOf:probe];
+    NSData *sig = [WPCapture probeSignature];   // fingerprint only; no frame is kept for a probe
+    if (sig) {
         BOOL stable = _lastTickSig && [WPCapture signature:sig matches:_lastTickSig];
         BOOL isNew  = !_lastSavedSig || ![WPCapture signature:sig matches:_lastSavedSig];
         if (stable && isNew) {

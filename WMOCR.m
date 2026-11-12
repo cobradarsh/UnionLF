@@ -199,10 +199,22 @@ typedef struct { CGFloat minX, maxX, top, bottom; } WMBox;
         NSUInteger n = frames.count;
         NSMutableArray<NSArray *> *perFrame = [NSMutableArray arrayWithCapacity:n];
         for (NSUInteger i = 0; i < n; i++) [perFrame addObject:@[]];
-        dispatch_apply(n, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^(size_t i) {
-            NSArray *msgs = [self _messagesInImage:frames[i] fast:fast];
-            @synchronized (perFrame) { perFrame[i] = msgs ?: @[]; }
-        });
+        // At most two Vision passes at once: each allocates tens of MB inside SpringBoard, and
+        // one per CPU core (the old dispatch_apply) multiplied that on a 10-screen capture.
+        dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0);
+        dispatch_semaphore_t gate = dispatch_semaphore_create(2);
+        dispatch_group_t group = dispatch_group_create();
+        for (NSUInteger i = 0; i < n; i++) {
+            dispatch_semaphore_wait(gate, DISPATCH_TIME_FOREVER);
+            dispatch_group_async(group, q, ^{
+                @autoreleasepool {
+                    NSArray *msgs = [self _messagesInImage:frames[i] fast:fast];
+                    @synchronized (perFrame) { perFrame[i] = msgs ?: @[]; }
+                }
+                dispatch_semaphore_signal(gate);
+            });
+        }
+        dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
         NSMutableArray<NSString *> *out = [NSMutableArray array];
         for (NSArray *msgs in perFrame) {                   // oldest first
             for (NSDictionary *m in msgs) {

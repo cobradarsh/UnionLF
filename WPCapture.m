@@ -7,13 +7,26 @@
 
     Two spellings exist across iOS versions; we try the rotation variant first
     (what Snapper imports) and fall back to the no-argument one. Passing 0 is a
-    safe "no rotation" either way under the arm64 calling convention.            */
+    safe "no rotation" either way under the arm64 calling convention.
+
+    OWNERSHIP: both functions follow the Core Foundation "Create" rule and hand back
+    a UIImage the caller already owns (+1). ARC can't know that for a dlsym'd C
+    function, so typing them as returning UIImage * made it retain the result again,
+    and every capture leaked one full-screen image (14 MB or more). Scroll-capture
+    probes ~3 times a second, so SpringBoard passed its memory limit within a minute
+    and iOS killed it: the "crash + respring". They're typed void * now and the +1
+    is handed to ARC with __bridge_transfer, so each shot is freed once it's used.  */
 
 #import "WPlus.h"
 #import <dlfcn.h>
 
-typedef UIImage *(*WPScreenRotFn)(long);   // _UICreateScreenUIImageWithRotation
-typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
+typedef void *(*WPScreenRotFn)(long);   // _UICreateScreenUIImageWithRotation, returns +1
+typedef void *(*WPScreenFn)(void);      // _UICreateScreenUIImage, returns +1
+
+// Frames are kept (up to 10 per capture) and OCR'd inside SpringBoard, so they're stored
+// at most this tall instead of the native 2796 px. Claude only reads 1568 px anyway, and
+// Vision still reads chat text easily at this size.
+static const CGFloat kWPFrameMaxLongEdge = 1900;
 
 @implementation WPCapture
 
@@ -24,12 +37,12 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
         rotFn   = (WPScreenRotFn)dlsym(RTLD_DEFAULT, "_UICreateScreenUIImageWithRotation");
         plainFn = (WPScreenFn)  dlsym(RTLD_DEFAULT, "_UICreateScreenUIImage");
     });
-    UIImage *img = nil;
+    void *owned = NULL;
     @try {
-        if (rotFn)        img = rotFn(0);
-        else if (plainFn) img = plainFn();
-    } @catch (__unused id e) { img = nil; }
-    return img;
+        if (rotFn)        owned = rotFn(0);
+        else if (plainFn) owned = plainFn();
+    } @catch (__unused id e) { owned = NULL; }
+    return (__bridge_transfer UIImage *)owned;   // ARC takes over the +1 and releases it
 }
 
 // The private API can hand back a UIImage that isn't a plain CGImage bitmap
@@ -44,7 +57,13 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
     if (sz.width < 1 || sz.height < 1) return raw;
     UIGraphicsImageRendererFormat *fmt = [UIGraphicsImageRendererFormat defaultFormat];
     fmt.opaque = YES;
-    fmt.scale  = raw.scale > 0 ? raw.scale : [UIScreen mainScreen].scale;
+    // The default format renders 16-bit wide colour on this screen: 8 bytes a pixel, ~29 MB
+    // for a full 3x frame. 8-bit sRGB at the capped size is ~6.5 MB and reads the same.
+    fmt.preferredRange = UIGraphicsImageRendererFormatRangeStandard;
+    CGFloat scale = raw.scale > 0 ? raw.scale : [UIScreen mainScreen].scale;
+    CGFloat longPx = MAX(sz.width, sz.height) * scale;
+    if (longPx > kWPFrameMaxLongEdge) scale *= kWPFrameMaxLongEdge / longPx;
+    fmt.scale = scale;
     UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:sz format:fmt];
     UIImage *norm = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
         [raw drawInRect:CGRectMake(0, 0, sz.width, sz.height)];
@@ -58,21 +77,31 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
     // We're already on the main thread; spin the runloop briefly instead of an
     // async hop so the caller gets the image back synchronously.
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.08]];
-    UIImage *shot = [self _normalize:[self _rawScreen]];
+    UIImage *shot = nil;
+    @autoreleasepool { shot = [self _normalize:[self _rawScreen]]; }   // full-size original freed here
     if (show) show();
     return shot;
 }
 
-// Capture without toggling any overlay (used by scroll-capture, where the bubble is
-// hidden only for the clean shot so it never appears in a saved frame).
+// Capture without toggling any overlay.
 + (UIImage *)captureNow {
-    return [self _normalize:[self _rawScreen]];
+    UIImage *shot = nil;
+    @autoreleasepool { shot = [self _normalize:[self _rawScreen]]; }
+    return shot;
+}
+
+// Scroll-capture probes the screen ~3 times a second only to see whether it moved, so the
+// probe fingerprints the raw shot directly instead of building a full frame every time.
++ (NSData *)probeSignature {
+    NSData *sig = nil;
+    @autoreleasepool { sig = [self signatureOf:[self _rawScreen]]; }
+    return sig;
 }
 
 // A tiny grayscale fingerprint so we can tell when the screen stopped changing
 // (profile reached the bottom, so a swipe no longer moves it).
 + (NSData *)signatureOf:(UIImage *)img {
-    if (!img.CGImage) return nil;
+    if (!img) return nil;
     const int W = 24, H = 48;
     uint8_t *buf = calloc((size_t)(W * H), 1);
     if (!buf) return nil;
@@ -80,7 +109,13 @@ typedef UIImage *(*WPScreenFn)(void);      // _UICreateScreenUIImage
     CGContextRef ctx = CGBitmapContextCreate(buf, W, H, 8, W, gray, (CGBitmapInfo)kCGImageAlphaNone);
     NSData *d = nil;
     if (ctx) {
-        CGContextDrawImage(ctx, CGRectMake(0, 0, W, H), img.CGImage);
+        // Draw through UIKit so raw (IOSurface-backed) shots, which may have no CGImage, and
+        // finished frames fingerprint the same way. Flipped to UIKit's top-left origin.
+        CGContextTranslateCTM(ctx, 0, H);
+        CGContextScaleCTM(ctx, 1, -1);
+        UIGraphicsPushContext(ctx);
+        [img drawInRect:CGRectMake(0, 0, W, H)];
+        UIGraphicsPopContext();
         d = [NSData dataWithBytes:buf length:(NSUInteger)(W * H)];
         CGContextRelease(ctx);
     }
