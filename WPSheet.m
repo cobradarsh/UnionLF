@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.24";
+NSString *const kWPVersion = @"1.0.25";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -34,42 +34,58 @@ static CGFloat const kWPSheetTopPad = 14;
 // Two chip sections, like the Android sheet: dating & flirt first (this is a dating tool), then every
 // general vibe. A chip's tag is the WMReplyMode value itself.
 static WMReplyMode const kWPDatingModes[] = {
-    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeReviver,
-    WMReplyModePlanDate,   WMReplyModeRomance,     WMReplyModeSeduce,   WMReplyModeAlphaPower,
-    WMReplyModeFlirty,     WMReplyModeSensual,     WMReplyModeLustful,  WMReplyModeDirty
+    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeReviver,  WMReplyModePhoneConvo,
+    WMReplyModePlanDate,   WMReplyModeRomance,     WMReplyModeSeduce,   WMReplyModeStupidLove,
+    WMReplyModeHilarify,   WMReplyModeAlphaPower,  WMReplyModeFlirty,   WMReplyModeSensual,
+    WMReplyModeLustful,    WMReplyModeDirty
 };
 static WMReplyMode const kWPGeneralModes[] = {
     WMReplyModeAggressive, WMReplyModeDecentRoast, WMReplyModeRoastedToHell,
-    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeFunny,    WMReplyModeGenZ,
-    WMReplyModeLyrical,    WMReplyModeExcited,     WMReplyModeThankful, WMReplyModeWishing,
-    WMReplyModeFormal,     WMReplyModeChill,       WMReplyModeEmojify,  WMReplyModeRemix,
-    WMReplyModeFacts,      WMReplyModeBackhand
+    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeExcuse,   WMReplyModeFunny,
+    WMReplyModeGenZ,       WMReplyModeLyrical,     WMReplyModeExcited,  WMReplyModeThankful,
+    WMReplyModeWishing,    WMReplyModeFormal,      WMReplyModeChill,    WMReplyModeEmojify,
+    WMReplyModeRemix,      WMReplyModeFacts,       WMReplyModeBackhand
 };
 static NSInteger const kWPDatingCount  = sizeof(kWPDatingModes)/sizeof(kWPDatingModes[0]);
 static NSInteger const kWPGeneralCount = sizeof(kWPGeneralModes)/sizeof(kWPGeneralModes[0]);
 
 // Photo Opener sub-styles — a little sub-menu under the vibe when Photo Opener is picked.
 // The brief is appended to the Photo Opener prompt via WMSettings.photoStyleExtra.
-static NSString *const kWPPhotoStyleLabels[] = { @"Combination", @"Classy", @"Bold", @"Flirty" };
-static NSInteger const kWPPhotoStyleCount = 4;
+static NSString *const kWPPhotoStyleLabels[] = {
+    @"Combination", @"Classy", @"Bold", @"Flirty", @"Cheeky", @"Story", @"Witty"
+};
+static NSInteger const kWPPhotoStyleCount = sizeof(kWPPhotoStyleLabels)/sizeof(kWPPhotoStyleLabels[0]);
 static NSString *WPPhotoStyleBrief(NSInteger i) {
     switch (i) {
-        case 1: return @"FLAVOUR — refined and eloquent: finesse, class and a captivating turn of "
-                        "phrase, a line that feels rare and considered, well above average. "
-                        "Appreciate her beauty with elegance, never cliche.";
-        case 2: return @"FLAVOUR — bold and alpha: confidently admire her figure and the way she "
-                        "carries her body, a little daring, owning the compliment with magnetic "
+        case 1: return @"FLAVOUR — refined and eloquent: a rare, considered line with real finesse, the "
+                        "kind a well-read man with taste would say. Appreciate her beauty with elegance "
+                        "and a touch of poetry, never cliche.";
+        case 2: return @"FLAVOUR — bold and alpha: confidently admire her figure and the way she carries "
+                        "herself in that shot, a little daring, owning the compliment with magnetic "
                         "self-assurance. Tasteful and adult, never crude, creepy or objectifying.";
-        case 3: return @"FLAVOUR — flirty and teasing: weave in playful flirtation and a little "
-                        "tease so it's charged and fun, the kind of line that makes her smile and reply.";
-        default: return @"FLAVOUR — the full blend: a classy, eloquent observation of the scene, "
-                        "genuine appreciation of HER and the shape and grace of her figure, and a "
-                        "touch of flirt and tease. Go well beyond what an average guy sends ('you "
-                        "look beautiful'); make it stand out so it earns a reply.";
+        case 3: return @"FLAVOUR — flirty and teasing: playful flirtation with a little tease that makes "
+                        "her grin, charged and fun, with an easy hook for her to reply to.";
+        case 4: return @"FLAVOUR — cheeky: a playful accusation, a mock complaint or a confident cold "
+                        "read about her from the photo ('you're definitely the one who...'), push-pull "
+                        "that teases her a little while making it obvious I'm into her.";
+        case 5: return @"FLAVOUR — story spin: turn the photo into a tiny scene or a playful 'what "
+                        "happens next' that puts me in the picture with her, a mini adventure she'll "
+                        "want to add to.";
+        case 6: return @"FLAVOUR — witty: clever wordplay, a sharp one-liner or the perfect caption for "
+                        "her photo, smart and funny, with the flirt riding on the wit.";
+        default: return @"FLAVOUR — the full blend: a sharp observation of the scene, genuine "
+                        "appreciation of HER and how she carries herself in it, and a flirty twist or "
+                        "tease to finish. Well beyond what an average guy sends ('you look "
+                        "beautiful'); make it the line she can't leave on read.";
     }
 }
 
 static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated while up
+
+// The sheet belongs to the app it was opened over. Once that app leaves the front (home screen, app switcher,
+// another app, the lock screen) the sheet closes itself; up to 1.0.24 it stayed up over whatever came next.
+// Two misses in a row are needed, so one odd answer from SpringBoard can't close it.
+static NSTimeInterval const kWPHostCheckSeconds = 0.3;
 
 // A key-capable window: a plain overlay UIWindow in SpringBoard won't bring up the
 // keyboard. canBecomeKeyWindow + makeKeyAndVisible makes it key, and WPFocus asks
@@ -161,7 +177,7 @@ static void WPTakeKeyboardSoon(void) {
 @end
 @implementation WPSettingsVC {
     UISegmentedControl *_provider;
-    UITextField *_key;
+    UITextField *_key, *_city;
     UITextView  *_style;
     UILabel     *_status, *_model;
 }
@@ -227,6 +243,16 @@ static void WPTakeKeyboardSoon(void) {
     _style.layer.cornerRadius = 8; _style.font = [UIFont systemFontOfSize:15];
     _style.text = s.soundLikeMe;
     [sc addSubview:_style]; y += 92;
+
+    UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
+    cl.text = @"My city (optional, for Phone Convo's local news)"; cl.font = [UIFont boldSystemFontOfSize:14];
+    [sc addSubview:cl]; y += 26;
+    _city = [[UITextField alloc] initWithFrame:CGRectMake(m, y, W-2*m, 40)];
+    _city.borderStyle = UITextBorderStyleRoundedRect;
+    _city.placeholder = @"The city you live in";
+    _city.autocorrectionType = UITextAutocorrectionTypeNo; _city.delegate = self;
+    _city.text = s.myCity;
+    [sc addSubview:_city]; y += 52;
 
     UIButton *apps = [UIButton buttonWithType:UIButtonTypeSystem];
     apps.frame = CGRectMake(m, y, W-2*m, 40);
@@ -310,6 +336,7 @@ static void WPTakeKeyboardSoon(void) {
     [s saveProvider:[self _p]];
     [s saveKey:_key.text forProvider:[self _p]];
     [s setValue:(_style.text ?: @"") forSettingKey:@"soundLikeMe"];
+    [s setValue:(_city.text ?: @"") forSettingKey:@"myCity"];
     [self.navigationController popViewControllerAnimated:YES];
 }
 @end
@@ -337,6 +364,10 @@ static void WPTakeKeyboardSoon(void) {
 @property (nonatomic, strong) UILabel *contextHint;
 @property (nonatomic, copy)   NSString *contextText;                   // survives _rebuild (chip taps rebuild)
 @property (nonatomic) CGFloat kbHeight;                                // keyboard overlap while typing context
+@property (nonatomic, copy)   NSString *hostApp;                       // bundle id of the app the sheet opened over
+@property (nonatomic, strong) NSTimer *hostTimer;                      // watches that app stays in front
+@property (nonatomic) NSInteger hostMisses;
+@property (nonatomic, strong) NSMutableSet<NSString *> *noteReplies;   // Phone Convo cards: copy without closing
 @end
 
 @implementation WPSheet
@@ -345,6 +376,7 @@ static void WPTakeKeyboardSoon(void) {
     if ((self = [super init])) {
         _frames = shot ? [NSMutableArray arrayWithObject:shot] : [NSMutableArray array];
         _allReplies = [NSMutableArray array];
+        _noteReplies = [NSMutableSet set];
         _mode = WMReplyModeIcebreaker;
         _length = WMReplyLengthShort;
         _photoStyle = 0;   // Combination
@@ -365,8 +397,36 @@ static void WPTakeKeyboardSoon(void) {
     gWPWindow.rootViewController = nav;
     [gWPWindow makeKeyAndVisible];
     WPTakeKeyboardSoon();                            // so the context and key boxes get a keyboard
+    [self _watchHostApp];
 }
+
+- (void)_watchHostApp {
+    [_hostTimer invalidate];
+    _hostTimer = nil;
+    _hostMisses = 0;
+    _hostApp = [WPHost frontmostBundleID];
+    if (_hostApp.length == 0) return;                // opened over nothing we can name: the user closes it
+    __weak typeof(self) ws = self;
+    _hostTimer = [NSTimer scheduledTimerWithTimeInterval:kWPHostCheckSeconds repeats:YES block:^(NSTimer *t) {
+        WPSheet *sheet = ws;
+        if (sheet) [sheet _checkHostApp]; else [t invalidate];
+    }];
+}
+
+// Also runs while the sheet is hidden for "Add another screen": leaving the app ends that capture too.
+- (void)_checkHostApp {
+    if (!gWPWindow || gWPWindow.rootViewController != self.navigationController) {   // a newer sheet took over
+        [_hostTimer invalidate];
+        _hostTimer = nil;
+        return;
+    }
+    if ([[WPHost frontmostBundleID] isEqualToString:_hostApp]) { _hostMisses = 0; return; }
+    if (++_hostMisses >= 2) [self _close];
+}
+
 - (void)_close {
+    [_hostTimer invalidate];
+    _hostTimer = nil;
     [gWPWindow endEditing:YES];
     [WPFocus giveKeyboardBack];                      // the app in front gets its keyboard back
     gWPWindow.hidden = YES;
@@ -440,7 +500,11 @@ static void WPTakeKeyboardSoon(void) {
 
 - (void)_settings { [self.navigationController pushViewController:[WPSettingsVC new] animated:YES]; }
 
-- (NSString *)_genTitle { return _mode == WMReplyModeIcebreaker ? @"Write icebreaker" : @"Write 3 replies"; }
+- (NSString *)_genTitle {
+    if (_mode == WMReplyModeIcebreaker) return @"Write icebreaker";
+    if (_mode == WMReplyModePhoneConvo) return @"Plan my call";
+    return @"Write 3 replies";
+}
 
 - (void)_addScreen { [[WPBubble shared] beginAppendTo:self]; }
 
@@ -767,17 +831,22 @@ static void WPTakeKeyboardSoon(void) {
         (_mode == WMReplyModePhotoOpener) ? WPPhotoStyleBrief(_photoStyle) : nil;
 
     NSArray<UIImage *> *frames = [_frames copy];
+    WMReplyMode mode = _mode;                        // chips stay tappable while this batch is written
+    BOOL notes = [WMPrompts isTalkingPointsMode:mode];
     // Claude / Kimi see the frames themselves, so the OCR text is only a ME/THEM hint there: use Vision's
     // fast recognizer (several times quicker on a multi-screen capture). DeepSeek is text-only: accurate.
     BOOL fastOCR = (s.provider != WMAPIProviderDeepSeek) && frames.count > 0;
     [WMOCR transcriptFromFrames:frames fast:fastOCR completion:^(NSString *transcript, NSInteger count) {
-        self->_status.text = @"Writing replies…";
+        NSString *busy = @"Writing replies…";
+        if (s.provider == WMAPIProviderClaude && notes) busy = @"Checking what's on near you…";
+        else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeHilarify) busy = @"Finding fresh local material…";
+        self->_status.text = busy;
         @try {
             [[WMAPIClient shared] generateRepliesWithProvider:s.provider
                                                        frames:frames
                                                    transcript:transcript ?: @""
                                                       context:(self->_contextText ?: @"")
-                                                         mode:self->_mode
+                                                         mode:mode
                                                        length:self->_length
                                                    completion:^(NSArray<NSString *> *replies, NSError *err) {
                 self->_genBtn.enabled = YES; self->_genBtn.alpha = 1;
@@ -786,8 +855,9 @@ static void WPTakeKeyboardSoon(void) {
                     self->_status.text = err ? err.localizedDescription : @"No replies — try again.";
                     return;
                 }
+                if (notes) [self->_noteReplies addObjectsFromArray:replies];
                 self->_status.textColor = WP_SUBTEXT;
-                self->_status.text = @"Tap a reply to copy it.";
+                self->_status.text = notes ? @"Tap a card to copy it for the call." : @"Tap a reply to copy it.";
                 if (!self->_allReplies) self->_allReplies = [NSMutableArray array];
                 // newest batch on top, older replies kept below
                 [self->_allReplies insertObjects:replies
@@ -844,6 +914,11 @@ static void WPTakeKeyboardSoon(void) {
     if (!txt.text.length) return;
     [WPHost copyToClipboard:txt.text];
     [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
+    if ([_noteReplies containsObject:txt.text]) {   // call notes, not a text: stay open so every card can be copied
+        _status.textColor = WP_OK;
+        _status.text = @"Copied. Paste it into Notes before the call.";
+        return;
+    }
     _status.textColor = WP_OK;
     _status.text = @"Copied — paste it in the app.";
     // auto-close so the user lands straight back on the dating app to paste

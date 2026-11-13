@@ -157,6 +157,20 @@
                     "praise on the surface, a playful dig underneath ('you look great for someone who "
                     "slept three hours'). Clever and cheeky, obviously tongue-in-cheek, never genuinely "
                     "hurtful and none of the forbidden attack topics.";
+        case WMReplyModeExcuse:
+            return @"EXCUSE. Get me out of this gracefully. Read the chat and my context to see exactly "
+                    "what I need out of: an invite or event I can't or don't want to go to, a plan I want "
+                    "to push, or a conversation that's getting heated or awkward. Give one simple, everyday "
+                    "reason that's easy to believe (a prior plan, work running late, an early start, family "
+                    "stuff, a deadline), vague enough that it never needs proof or a follow-up story, and "
+                    "consistent with anything in the chat; if my context gives the real reason, use that. "
+                    "Keep it warm so they never feel I've lost interest in THEM: appreciate the invite, show "
+                    "a little genuine disappointment, and offer a specific rain check or alternative "
+                    "(another day, a shorter catch-up, a call). If it's a tense moment, lower the "
+                    "temperature instead: acknowledge them, take the heat out without conceding my point, "
+                    "and buy time to talk properly later. No over-explaining, no grovelling, no "
+                    "guilt-trips, and no dramatic stories (fake emergencies, illness or a death in the "
+                    "family) that could backfire. Make the three three different ways out.";
         case WMReplyModePlanDate:
             return @"PLAN A DATE. Suggest an actual date. Read the chat for what they're into, "
                     "then propose one concrete, doable plan (a place or activity, a rough day "
@@ -194,17 +208,19 @@
                     "negging, no over-the-top flattery. Organic, specific and sincere.";
         case WMReplyModePhotoOpener: {
             NSString *base = @"PHOTO OPENER (opening message from her photos). Look CLOSELY at her actual "
-                    "PHOTOS: the setting and surroundings, the colours, the light, the mood, what "
-                    "she's doing, AND her, her expression, her energy, how she fits that scene. "
-                    "Write an opener that does two things at once: notice something specific and "
-                    "real in the picture, AND give her genuine, earned appreciation of HER in it. "
-                    "Don't just ask about the place, and don't drop a flat 'you're gorgeous'. "
-                    "Validate her beauty THROUGH the context so it feels sincere: how she's in her "
-                    "element there, how she stands out against that backdrop, the way her smile "
-                    "fits the moment, the glow of her against that light or place. She should feel "
-                    "I saw the whole picture and her in it, not just a pretty face. Warm, "
-                    "confident, a little magnetic, never creepy or objectifying. Make the three "
-                    "about THREE DIFFERENT photos.";
+                    "PHOTOS: where she is, what she's doing, the light, the colours, the props and the "
+                    "little details most guys would miss, AND her: her expression, her energy, her style, "
+                    "how she owns the moment. Write an opener that's genuinely flirty and creative, the "
+                    "kind she screenshots to her friends. Pin it on one specific, real detail in a photo, "
+                    "then give it a spark: a playful assumption about her from the picture, a cheeky "
+                    "accusation or mock complaint about that smile or that look, a tiny scene that puts me "
+                    "in the picture with her, or a compliment with a twist. Let appreciation of HER come "
+                    "through the context (how she lights up that place, how she's clearly the main "
+                    "character of that shot) instead of a flat 'you're gorgeous'. BANNED: 'you're "
+                    "beautiful', 'nice pic', 'great smile', pickup-line cliches, and anything crude, "
+                    "creepy or objectifying. Warm, confident, a little magnetic. Make the three about "
+                    "THREE DIFFERENT photos and three different moves, so she's curious, smiling and "
+                    "wants to reply.";
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
@@ -234,6 +250,76 @@
                     "controlling of her choices, or dismissive of a no; a real man's strength "
                     "includes respect. Make the three three different flavours of that alpha "
                     "energy.";
+        case WMReplyModePhoneConvo: {
+            NSString *find = canSearch
+                ? @"Then use web_search (two or three quick searches) for what's on right now where she "
+                   "lives, or in my city if her location isn't shown: light local news worth chatting about "
+                   "(never tragedies, crime or politics), festivals, concerts, food or cultural events and "
+                   "long weekends in the next few weeks, and the weather or season there. Use only what you "
+                   "actually find, with real names and dates; never invent an event."
+                : @"You can't look anything up, so never present anything as news and never invent an "
+                   "event or a date. Use what you reliably know about this time of year where she lives (or "
+                   "my city): festivals and holidays coming up after today, the season and the weather it "
+                   "brings, and evergreen local things like food, favourite spots and weekend plans. Phrase "
+                   "anything time-sensitive as a question ('are you doing anything for...?'), not a claim.";
+            return [NSString stringWithFormat:
+                @"PHONE CONVO. We're about to talk on the phone: write my conversation plan for the call, "
+                 "not a text to send, and don't answer her last message. The capture is her dating profile "
+                 "or our chat, so work out which (on a profile, ignore any ME/THEM labels) and pull out "
+                 "everything I can use: her job, what she loves, places she's been, her prompts and jokes, "
+                 "anything she told me. %@\n"
+                 "Write THREE talking-point cards, each a different thread that can carry three to five "
+                 "minutes on its own, so together they fill an easy, fun call of ten minutes or more. Build "
+                 "at least one on something personal from her profile or our chat, and at least one on "
+                 "something current or seasonal near her. Each card is a few short lines, each starting "
+                 "with its emoji:\n"
+                 "📌 the topic in a few words\n"
+                 "🗣 an opening line I can say out loud, natural and playful, ending in an easy question\n"
+                 "❓ follow-up questions that go deeper: what she'd pick, why, a story from her\n"
+                 "💬 what I could share back from my own life, as a cue (like 'your worst cooking "
+                 "disaster'), never a made-up fact about me, so it's a conversation and not an interview\n"
+                 "➡️ a smooth bridge to the next topic, or a callback I can use later in the call\n"
+                 "Spoken, warm and curious, the way a confident guy who's genuinely into her talks. These "
+                 "card lines replace the usual no-labels rule for this vibe; still put a line with only ~~~ "
+                 "between the three cards.", find];
+        }
+        case WMReplyModeStupidLove:
+            return @"STUPID LOVE. Channel the effortless charm of Ryan Gosling's character Jacob in Crazy, "
+                    "Stupid, Love: relaxed, confident, a little cocky in a fun way, and completely at ease. "
+                    "He's playful and direct, teases with a grin, gives compliments that are bold but "
+                    "sincere, and makes her feel like the most interesting person in the room. Keep it "
+                    "light, happy and moving: answer her, add a playful twist or a cheeky observation, then "
+                    "hand her something fun to come back to (a playful challenge, a this-or-that, a "
+                    "mock-serious question, a tiny game). Never needy, never try-hard, never chasing "
+                    "approval, never over-explaining. Write original lines in that spirit, and don't quote "
+                    "or rework lines from the film. Make the three three different moves: a playful tease, "
+                    "a smooth confident compliment, and a fun challenge or invitation.";
+        case WMReplyModeHilarify: {
+            NSString *fresh = canSearch
+                ? @"First use web_search (one or two quick searches) for something current there this "
+                   "week (a new metro stretch, the rain, a traffic saga, a viral local moment, a festival or "
+                   "event) so at least one bit feels fresh, and use only what you actually find."
+                : @"You can't look anything up, so lean on the evergreen local staples everyone here knows, "
+                   "and never present anything as recent news.";
+            return [NSString stringWithFormat:
+                @"HILARIFY. Write stand-up I can tell her as if it really happened to me: a short, "
+                 "true-sounding funny story from my own life, told the way a stand-up comic tells a bit, with "
+                 "me as the guy it happened to. Take the springboard from the chat or her profile when there "
+                 "is one (something she said, a topic, a place); otherwise pick an everyday moment anyone "
+                 "here has lived. Set it in Bangalore (or WHERE I LIVE, if that's somewhere else) with real "
+                 "local texture: the areas, roads and landmarks, autos and Rapido, BMTC and Namma Metro, Silk "
+                 "Board and ORR traffic, the weather, darshinis and filter coffee, startups and landlords, the "
+                 "things people here actually deal with. %@ "
+                 "Make it realistic: grounded, specific details and a believable situation that escalates, "
+                 "exaggerated just enough to be funny, never absurd fantasy. Stand-up shape: a quick setup, "
+                 "one vivid detail, an escalation, a punchline, and a tag if it earns one; little act-outs "
+                 "(what the auto driver said) are great. Self-deprecating in a charming way, so I come across "
+                 "as fun and likeable, never pathetic, and end so she can laugh and want to top it with her "
+                 "own story. Inventing the funny situation is fine for this vibe, as long as it fits anything "
+                 "the chat says about me. Write ORIGINAL bits in your own words, never a known comedian's "
+                 "routine or punchlines, and punch at situations, never at anyone's language, region, "
+                 "religion, caste, gender or looks. Make the three three different bits.", fresh];
+        }
         default:
             return @"";
     }
@@ -282,9 +368,32 @@
         [p appendFormat:@"MY CONTEXT: \"%@\"\n\n", context];
     }
 
+    BOOL notes = [self isTalkingPointsMode:mode];
+    BOOL hilarify = (mode == WMReplyModeHilarify);
+    if (notes || hilarify) {   // local events and local jokes only make sense against a date and a place
+        NSDateFormatter *df = [NSDateFormatter new];
+        df.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        df.dateFormat = @"EEEE d MMMM yyyy";
+        NSString *city = [WMSettings shared].myCity;
+        NSString *where = city.length ? city
+            : hilarify ? @"Bangalore"
+            : [NSString stringWithFormat:@"not set, so go by her profile or my phone's time zone (%@)",
+                                         [NSTimeZone localTimeZone].name];
+        [p appendFormat:@"TODAY: %@\nWHERE I LIVE: %@\n\n", [df stringFromDate:[NSDate date]], where];
+    }
+
     [p appendFormat:@"STYLE: %@\n\n", [self _instructionForMode:mode canSearch:canSearch]];
 
-    if (length == WMReplyLengthShort) {
+    if (notes) {
+        [p appendString:length == WMReplyLengthShort
+            ? @"LENGTH: compact cards: one short line per emoji, two follow-up questions.\n\n"
+            : @"LENGTH: fuller cards: three or four follow-up questions and two things to share back.\n\n"];
+    } else if (hilarify) {
+        [p appendString:length == WMReplyLengthShort
+            ? @"LENGTH: tight bits, two or three sentences each, setup to punchline.\n\n"
+            : @"LENGTH: fuller bits, four to seven sentences with an escalation and a tag or callback, "
+               "still reading like a text.\n\n"];
+    } else if (length == WMReplyLengthShort) {
         [p appendString:@"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:@"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
@@ -292,8 +401,8 @@
                          "style is Formal).\n\n"];
     }
 
-    [p appendFormat:@"Write exactly %ld different replies, separated by a line containing "
-                     "only ~~~ as described above.", (long)kWMRepliesPerCall];
+    [p appendFormat:@"Write exactly %ld different %@, separated by a line containing "
+                     "only ~~~ as described above.", (long)kWMRepliesPerCall, notes ? @"cards" : @"replies"];
     return [p copy];
 }
 
@@ -318,6 +427,7 @@
         case WMReplyModeWishing:       return @"Wishing";
         case WMReplyModeFacts:         return @"Facts";
         case WMReplyModeBackhand:      return @"Backhand Compliment";
+        case WMReplyModeExcuse:        return @"Excuse";
         case WMReplyModePlanDate:      return @"Plan a Date";
         case WMReplyModeRomance:       return @"Romance Her";
         case WMReplyModeSeduce:        return @"Seduce (Bond)";
@@ -328,6 +438,9 @@
         case WMReplyModePhotoOpener:   return @"Photo Opener";
         case WMReplyModeReviver:       return @"Reviver";
         case WMReplyModeAlphaPower:    return @"Alpha Power";
+        case WMReplyModePhoneConvo:    return @"Phone Convo";
+        case WMReplyModeStupidLove:    return @"Stupid Love";
+        case WMReplyModeHilarify:      return @"Hilarify";
         default:                       return @"";
     }
 }
@@ -352,6 +465,7 @@
         case WMReplyModeWishing:       return @"\U0001F389"; // 🎉
         case WMReplyModeFacts:         return @"\U0001F4DA"; // 📚
         case WMReplyModeBackhand:      return @"\U0001F3AD"; // 🎭
+        case WMReplyModeExcuse:        return @"\U0001F6AA"; // 🚪
         case WMReplyModePlanDate:      return @"\U0001F4C5"; // 📅
         case WMReplyModeRomance:       return @"\U0001F339"; // 🌹
         case WMReplyModeSeduce:        return @"\U0001F576"; // 🕶
@@ -362,12 +476,19 @@
         case WMReplyModePhotoOpener:   return @"\U0001F4F8"; // 📸
         case WMReplyModeReviver:       return @"\U0001F4AB"; // 💫
         case WMReplyModeAlphaPower:    return @"\U0001F451"; // 👑
+        case WMReplyModePhoneConvo:    return @"\U0001F4DE"; // 📞
+        case WMReplyModeStupidLove:    return @"\U0001F57A"; // 🕺
+        case WMReplyModeHilarify:      return @"\U0001F399\U0000FE0F"; // 🎙️
         default:                       return @"";
     }
 }
 
 + (BOOL)isDatingMode:(WMReplyMode)mode {
     return mode >= WMReplyModeFirstDating && mode < WMReplyModeCount;
+}
+
++ (BOOL)isTalkingPointsMode:(WMReplyMode)mode {
+    return mode == WMReplyModePhoneConvo;
 }
 
 @end

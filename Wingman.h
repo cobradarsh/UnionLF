@@ -35,6 +35,7 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeWishing,
     WMReplyModeFacts,        // explain with valid, checkable facts (web search where available)
     WMReplyModeBackhand,     // backhanded compliment
+    WMReplyModeExcuse,       // a believable, warm way out of a plan or a tense moment
     // dating / flirt styles (consenting adults)
     WMReplyModePlanDate,
     WMReplyModeRomance,
@@ -46,6 +47,9 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModePhotoOpener,  // opener from HER PHOTOS (appreciate her in the moment)
     WMReplyModeReviver,      // re-ignite a cooled conversation (attraction principles)
     WMReplyModeAlphaPower,   // commanding alpha-male persona (Massimo / Christian Grey)
+    WMReplyModePhoneConvo,   // talking points for a phone call (local news and events via web search)
+    WMReplyModeStupidLove,   // effortless, playful charm (Jacob in Crazy, Stupid, Love)
+    WMReplyModeHilarify,     // stand-up style bits told as if they happened to me, set in Bangalore
     WMReplyModeCount
 };
 
@@ -96,6 +100,7 @@ static NSInteger const kWMQuickReplyCount = 5;
 @property (nonatomic, readonly, copy) NSString *deepseekModel;
 @property (nonatomic, readonly, copy) NSString *deepseekEndpoint; // full .../chat/completions URL
 @property (nonatomic, readonly, copy) NSString *soundLikeMe;
+@property (nonatomic, readonly, copy) NSString *myCity;         // optional: where Phone Convo looks for local news
 @property (nonatomic, copy) NSString *photoStyleExtra;   // transient: Photo Opener sub-style brief
 @property (nonatomic, readonly) BOOL autoDetectApps;
 @property (nonatomic, readonly, copy) NSArray<NSString *> *manualApps;
@@ -213,4 +218,5 @@ static NSInteger const kWMQuickReplyCount = 5;
                       canSearch:(BOOL)canSearch;    // the model has web_search (Claude): In My Favor / Facts use it
 + (NSString *)labelForMode:(WMReplyMode)mode;
 + (NSString *)emojiForMode:(WMReplyMode)mode;
++ (BOOL)isTalkingPointsMode:(WMReplyMode)mode;     // YES: the three are notes to read (Phone Convo), not texts
 @end

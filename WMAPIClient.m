@@ -93,8 +93,42 @@ NSURLSession *WMPrivateSession(void) {
     // left the parser with an unterminated array). The parser also salvages partial
     // JSON, but giving room avoids losing the 3rd reply in the first place.
     NSInteger n = (length == WMReplyLengthShort) ? 1200 : 2000;
-    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts) n += 800;   // room for searched facts
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeHilarify)
+        n += 800;                                                              // room for what it searched
+    if ([WMPrompts isTalkingPointsMode:mode]) n = (length == WMReplyLengthShort) ? 2400 : 3200;  // 3 call cards
     return n;
+}
+
+// Where Phone Convo's searches should look: my city from Settings, plus the phone's region and time zone.
+static NSDictionary *WMSearchLocation(NSString *city) {
+    NSMutableDictionary *loc = [@{ @"type": @"approximate" } mutableCopy];
+    if (city.length) loc[@"city"] = city.length > 60 ? [city substringToIndex:60] : city;
+    NSString *cc = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
+    if ([cc isKindOfClass:[NSString class]] && cc.length == 2) loc[@"country"] = cc.uppercaseString;
+    NSString *tz = [NSTimeZone localTimeZone].name;
+    if (tz.length) loc[@"timezone"] = tz;
+    return loc.count > 1 ? loc : nil;
+}
+
+// Claude's answer once any searching is done: the text after the last search block. Text before a search is
+// Claude saying what it's about to look up, and must never end up in a reply card.
+static NSString *WMClaudeAnswerText(NSArray *blocks) {
+    if (![blocks isKindOfClass:[NSArray class]]) return @"";
+    NSInteger lastTool = -1;
+    for (NSInteger i = 0; i < (NSInteger)blocks.count; i++) {
+        NSDictionary *b = blocks[i];
+        if (![b isKindOfClass:[NSDictionary class]]) continue;
+        if ([b[@"type"] isEqual:@"server_tool_use"] || [b[@"type"] isEqual:@"web_search_tool_result"]) lastTool = i;
+    }
+    NSMutableString *after = [NSMutableString string], *all = [NSMutableString string];
+    for (NSInteger i = 0; i < (NSInteger)blocks.count; i++) {
+        NSDictionary *b = blocks[i];
+        if (![b isKindOfClass:[NSDictionary class]] || ![b[@"type"] isEqual:@"text"] ||
+            ![b[@"text"] isKindOfClass:[NSString class]]) continue;
+        [all appendString:b[@"text"]];
+        if (i > lastTool) [after appendString:b[@"text"]];
+    }
+    return after.length ? after : all;
 }
 
 // readable errors for the common failures
@@ -168,32 +202,56 @@ NSURLSession *WMPrivateSession(void) {
                              @"cache_control": @{ @"type": @"ephemeral" } } ],
         @"messages":   @[ @{ @"role": @"user", @"content": content } ]
     } mutableCopy];
-    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts)
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts) {
         body[@"tools"] = @[ @{ @"type": @"web_search_20250305", @"name": @"web_search", @"max_uses": @2 } ];
+    } else if (mode == WMReplyModePhoneConvo || mode == WMReplyModeHilarify) {
+        BOOL jokes = (mode == WMReplyModeHilarify);
+        NSString *city = s.myCity;
+        if (city.length == 0 && jokes) city = @"Bengaluru";   // Hilarify's bits are set in Bangalore
+        NSMutableDictionary *search = [@{ @"type": @"web_search_20250305", @"name": @"web_search",
+                                          @"max_uses": jokes ? @2 : @3 } mutableCopy];
+        NSDictionary *where = WMSearchLocation(city);
+        if (where) search[@"user_location"] = where;
+        body[@"tools"] = @[ search ];
+    }
+    [self _claudeSend:body key:s.claudeKey attempt:0 completion:done];
+}
 
+// One Messages call. A web-search turn can come back paused (stop_reason "pause_turn"): hand the partial turn
+// straight back so Claude carries on, a few times at most. Android does the same.
+- (void)_claudeSend:(NSMutableDictionary *)body
+                key:(NSString *)key
+            attempt:(NSInteger)attempt
+         completion:(void(^)(NSArray<NSString *> *, NSError *))done {
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:
         [NSURL URLWithString:@"https://api.anthropic.com/v1/messages"]];
     req.HTTPMethod = @"POST";
     [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    [req setValue:s.claudeKey         forHTTPHeaderField:@"x-api-key"];
+    [req setValue:key                 forHTTPHeaderField:@"x-api-key"];
     [req setValue:@"2023-06-01"       forHTTPHeaderField:@"anthropic-version"];
     req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
-    req.timeoutInterval = 90;
+    req.timeoutInterval = body[@"tools"] ? 120 : 90;   // searching takes longer
 
     [[WMPrivateSession() dataTaskWithRequest:req
       completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
-        NSArray *replies = nil; NSError *e = err;
-        if (!e) {
-            id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-            NSMutableString *text = [NSMutableString string];
-            NSArray *blocks = [json isKindOfClass:[NSDictionary class]] ? json[@"content"] : nil;
-            if ([blocks isKindOfClass:[NSArray class]])
-                for (NSDictionary *b in blocks)
-                    if ([b isKindOfClass:[NSDictionary class]] && [b[@"type"] isEqual:@"text"] &&
-                        [b[@"text"] isKindOfClass:[NSString class]]) [text appendString:b[@"text"]];
-            replies = [self _parseReplies:text];
-            if (replies.count == 0) e = [self _httpError:resp json:json provider:@"Claude"];
+        if (err) { dispatch_async(dispatch_get_main_queue(), ^{ done(nil, err); }); return; }
+        id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSDictionary *res = [json isKindOfClass:[NSDictionary class]] ? json : nil;
+        NSArray *blocks = [res[@"content"] isKindOfClass:[NSArray class]] ? res[@"content"] : nil;
+        NSString *stop = [res[@"stop_reason"] isKindOfClass:[NSString class]] ? res[@"stop_reason"] : @"";
+        if ([stop isEqualToString:@"pause_turn"] && blocks.count > 0 && attempt < 3) {
+            NSMutableArray *msgs = [body[@"messages"] mutableCopy];
+            [msgs addObject:@{ @"role": @"assistant", @"content": blocks }];
+            body[@"messages"] = msgs;
+            [self _claudeSend:body key:key attempt:attempt + 1 completion:done];
+            return;
         }
+        NSArray *replies = [self _parseReplies:WMClaudeAnswerText(blocks)];
+        NSError *e = nil;
+        if (replies.count == 0)
+            e = [stop isEqualToString:@"refusal"]
+                ? [self _err:@"Claude declined this one. Try another vibe or add context."]
+                : [self _httpError:resp json:json provider:@"Claude"];
         dispatch_async(dispatch_get_main_queue(), ^{ done(e ? nil : replies, e); });
     }] resume];
 }

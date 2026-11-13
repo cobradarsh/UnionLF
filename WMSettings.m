@@ -198,6 +198,7 @@ static NSString *WMStr(id v, NSString *fallback) {
 - (NSString *)deepseekKey { return WMStr(_prefs[@"deepseekAPIKey"], @""); }
 - (NSString *)kimiKey     { return WMStr(_prefs[@"kimiAPIKey"], @""); }
 - (NSString *)soundLikeMe { return WMStr(_prefs[@"soundLikeMe"], @""); }
+- (NSString *)myCity      { return WMStr(_prefs[@"myCity"], @""); }
 - (BOOL)claudeSendsScreenshot { return [_prefs[@"claudeReads"] integerValue] == 1; }
 
 - (NSString *)keyForProvider:(WMAPIProvider)p {
