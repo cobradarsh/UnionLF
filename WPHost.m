@@ -87,4 +87,32 @@ static NSMutableArray<NSString *> *gRecentFront;
     if (text.length) [UIPasteboard generalPasteboard].string = text;
 }
 
+// SpringBoard has more than one foreground UIWindowScene. On Dynamic Island iPhones the island
+// has its own, SBSystemApertureCurtainWindowScene, next to the main SBWindowScene. Up to 1.0.23
+// the bubble and the sheet took "the first foreground scene" of connectedScenes, an unordered
+// set, so they landed in the main scene on some boots and in the island's on others. Asking
+// SpringBoard to lock keyboard focus to the island's scene crashes it (three resprings on
+// 13 Nov 2026), so the scene is ranked instead of left to set order: class exactly SBWindowScene
+// first, then anything that isn't the island's, then the main screen, then foreground-active.
++ (BOOL)isMainScene:(UIWindowScene *)scene {
+    Class main = NSClassFromString(@"SBWindowScene");
+    return scene && main && [scene class] == main;
+}
+
++ (UIWindowScene *)mainScene {
+    UIWindowScene *best = nil;
+    NSUInteger bestRank = NSUIntegerMax;
+    for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+        if (![s isKindOfClass:UIWindowScene.class]) continue;
+        UIWindowScene *ws = (UIWindowScene *)s;
+        NSUInteger rank = 0;
+        if (![self isMainScene:ws]) rank += 8;
+        if ([NSStringFromClass([ws class]) containsString:@"Aperture"]) rank += 4;
+        if (ws.screen != UIScreen.mainScreen) rank += 2;
+        if (ws.activationState != UISceneActivationStateForegroundActive) rank += 1;
+        if (rank < bestRank) { bestRank = rank; best = ws; }
+    }
+    return best;
+}
+
 @end

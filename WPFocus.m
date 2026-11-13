@@ -11,7 +11,14 @@
     before each call, and calls are wrapped in @try. A call is only made if it returns an
     object - the focus lock - which we invalidate when the sheet hides. Focus must never
     stay stuck on SpringBoard, or the app below would lose its keyboard. Every attempt
-    is logged to /var/mobile/wingman_keyboard.txt.                                   */
+    is logged to /var/mobile/wingman_keyboard.txt.
+
+    Neither call is made unless the sheet is in SpringBoard's main scene (SBWindowScene).
+    @try is no protection here: given the Dynamic Island's scene
+    (SBSystemApertureCurtainWindowScene), lockFocusToSpringBoardWindowScene: hits a trap
+    inside SpringBoard, not an exception, and SpringBoard restarts - three resprings on
+    13 Nov 2026 with 1.0.23. Without the calls the sheet still works through its Paste
+    buttons.                                                                          */
 
 #import "WPlus.h"
 #import <objc/message.h>
@@ -77,6 +84,10 @@ static id WPFocusController(void) {
                 NSStringFromClass([window class]),
                 window.windowScene ? NSStringFromClass([window.windowScene class]) : @"(none)"]);
     if (!fc) return;
+    if (![WPHost isMainScene:window.windowScene]) {
+        WPFocusLog(@"skipped: the sheet is not in SpringBoard's main scene, keyboard focus left alone");
+        return;
+    }
 
     // Both calls are tried and every lock returned is kept: either one may be what routes the
     // keyboard to this window, and all of them are invalidated together in giveKeyboardBack.

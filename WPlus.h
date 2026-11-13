@@ -20,6 +20,8 @@
 + (NSArray<NSDictionary *> *)installedApps;      // @[ @{ @"id":bundleID, @"name":display } ], user apps, A–Z
 + (NSArray<NSString *> *)recentFrontmostApps;    // bundle ids recently seen in front, newest first (exact)
 + (void)copyToClipboard:(NSString *)text;        // puts a reply on the general pasteboard
++ (UIWindowScene *)mainScene;                    // SpringBoard's main scene: the bubble, toast and sheet live here
++ (BOOL)isMainScene:(UIWindowScene *)scene;      // YES only for that scene (never the Dynamic Island's)
 @end
 
 // ── whole-screen capture from SpringBoard (no app injection) ──

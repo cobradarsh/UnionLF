@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.23";
+NSString *const kWPVersion = @"1.0.24";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -70,19 +70,6 @@ static NSString *WPPhotoStyleBrief(NSInteger i) {
 }
 
 static UIWindow *gWPWindow;   // strong ref so the overlay isn't deallocated while up
-
-// Same iOS 13+ rule as the bubble: a UIWindow only renders when it belongs to a
-// foreground UIWindowScene. The reply sheet needs this too, or it stays invisible.
-static UIWindowScene *WPActiveScene(void) {
-    UIWindowScene *fallback = nil;
-    for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
-        if (![s isKindOfClass:UIWindowScene.class]) continue;
-        UIWindowScene *ws = (UIWindowScene *)s;
-        if (ws.activationState == UISceneActivationStateForegroundActive) return ws;
-        if (!fallback) fallback = ws;
-    }
-    return fallback;
-}
 
 // A key-capable window: a plain overlay UIWindow in SpringBoard won't bring up the
 // keyboard. canBecomeKeyWindow + makeKeyAndVisible makes it key, and WPFocus asks
@@ -368,7 +355,9 @@ static void WPTakeKeyboardSoon(void) {
 
 - (void)presentGlobally {
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self];
-    UIWindowScene *scene = WPActiveScene();
+    // Same iOS 13+ rule as the bubble: a UIWindow only renders when it belongs to a foreground
+    // UIWindowScene. It has to be SpringBoard's main scene, the only one keyboard focus can lock to.
+    UIWindowScene *scene = [WPHost mainScene];
     gWPWindow = scene ? [[WPSheetWindow alloc] initWithWindowScene:scene]
                       : [[WPSheetWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     gWPWindow.frame = [UIScreen mainScreen].bounds;

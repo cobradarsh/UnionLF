@@ -95,19 +95,8 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
 // On iOS 13+ a UIWindow only actually displays when it belongs to a foreground
 // UIWindowScene. A bare initWithFrame: window (what 1.0.x used) stays invisible in
 // SpringBoard - which is why the bubble never appeared even though the dylib loaded
-// (confirmed by wingmanplus_loaded.txt). Attaching the window to the current scene
-// is what makes it render.
-- (UIWindowScene *)_activeScene {
-    UIWindowScene *fallback = nil;
-    for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
-        if (![s isKindOfClass:UIWindowScene.class]) continue;
-        UIWindowScene *ws = (UIWindowScene *)s;
-        if (ws.activationState == UISceneActivationStateForegroundActive) return ws;
-        if (!fallback) fallback = ws;
-    }
-    return fallback;
-}
-
+// (confirmed by wingmanplus_loaded.txt). Attaching the window to SpringBoard's main
+// scene (WPHost mainScene, the same one the sheet uses) is what makes it render.
 - (void)evaluateVisibility {
     // Show only over the apps that should get Wingman (dating + chat auto-detected,
     // plus anything picked in Settings); hidden on the home screen and everywhere else.
@@ -115,8 +104,8 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
     BOOL wanted = _scrolling || [WPHost wingmanEnabledForFrontmost];
     if (!wanted) { if (_built) _window.hidden = YES; return; }
     if (!_built) [self _build];
-    // Attach to (or follow) the current foreground scene so the window renders.
-    UIWindowScene *scene = [self _activeScene];
+    // Attach to SpringBoard's main scene so the window renders.
+    UIWindowScene *scene = [WPHost mainScene];
     if (scene && _window.windowScene != scene) _window.windowScene = scene;
     if (!_capturing && !_busy) _window.hidden = NO;   // don't un-hide mid clean shot
 }
@@ -238,7 +227,7 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
     t.font = [UIFont systemFontOfSize:14]; t.textAlignment = NSTextAlignmentCenter;
     t.numberOfLines = 0; t.layer.cornerRadius = 10; t.clipsToBounds = YES;
     t.frame = CGRectMake(40, b.size.height - 160, b.size.width - 80, 44);
-    UIWindowScene *scene = [self _activeScene];
+    UIWindowScene *scene = [WPHost mainScene];
     UIWindow *w = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:b];
     w.frame = b;
     w.windowLevel = kBubbleLevel + 1; w.backgroundColor = UIColor.clearColor;
