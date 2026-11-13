@@ -99,6 +99,57 @@ NSURLSession *WMPrivateSession(void) {
     return n;
 }
 
+// Claude's ceiling. It's a ceiling, not a target: the model doesn't see it and writes the same either way. It has
+// to cover thinking too, which current models do by default (Haiku 5.5 included) and which counts against
+// max_tokens; with web search the model thinks again after every result. 1.0.25's 2000-2400 ran out before a
+// single reply was written ("Claude returned no replies" on Phone Convo and Hilarify). DeepSeek and Kimi keep
+// _maxTokensForMode, since their own output limits are lower.
+- (NSInteger)_claudeMaxTokensForMode:(WMReplyMode)mode length:(WMReplyLength)length {
+    if ([WMPrompts isTalkingPointsMode:mode]) return 16000;
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeHilarify) return 12000;
+    return (length == WMReplyLengthShort) ? 3000 : 4000;
+}
+
+// A content-free record of the recent Claude calls, readable over SSH when something fails on the phone:
+// /var/mobile/wingman_api.txt. HTTP status, stop reason, token counts and block types only; never any chat
+// text, screenshot or key.
+static void WMLogClaudeCall(NSDictionary *body, NSDictionary *res, NSInteger code, NSInteger attempt) {
+    static NSMutableArray<NSString *> *lines;
+    NSMutableArray<NSString *> *types = [NSMutableArray array];
+    NSUInteger textChars = 0;
+    NSArray *content = [res[@"content"] isKindOfClass:[NSArray class]] ? res[@"content"] : @[];
+    for (NSDictionary *b in content) {
+        if (![b isKindOfClass:[NSDictionary class]]) continue;
+        NSString *t = [b[@"type"] isKindOfClass:[NSString class]] ? b[@"type"] : @"?";
+        [types addObject:t];
+        if ([t isEqualToString:@"text"] && [b[@"text"] isKindOfClass:[NSString class]])
+            textChars += ((NSString *)b[@"text"]).length;
+    }
+    NSDictionary *u = [res[@"usage"] isKindOfClass:[NSDictionary class]] ? res[@"usage"] : @{};
+    NSDictionary *tools = [u[@"server_tool_use"] isKindOfClass:[NSDictionary class]] ? u[@"server_tool_use"] : @{};
+    NSString *error = @"";
+    if ([res[@"error"] isKindOfClass:[NSDictionary class]]) {
+        id msg = res[@"error"][@"message"];
+        NSString *m = [msg isKindOfClass:[NSString class]] ? msg : @"";
+        error = [NSString stringWithFormat:@" error=%@", m.length > 160 ? [m substringToIndex:160] : m];
+    }
+    NSString *line = [NSString stringWithFormat:
+        @"%@  model=%@ http=%ld attempt=%ld max=%@ stop=%@ in=%@ cached=%@ out=%@ searches=%@ textChars=%lu blocks=%@%@",
+        [NSDate date], body[@"model"], (long)code, (long)attempt, body[@"max_tokens"],
+        res[@"stop_reason"] ?: @"-", u[@"input_tokens"] ?: @"-", u[@"cache_read_input_tokens"] ?: @"-",
+        u[@"output_tokens"] ?: @"-", tools[@"web_search_requests"] ?: @"0", (unsigned long)textChars,
+        [types componentsJoinedByString:@","], error];
+    @synchronized ([WMAPIClient class]) {
+        if (!lines) lines = [NSMutableArray array];
+        [lines addObject:line];
+        while (lines.count > 40) [lines removeObjectAtIndex:0];
+        @try {
+            [[lines componentsJoinedByString:@"\n"] writeToFile:@"/var/mobile/wingman_api.txt" atomically:YES
+                                                       encoding:NSUTF8StringEncoding error:nil];
+        } @catch (__unused id e) {}
+    }
+}
+
 // Where Phone Convo's searches should look: my city from Settings, plus the phone's region and time zone.
 static NSDictionary *WMSearchLocation(NSString *city) {
     NSMutableDictionary *loc = [@{ @"type": @"approximate" } mutableCopy];
@@ -194,7 +245,7 @@ static NSString *WMClaudeAnswerText(NSArray *blocks) {
 
     NSMutableDictionary *body = [@{
         @"model":      s.claudeModel,
-        @"max_tokens": @([self _maxTokensForMode:mode length:length]),
+        @"max_tokens": @([self _claudeMaxTokensForMode:mode length:length]),
         // Sent as a cached content block: identical on every call, so it's a stable prefix that hits
         // across every chat and profile (not just re-gens of one capture) at ~10% of the input price.
         @"system":     @[ @{ @"type": @"text",
@@ -230,13 +281,15 @@ static NSString *WMClaudeAnswerText(NSArray *blocks) {
     [req setValue:key                 forHTTPHeaderField:@"x-api-key"];
     [req setValue:@"2023-06-01"       forHTTPHeaderField:@"anthropic-version"];
     req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
-    req.timeoutInterval = body[@"tools"] ? 120 : 90;   // searching takes longer
+    req.timeoutInterval = body[@"tools"] ? 180 : 90;   // searching (and thinking about the results) takes longer
 
     [[WMPrivateSession() dataTaskWithRequest:req
       completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
         if (err) { dispatch_async(dispatch_get_main_queue(), ^{ done(nil, err); }); return; }
+        NSInteger code = [resp isKindOfClass:[NSHTTPURLResponse class]] ? ((NSHTTPURLResponse *)resp).statusCode : 0;
         id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
         NSDictionary *res = [json isKindOfClass:[NSDictionary class]] ? json : nil;
+        WMLogClaudeCall(body, res, code, attempt);
         NSArray *blocks = [res[@"content"] isKindOfClass:[NSArray class]] ? res[@"content"] : nil;
         NSString *stop = [res[@"stop_reason"] isKindOfClass:[NSString class]] ? res[@"stop_reason"] : @"";
         if ([stop isEqualToString:@"pause_turn"] && blocks.count > 0 && attempt < 3) {
@@ -247,11 +300,23 @@ static NSString *WMClaudeAnswerText(NSArray *blocks) {
             return;
         }
         NSArray *replies = [self _parseReplies:WMClaudeAnswerText(blocks)];
+        // Thinking (and searching) used the whole ceiling before a reply was written: once more, with room.
+        NSInteger cap = [body[@"max_tokens"] integerValue];
+        if (replies.count == 0 && [stop isEqualToString:@"max_tokens"] && cap < 16000 && attempt < 3) {
+            body[@"max_tokens"] = @(MIN(cap * 2, 16000));
+            [self _claudeSend:body key:key attempt:attempt + 1 completion:done];
+            return;
+        }
         NSError *e = nil;
-        if (replies.count == 0)
-            e = [stop isEqualToString:@"refusal"]
-                ? [self _err:@"Claude declined this one. Try another vibe or add context."]
-                : [self _httpError:resp json:json provider:@"Claude"];
+        if (replies.count == 0) {
+            if ([stop isEqualToString:@"refusal"])
+                e = [self _err:@"Claude declined this one. Try another vibe or add context."];
+            else if (code == 200)
+                e = [self _err:[NSString stringWithFormat:@"Claude returned no replies (stopped: %@). Try again.",
+                                                          stop.length ? stop : @"unknown"]];
+            else
+                e = [self _httpError:resp json:json provider:@"Claude"];
+        }
         dispatch_async(dispatch_get_main_queue(), ^{ done(e ? nil : replies, e); });
     }] resume];
 }
