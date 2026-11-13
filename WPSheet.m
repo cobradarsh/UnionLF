@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.26";
+NSString *const kWPVersion = @"1.0.27";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {

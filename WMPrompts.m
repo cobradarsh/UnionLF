@@ -60,7 +60,11 @@
       "6. Keep replies non-sexual by default. If the chosen STYLE explicitly asks for "
          "romance, seduction or sexual content, it is fine to be flirty, sensual or "
          "explicit, as long as everyone involved is a consenting adult.\n"
-      "7. Make the replies genuinely different from each other, not rewordings.\n\n"
+      "7. Make the replies genuinely different from each other, not rewordings.\n"
+      "8. Never ask me anything, wait for confirmation or comment on these instructions or "
+         "my context. If something is unclear or doesn't add up (a name, who they are to me), "
+         "go with the most sensible reading of the chat and still write the three. Plain "
+         "text only, no markdown (no ** or #).\n\n"
 
       "OUTPUT FORMAT:\n"
       "Output EXACTLY three replies. Put a line containing only ~~~ between them (not "
@@ -252,36 +256,40 @@
                     "energy.";
         case WMReplyModePhoneConvo: {
             NSString *find = canSearch
-                ? @"Then use web_search (two or three quick searches) for what's on right now where she "
-                   "lives, or in my city if her location isn't shown: light local news worth chatting about "
-                   "(never tragedies, crime or politics), festivals, concerts, food or cultural events and "
-                   "long weekends in the next few weeks, and the weather or season there. Use only what you "
+                ? @"Then use web_search (two or three quick searches) for what's on right now where they "
+                   "live, or in my city if theirs isn't shown: light local news worth chatting about (never "
+                   "tragedies, crime or politics), festivals, concerts, food or cultural events and long "
+                   "weekends in the next few weeks, and the weather or season there. Use only what you "
                    "actually find, with real names and dates; never invent an event."
                 : @"You can't look anything up, so never present anything as news and never invent an "
-                   "event or a date. Use what you reliably know about this time of year where she lives (or "
+                   "event or a date. Use what you reliably know about this time of year where they live (or "
                    "my city): festivals and holidays coming up after today, the season and the weather it "
                    "brings, and evergreen local things like food, favourite spots and weekend plans. Phrase "
                    "anything time-sensitive as a question ('are you doing anything for...?'), not a claim.";
             return [NSString stringWithFormat:
                 @"PHONE CONVO. We're about to talk on the phone: write my conversation plan for the call, "
-                 "not a text to send, and don't answer her last message. The capture is her dating profile "
-                 "or our chat, so work out which (on a profile, ignore any ME/THEM labels) and pull out "
-                 "everything I can use: her job, what she loves, places she's been, her prompts and jokes, "
-                 "anything she told me. %@\n"
+                 "not a text to send, and don't answer their last message. I'm calling the person this "
+                 "chat or profile is about (the name at the top of the screen). It's usually a dating "
+                 "match; if the chat is clearly with a friend, family member or colleague, plan a warm, easy "
+                 "call that fits that relationship instead, with no flirting. On a dating profile, ignore any "
+                 "ME/THEM labels. Pull out everything I can use: their job, what they love, places they've "
+                 "been, plans and jokes, anything they told me. %@\n"
                  "Write THREE talking-point cards, each a different thread that can carry three to five "
                  "minutes on its own, so together they fill an easy, fun call of ten minutes or more. Build "
-                 "at least one on something personal from her profile or our chat, and at least one on "
-                 "something current or seasonal near her. Each card is a few short lines, each starting "
+                 "at least one on something personal from their profile or our chat, and at least one on "
+                 "something current or seasonal near them. Each card is a few short lines, each starting "
                  "with its emoji:\n"
                  "📌 the topic in a few words\n"
                  "🗣 an opening line I can say out loud, natural and playful, ending in an easy question\n"
-                 "❓ follow-up questions that go deeper: what she'd pick, why, a story from her\n"
+                 "❓ follow-up questions that go deeper: what they'd pick, why, a story from them\n"
                  "💬 what I could share back from my own life, as a cue (like 'your worst cooking "
                  "disaster'), never a made-up fact about me, so it's a conversation and not an interview\n"
                  "➡️ a smooth bridge to the next topic, or a callback I can use later in the call\n"
-                 "Spoken, warm and curious, the way a confident guy who's genuinely into her talks. These "
-                 "card lines replace the usual no-labels rule for this vibe; still put a line with only ~~~ "
-                 "between the three cards.", find];
+                 "Spoken, warm and curious; with a dating match, a little flirty too, the way a confident "
+                 "guy who's into her talks. These card lines replace the usual no-labels rule for this vibe "
+                 "(plain text, no markdown); still put a line with only ~~~ between the three cards. Never "
+                 "ask me anything: if something is unclear or doesn't add up, go with the most sensible "
+                 "reading and write the three cards anyway.", find];
         }
         case WMReplyModeStupidLove:
             return @"STUPID LOVE. Channel the effortless charm of Ryan Gosling's character Jacob in Crazy, "
@@ -302,11 +310,11 @@
                 : @"You can't look anything up, so lean on the evergreen local staples everyone here knows, "
                    "and never present anything as recent news.";
             return [NSString stringWithFormat:
-                @"HILARIFY. Write stand-up I can tell her as if it really happened to me: a short, "
-                 "true-sounding funny story from my own life, told the way a stand-up comic tells a bit, with "
-                 "me as the guy it happened to. Take the springboard from the chat or her profile when there "
-                 "is one (something she said, a topic, a place); otherwise pick an everyday moment anyone "
-                 "here has lived. Set it in Bangalore (or WHERE I LIVE, if that's somewhere else) with real "
+                @"HILARIFY. Write stand-up I can tell the person I'm chatting with as if it really "
+                 "happened to me: a short, true-sounding funny story from my own life, told the way a "
+                 "stand-up comic tells a bit, with me as the guy it happened to. Take the springboard from "
+                 "the chat or their profile when there is one (something they said, a topic, a place); "
+                 "otherwise pick an everyday moment anyone here has lived. Set it in Bangalore (or WHERE I LIVE, if that's somewhere else) with real "
                  "local texture: the areas, roads and landmarks, autos and Rapido, BMTC and Namma Metro, Silk "
                  "Board and ORR traffic, the weather, darshinis and filter coffee, startups and landlords, the "
                  "things people here actually deal with. %@ "
@@ -314,8 +322,8 @@
                  "exaggerated just enough to be funny, never absurd fantasy. Stand-up shape: a quick setup, "
                  "one vivid detail, an escalation, a punchline, and a tag if it earns one; little act-outs "
                  "(what the auto driver said) are great. Self-deprecating in a charming way, so I come across "
-                 "as fun and likeable, never pathetic, and end so she can laugh and want to top it with her "
-                 "own story. Inventing the funny situation is fine for this vibe, as long as it fits anything "
+                 "as fun and likeable, never pathetic, and end so they can laugh and want to top it with "
+                 "their own story. Inventing the funny situation is fine for this vibe, as long as it fits anything "
                  "the chat says about me. Write ORIGINAL bits in your own words, never a known comedian's "
                  "routine or punchlines, and punch at situations, never at anyone's language, region, "
                  "religion, caste, gender or looks. Make the three three different bits.", fresh];
@@ -377,7 +385,7 @@
         NSString *city = [WMSettings shared].myCity;
         NSString *where = city.length ? city
             : hilarify ? @"Bangalore"
-            : [NSString stringWithFormat:@"not set, so go by her profile or my phone's time zone (%@)",
+            : [NSString stringWithFormat:@"not set, so go by their profile or my phone's time zone (%@)",
                                          [NSTimeZone localTimeZone].name];
         [p appendFormat:@"TODAY: %@\nWHERE I LIVE: %@\n\n", [df stringFromDate:[NSDate date]], where];
     }
