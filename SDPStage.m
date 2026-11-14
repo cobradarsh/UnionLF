@@ -36,7 +36,7 @@ static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // c
 SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
                      .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0,
                      .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES,
-                     .fitFrac = 0.497, .fitDelay = 0.7 };
+                     .fitFrac = 0.5365, .fitDelay = 0.7, .revealViewMode = 1, .revealCleanup = YES };
 
 // Dynamic Stage's "relaunch with frame" singleton (DS_IIlIIIlIl…: settings, bundle id, frame).
 // At the end of its own swipe, block sub_95e44 stores the top-window frame for the front app here
@@ -312,7 +312,14 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
     if (!gv || ![gv respondsToSelector:entry]) { SDPLog(@"reveal: gesture view not found"); return NO; }
     CGRect s = UIScreen.mainScreen.bounds;
     SDPFakeSwipe *g = [[SDPFakeSwipe alloc] initWithTarget:nil action:NULL];
-    g.fakeView = gv;
+    // SpringBoard's own pull recognizer lives on a full-screen view, and Dynamic Stage's "finger
+    // lifted" maths compares the finger with half that view's height, so report a full-screen view.
+    UIView *reported = gv;
+    if (gSDPTune.revealViewMode == 1 && gv.window) reported = gv.window;
+    else if (gSDPTune.revealViewMode == 2 && gv.superview) reported = gv.superview;
+    g.fakeView = reported;
+    SDPLog(@"reveal: gesture view %@ reports %@ %@", NSStringFromCGRect([gv convertRect:gv.bounds toView:nil]),
+           NSStringFromClass([reported class]), NSStringFromCGRect(reported.bounds));
     CGFloat x = s.size.width / 2, y0 = s.size.height - 6, y1 = s.size.height * MAX(0.2, MIN(0.95, gSDPTune.revealTo));
     int frames = MAX(3, MIN(90, gSDPTune.revealFrames));
     void (^send)(UIGestureRecognizerState, CGFloat) = ^(UIGestureRecognizerState st, CGFloat y) {
@@ -388,6 +395,57 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
     if ([name isEqualToString:@"helper"]) return SDPMsg(NSClassFromString(kHelperClass), @"sharedInstance");
     Class c = NSClassFromString(name);
     return c;                                                   // a class name: call a class method
+}
+
+static void SDPCollectViews(UIView *v, Class c, NSMutableArray *out, int depth) {
+    if ([v isKindOfClass:c]) [out addObject:v];
+    if (depth > 16) return;
+    for (UIView *s in v.subviews) SDPCollectViews(s, c, out, depth + 1);
+}
+
++ (NSArray<UIView *> *)_allViewsOfClass:(NSString *)name {
+    Class c = NSClassFromString(name);
+    NSMutableArray *out = [NSMutableArray array];
+    if (!c) return out;
+    NSMutableArray<UIWindow *> *wins = [NSMutableArray array];
+    for (UIScene *s in UIApplication.sharedApplication.connectedScenes)
+        if ([s isKindOfClass:UIWindowScene.class]) [wins addObjectsFromArray:((UIWindowScene *)s).windows];
+    for (UIWindow *w in [UIApplication.sharedApplication windows]) if (![wins containsObject:w]) [wins addObject:w];
+    for (UIWindow *w in wins) SDPCollectViews(w, c, out, 0);
+    return out;
+}
+
+// What Dynamic Stage's finish would do to the card: drop the background blur, clear the drag
+// tint, spring the card back from its slight "held" scale, and stop the gesture's frame loop.
++ (void)finishCard {
+    UIView *card = [self _card];
+    if (![card isKindOfClass:UIView.class] || ![self isOpen]) return;
+    NSMutableArray *did = [NSMutableArray array];
+    for (UIView *host in [self _allViewsOfClass:@"_TtC12DynamicStage15SwiftUIViewHost"]) {
+        if ([host respondsToSelector:NSSelectorFromString(@"unBlurView")]) {
+            ((void (*)(id, SEL))objc_msgSend)(host, NSSelectorFromString(@"unBlurView"));
+            [did addObject:@"unblur"];
+        }
+    }
+    UIView *tint = SDPMsg(card, @"tintView");
+    if ([tint isKindOfClass:UIView.class]) { tint.backgroundColor = UIColor.clearColor; [did addObject:@"tint"]; }
+    NSMutableArray<UIView *> *scaled = [NSMutableArray array];
+    for (UIView *v = card; v && ![v isKindOfClass:UIWindow.class]; v = v.superview) {
+        CGAffineTransform t = v.transform;
+        if (!CGAffineTransformIsIdentity(t) && fabs(t.b) < 0.001 && fabs(t.c) < 0.001 && t.a > 0.8 && t.a < 0.999)
+            [scaled addObject:v];
+    }
+    if (scaled.count) [did addObject:[NSString stringWithFormat:@"unscale x%lu", (unsigned long)scaled.count]];
+    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.85 initialSpringVelocity:0.3 options:0 animations:^{
+        for (UIView *v in scaled) v.transform = CGAffineTransformIdentity;
+        if (card.alpha < 1) card.alpha = 1;
+    } completion:nil];
+    UIView *gv = [self _gestureView];
+    if ([gv respondsToSelector:NSSelectorFromString(@"pauseDisplayLink")]) {
+        ((void (*)(id, SEL))objc_msgSend)(gv, NSSelectorFromString(@"pauseDisplayLink"));
+        [did addObject:@"pause"];
+    }
+    SDPLog(@"finishCard: %@ %@", [did componentsJoinedByString:@","], [self diagnostics]);
 }
 
 + (void)stopGesture {
@@ -491,7 +549,10 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
             SDPLog(@"swap: %@ in front=%d %@", bottom, front, [self diagnostics]);
             SDPAfter(gSDPTune.settle, ^{
                 if (![self isOpen]) [self revealStage];
-                SDPAfter(0.35 + gSDPTune.fitDelay, ^{ [self fitTopApp:bottom]; });
+                SDPAfter(0.35 + gSDPTune.fitDelay, ^{
+                    [self fitTopApp:bottom];
+                    SDPAfter(0.5, ^{ if (gSDPTune.revealCleanup) [self finishCard]; });
+                });
                 if (refocus) {
                     SDPAfter(1.4, ^{
                         pid_t p = [SDPHost pidForBundleID:bottom];
@@ -541,7 +602,10 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
         } else {
             SDPAfter(0.5, ^{
                 if (![self isOpen]) [self revealStage];
-                SDPAfter(0.35 + gSDPTune.fitDelay, ^{ [self fitTopApp:top]; });
+                SDPAfter(0.35 + gSDPTune.fitDelay, ^{
+                    [self fitTopApp:top];
+                    SDPAfter(0.5, ^{ if (gSDPTune.revealCleanup) [self finishCard]; });
+                });
             });
         }
         SDPAfter(2.5, ^{ SDPLog(@"pair done %@", [self diagnostics]); });

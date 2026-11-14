@@ -13,6 +13,7 @@
         callgr <t> <sel>      same, passing the last synthetic swipe as the argument
         fit [bundle id]       fit the front (or given) app into the top window, like Dynamic Stage's swipe end
         relaunchinfo          log Dynamic Stage's stored relaunch bundle + frame
+        finish                clear a leftover drag look on the stage card (blur, tint, scale)
         open <bundle id>      open an app in the stage window
         launch <bundle id>    bring an app to the front
         pair <top> <bottom>   launch an app pair
@@ -233,6 +234,7 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
         else if ([cmd isEqualToString:@"dsstop"]) [SDPStage stopGesture];
         else if ([cmd isEqualToString:@"fit"])    [SDPStage fitTopApp:(a1 ?: [SDPHost frontmostBundleID])];
         else if ([cmd isEqualToString:@"relaunchinfo"]) SDPLog(@"%@", [SDPStage relaunchInfo]);
+        else if ([cmd isEqualToString:@"finish"]) [SDPStage finishCard];
         else if (([cmd isEqualToString:@"call"] || [cmd isEqualToString:@"callgr"]) && a2) {
             // call <gv|card|pane|mgr|helper|ClassName> <selector>   (void, no argument / the last swipe)
             id t = [SDPStage debugTarget:a1];
@@ -260,6 +262,8 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
             else if ([a1 isEqualToString:@"revealShouldBegin"]) gSDPTune.revealShouldBegin = a2.boolValue;
             else if ([a1 isEqualToString:@"fitFrac"])    gSDPTune.fitFrac = a2.doubleValue;
             else if ([a1 isEqualToString:@"fitDelay"])   gSDPTune.fitDelay = a2.doubleValue;
+            else if ([a1 isEqualToString:@"revealViewMode"]) gSDPTune.revealViewMode = a2.intValue;
+            else if ([a1 isEqualToString:@"revealCleanup"]) gSDPTune.revealCleanup = a2.boolValue;
             SDPLog(@"tune: settle=%.2f guardKills=%d revealTo=%.2f frames=%d hold=%d gap=%d reset=%.2f swapStyle=%d",
                    gSDPTune.settle, gSDPTune.guardKills, gSDPTune.revealTo, gSDPTune.revealFrames,
                    gSDPTune.revealHold, gSDPTune.revealEndGap, gSDPTune.revealReset, gSDPTune.swapStyle);
