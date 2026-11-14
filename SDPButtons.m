@@ -249,12 +249,13 @@ static UIColor *SDPIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 green:
 }
 
 - (void)_setup {
-    // first time: left edge, on the line between the two windows
-    _bubble = [[SDPBubble alloc] initWithKey:@"com.adarsh.sdplus.swapButtonPos" symbol:@"arrow.up.arrow.down"
+    // first time: right edge, centred on the seam between the two windows
+    _bubble = [[SDPBubble alloc] initWithKey:@"com.adarsh.sdplus.swapButtonPos2" symbol:@"arrow.up.arrow.down"
                                     fallback:@"arrow.2.squarepath" level:99998
                                defaultOrigin:^CGPoint(CGFloat size) {
-        CGRect s = UIScreen.mainScreen.bounds;
-        return CGPointMake(8, s.size.height * 0.46 - size / 2);
+        CGRect s = UIScreen.mainScreen.bounds, stage = [SDPStage stageFrame];
+        CGFloat seam = CGRectIsEmpty(stage) ? s.size.height * 0.5 : CGRectGetMinY(stage) + 18;
+        return CGPointMake(s.size.width - size - 8, seam - size / 2);
     }];
     __weak typeof(self) ws = self;
     _bubble.onTap = ^{ [ws _swap]; };

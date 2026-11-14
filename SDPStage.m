@@ -19,6 +19,9 @@
         to the front, then open the old front app in the stage.                    */
 
 #import "SDPlus.h"
+#import <dlfcn.h>
+#import <mach-o/getsect.h>
+#import <malloc/malloc.h>
 
 static NSString *const kCardClass  = @"DS_IIllIIIIIIIlllIIIIllllllIllIll";
 static NSString *const kCardShared = @"DS_IlIIIlIllllllIIIlIIIIlIIlIIIII";
@@ -75,6 +78,11 @@ static void SDPAfter(double sec, dispatch_block_t b) {
     if (!open || !v.window || v.window.hidden || !v.superview) return NO;
     CGRect r = [v convertRect:v.bounds toView:nil];          // minimised = a small pill, not a window
     return r.size.width > 120 && r.size.height > 120;
+}
+
++ (CGRect)stageFrame {
+    UIView *pane = [self _pane];
+    return [pane isKindOfClass:UIView.class] ? [pane convertRect:pane.bounds toView:nil] : CGRectZero;
 }
 
 + (NSString *)stageBundleID {
@@ -147,6 +155,36 @@ static void SDPAfter(double sec, dispatch_block_t b) {
     return anchor;
 }
 
+// Dynamic Stage's open method doesn't use its argument. It reads a global dictionary
+// @{ @"view": iconView, @"app": SBApplication } that the app strip fills right before
+// calling it with nil (strip handler at 0x91f70, open reads it at 0x82934 in the 1.2 arm64e
+// slice; 0xe5230 in the arm64 slice). So we fill the same global, then call open with nil.
+// The slot address is checked to lie inside Dynamic Stage's own __DATA,__common.
+static void **SDPSelectedAppSlot(void) {
+    static void **slot;
+    static BOOL looked;
+    if (looked) return slot;
+    looked = YES;
+    Class card = NSClassFromString(kCardClass);
+    Dl_info info;
+    if (!card || !dladdr((__bridge const void *)card, &info) || !info.dli_fbase) return NULL;
+    const struct mach_header_64 *mh = (const struct mach_header_64 *)info.dli_fbase;
+    unsigned long size = 0;
+    uint8_t *common = getsectiondata(mh, "__DATA", "__common", &size);
+#if __arm64e__
+    uintptr_t off = 0xe5c10;
+#else
+    uintptr_t off = 0xe5230;
+#endif
+    uint8_t *p = (uint8_t *)mh + off;
+    if (!common || p < common || p + sizeof(void *) > common + size) {
+        SDPLog(@"selected-app slot 0x%lx is outside Dynamic Stage's __common (%p+0x%lx)", (unsigned long)off, common, size);
+        return NULL;
+    }
+    slot = (void **)p;
+    return slot;
+}
+
 + (BOOL)_openInStage:(NSString *)bid from:(CGRect)originRect {
     if (![self available]) {
         SDPLog(@"openInStage(%@): Dynamic Stage 1.2 classes not found", bid);
@@ -159,9 +197,21 @@ static void SDPAfter(double sec, dispatch_block_t b) {
     }
     id app = [SDPHost applicationForBundleID:bid];
     if (!app) { SDPLog(@"openInStage(%@): no SBApplication", bid); return NO; }
+    void **slot = SDPSelectedAppSlot();
+    if (!slot) { SDPLog(@"openInStage(%@): no selected-app slot", bid); return NO; }
+    void *old = *slot;
+    if (old) {   // only ever replace what Dynamic Stage itself put there: a heap NSDictionary
+        if (malloc_size(old) == 0 || ![(__bridge id)old isKindOfClass:NSDictionary.class]) {
+            SDPLog(@"openInStage(%@): selected-app slot holds something unexpected, not touching it", bid);
+            return NO;
+        }
+    }
     UIView *origin = [self _originViewAt:originRect];
+    NSDictionary *sel = @{ @"view": origin, @"app": app };
+    *slot = (__bridge_retained void *)sel;              // the global owns it, like Dynamic Stage's own store
+    if (old) CFRelease(old);
     @try {
-        ((void (*)(id, SEL, id))objc_msgSend)(card, NSSelectorFromString(kCardOpen), @{ @"app": app, @"view": origin });
+        ((void (*)(id, SEL, id))objc_msgSend)(card, NSSelectorFromString(kCardOpen), nil);
     } @catch (NSException *e) {
         SDPLog(@"openInStage(%@) threw %@: %@", bid, e.name, e.reason);
         return NO;

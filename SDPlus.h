@@ -28,7 +28,7 @@
 #define SDP_N_REFOCUS     "com.adarsh.sdplus.refocus"        // SB -> apps   state = pid that should re-open its keyboard
 #define SDP_N_PREFS       "com.adarsh.stageduoplus/prefs"    // Settings -> SB (PostNotification)
 #define SDP_DOMAIN        @"com.adarsh.stageduoplus"
-#define SDP_VERSION       @"1.0.1"                          // keep in step with control
+#define SDP_VERSION       @"1.0.2"                          // keep in step with control
 
 typedef NS_OPTIONS(uint64_t, SDPConfigBits) {
     SDPConfigKeyboardButton = 1 << 0,   // apps report keyboard show/hide
@@ -100,6 +100,7 @@ extern SDPTune gSDPTune;
 + (BOOL)available;                                // Dynamic Stage 1.2 classes are present
 + (BOOL)isOpen;                                   // an app is showing in the stage window
 + (NSString *)stageBundleID;                      // that app (the bottom one)
++ (CGRect)stageFrame;                             // the stage window on screen (zero if none)
 + (BOOL)openInStage:(NSString *)bid;              // what tapping an app in Dynamic Stage's strip does
 + (void)swapWithReason:(NSString *)why refocus:(BOOL)refocus;
 + (BOOL)nativeExpand;                             // Dynamic Stage's own "bring the stage app to the front"
