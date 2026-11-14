@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.27";
+NSString *const kWPVersion = @"1.0.28";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -71,12 +71,13 @@ static NSString *WPPhotoStyleBrief(NSInteger i) {
         case 5: return @"FLAVOUR — story spin: turn the photo into a tiny scene or a playful 'what "
                         "happens next' that puts me in the picture with her, a mini adventure she'll "
                         "want to add to.";
-        case 6: return @"FLAVOUR — witty: clever wordplay, a sharp one-liner or the perfect caption for "
-                        "her photo, smart and funny, with the flirt riding on the wit.";
-        default: return @"FLAVOUR — the full blend: a sharp observation of the scene, genuine "
-                        "appreciation of HER and how she carries herself in it, and a flirty twist or "
-                        "tease to finish. Well beyond what an average guy sends ('you look "
-                        "beautiful'); make it the line she can't leave on read.";
+        case 6: return @"FLAVOUR — witty: clever wordplay, a sharp one-liner or the perfect caption for her photo, smart "
+                        "and funny, with the flirt riding on the wit. Wit means a fresh comparison or callback ('the wind "
+                        "is clearly on your payroll'), never a stock line.";
+        default: return @"FLAVOUR — the full blend: lead with HER, a specific, genuine compliment on something you can see "
+                        "about her (her smile, her hair, her style, how she wears that outfit), use the scene as the "
+                        "setup or foil for it, and finish with a flirty twist or tease. Well beyond what an average guy "
+                        "sends ('you look beautiful'); make it the line she can't leave on read.";
     }
 }
 

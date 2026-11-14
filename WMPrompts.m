@@ -211,20 +211,25 @@
                     "generic 'hey how's it going', no empty compliments on looks, no "
                     "negging, no over-the-top flattery. Organic, specific and sincere.";
         case WMReplyModePhotoOpener: {
-            NSString *base = @"PHOTO OPENER (opening message from her photos). Look CLOSELY at her actual "
-                    "PHOTOS: where she is, what she's doing, the light, the colours, the props and the "
-                    "little details most guys would miss, AND her: her expression, her energy, her style, "
-                    "how she owns the moment. Write an opener that's genuinely flirty and creative, the "
-                    "kind she screenshots to her friends. Pin it on one specific, real detail in a photo, "
-                    "then give it a spark: a playful assumption about her from the picture, a cheeky "
-                    "accusation or mock complaint about that smile or that look, a tiny scene that puts me "
-                    "in the picture with her, or a compliment with a twist. Let appreciation of HER come "
-                    "through the context (how she lights up that place, how she's clearly the main "
-                    "character of that shot) instead of a flat 'you're gorgeous'. BANNED: 'you're "
-                    "beautiful', 'nice pic', 'great smile', pickup-line cliches, and anything crude, "
-                    "creepy or objectifying. Warm, confident, a little magnetic. Make the three about "
-                    "THREE DIFFERENT photos and three different moves, so she's curious, smiling and "
-                    "wants to reply.";
+            // Her first, the scene second: 1.0.27 and earlier asked for the scene first, kept the compliment
+            // indirect and banned 'great smile', so the replies praised the view instead of her.
+            NSString *base = @"PHOTO OPENER (opening message from her photos). Look CLOSELY at HER first: her smile, eyes, "
+                    "hair, expression, outfit and style, how she carries herself; then where she is and what she's "
+                    "doing. Every reply must openly appreciate her beauty through one specific thing you can see "
+                    "about HER (that smile, that long hair, the way she carries that dress), so it's obvious I'm into "
+                    "HER, not the view; an outfit can frame the compliment, but the compliment lands on her. The "
+                    "place is the setup, foil or punchline and it lands back on her: tie her to the scene around her "
+                    "in most replies. Give it a spark: a playful assumption, a cheeky accusation or mock complaint "
+                    "about that smile or that look, a tiny scene that puts me in the picture with her, a playful "
+                    "callback to a photo's caption (once at most), or a compliment with a twist. Vary the moves: use "
+                    "the 'the view lost to you' joke (outshine, upstaged, never stood a chance) at most once, and let "
+                    "at least one reply end on an easy hook she can answer. Use only what is really visible in her "
+                    "photos or written on her profile; never invent a place, outfit or prop, name a place only if "
+                    "it's unmistakable or she named it (otherwise 'that skyline', 'that lake'), and make no factual "
+                    "claims about a place (its age, its history). BANNED: a bare 'you're beautiful' or 'great smile' "
+                    "with nothing specific, 'nice pic', 'main character energy', stock lines like 'should be "
+                    "illegal', pickup-line cliches, and anything crude, creepy or objectifying. Warm, confident, a "
+                    "little magnetic. Make the three about THREE DIFFERENT photos and three different moves.";
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
@@ -354,9 +359,10 @@
                          "rules. Read everything she actually shared, then write my opening "
                          "message to her.\n\n"];
         if (mode == WMReplyModePhotoOpener)
-            [p appendString:@"For THIS opener, base it on what you can SEE in her PHOTOS (the "
-                             "place, the setting, colours, light, mood, what she's doing and how "
-                             "she looks in it), not on the written prompts.\n\n"];
+            [p appendString:@"For THIS opener, base it on what you can SEE in her PHOTOS (how she looks first: her "
+                             "smile, hair, expression, outfit and style; then the place, setting, light and mood "
+                             "around her). A photo's caption can add to the joke, but don't build the opener on her "
+                             "written prompt answers. Every reply compliments HER; the scenery frames it.\n\n"];
         if (transcript.length > 0)
             [p appendFormat:@"HER PROFILE TEXT (read on my phone, top to bottom):\n%@\n\n", transcript];
         if (hasImages)
@@ -402,7 +408,9 @@
             : @"LENGTH: fuller bits, four to seven sentences with an escalation and a tag or callback, "
                "still reading like a text.\n\n"];
     } else if (length == WMReplyLengthShort) {
-        [p appendString:@"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
+        [p appendString:mode == WMReplyModePhotoOpener
+            ? @"LENGTH: SHORT. One quick text, about 6 to 18 words: enough room to compliment her and land the twist.\n\n"
+            : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:@"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
                          "words. Still reads like a chat message, not an email (unless the "
