@@ -1,0 +1,9 @@
+Package: com.adarsh.stageduoplus
+Name: Dynamic Stage+
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: Add-on for Dynamic Stage 1.2 (tomt000). A floating button that hides the keyboard, an optional auto-swap that moves the app you're using to the top window, and Samsung-style App Pairs from the app icon's long-press menu.
+Maintainer: Adarsh
+Author: Adarsh
+Section: Tweaks
+Depends: ellekit, preferenceloader, me.tomt000.stageduo (>= 1.2)

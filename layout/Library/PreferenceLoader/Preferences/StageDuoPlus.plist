@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>entry</key>
+	<dict>
+		<key>cell</key>
+		<string>PSLinkCell</string>
+		<key>icon</key>
+		<string>StageDuoPlus.png</string>
+		<key>label</key>
+		<string>Dynamic Stage+</string>
+	</dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>An add-on for Dynamic Stage 1.2. Changes apply right away, no respring.</string>
+			<key>label</key>
+			<string>Dynamic Stage+</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>label</key>
+			<string>Enabled</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>A floating button appears while the keyboard is up. Tap it to hide the keyboard. Drag it anywhere: it snaps to the nearest edge and remembers the spot. Long-press it while two apps are open to swap them.</string>
+			<key>label</key>
+			<string>Hide-Keyboard Button</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>kbButton</string>
+			<key>label</key>
+			<string>Show the Button</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>kbOnlyInStage</string>
+			<key>label</key>
+			<string>Only When Two Apps Are Open</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Button Size</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<integer>46</integer>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>kbButtonSize</string>
+			<key>max</key>
+			<integer>64</integer>
+			<key>min</key>
+			<integer>34</integer>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Moves the app you're using in the bottom window up to the top, and the top app down to the bottom.
+
+When Typing: only when you tap a text box in the bottom app, so the keyboard never covers what you're typing.
+
+Any Tap: as soon as you touch the bottom app. That first touch moves the app; it doesn't also tap whatever was under your finger.</string>
+			<key>label</key>
+			<string>Auto-Swap</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSegmentCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>swapMode</string>
+			<key>validTitles</key>
+			<array>
+				<string>Off</string>
+				<string>When Typing</string>
+				<string>Any Tap</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+				<integer>2</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>refocusAfterSwap</string>
+			<key>label</key>
+			<string>Reopen Keyboard After Swap</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Long-press an app icon and choose App Pairs… to pair it with another app. Then long-press either app's icon and choose Open with …: the first app opens on top and the second in the Dynamic Stage window.</string>
+			<key>label</key>
+			<string>App Pairs</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>pairsEnabled</string>
+			<key>label</key>
+			<string>Show in Icon Menus</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Records what Dynamic Stage+ does in /var/mobile/Library/Logs/StageDuoPlus.log. If a swap or a pair doesn't work, send that file.</string>
+			<key>label</key>
+			<string>Troubleshooting</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>debugLog</string>
+			<key>label</key>
+			<string>Debug Log</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>Dynamic Stage+</string>
+</dict>
+</plist>
