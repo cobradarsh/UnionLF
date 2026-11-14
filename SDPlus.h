@@ -28,7 +28,7 @@
 #define SDP_N_REFOCUS     "com.adarsh.sdplus.refocus"        // SB -> apps   state = pid that should re-open its keyboard
 #define SDP_N_PREFS       "com.adarsh.stageduoplus/prefs"    // Settings -> SB (PostNotification)
 #define SDP_DOMAIN        @"com.adarsh.stageduoplus"
-#define SDP_VERSION       @"1.0.5"                          // keep in step with control
+#define SDP_VERSION       @"1.0.6"                          // keep in step with control
 
 typedef NS_OPTIONS(uint64_t, SDPConfigBits) {
     SDPConfigKeyboardButton = 1 << 0,   // apps report keyboard show/hide
@@ -98,6 +98,8 @@ typedef struct {
     int revealEndGap;     // frames between the last move and "ended" (a real finger never has 0)
     double revealReset;   // seconds after "ended" before the recognizer resets to Possible (<0 = never)
     BOOL revealShouldBegin; // ask the gesture view gestureRecognizerShouldBegin: first, like Dynamic Stage's own hook
+    double fitFrac;       // top window height as a fraction of the screen (0.497 = the native split measured on device)
+    double fitDelay;      // seconds after the reveal before the top app is fitted
     int swapStyle;        // 0 = keep the stage (open top in stage, raise bottom, reveal); 1 = native expand
 } SDPTune;
 extern SDPTune gSDPTune;
@@ -114,6 +116,8 @@ extern SDPTune gSDPTune;
 + (BOOL)revealStage;                              // a synthetic swipe-up: shows a hidden stage window
 + (void)stopGesture;                              // Dynamic Stage's own gesture "stop" (un-sticks the card)
 + (id)debugTarget:(NSString *)name;               // gv | card | pane | mgr | helper (for test commands)
++ (void)fitTopApp:(NSString *)bid;               // store the top-window frame for bid and relaunch it (sub_95e44)
++ (NSString *)relaunchInfo;                       // Dynamic Stage's stored relaunch bundle + frame
 + (id)lastSwipe;
 + (void)engagementFromPid:(pid_t)pid typing:(BOOL)typing;
 + (void)launchPairTop:(NSString *)top bottom:(NSString *)bottom;

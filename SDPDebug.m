@@ -11,6 +11,8 @@
         dsstop                Dynamic Stage's own gesture stop (un-sticks a half-revealed card)
         call <t> <sel>        call a no-argument method; t = gv | card | pane | mgr | helper | ClassName
         callgr <t> <sel>      same, passing the last synthetic swipe as the argument
+        fit [bundle id]       fit the front (or given) app into the top window, like Dynamic Stage's swipe end
+        relaunchinfo          log Dynamic Stage's stored relaunch bundle + frame
         open <bundle id>      open an app in the stage window
         launch <bundle id>    bring an app to the front
         pair <top> <bottom>   launch an app pair
@@ -229,6 +231,8 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
         else if ([cmd isEqualToString:@"expand"]) SDPLog(@"expand -> %d", [SDPStage nativeExpand]);
         else if ([cmd isEqualToString:@"reveal"]) SDPLog(@"reveal -> %d", [SDPStage revealStage]);
         else if ([cmd isEqualToString:@"dsstop"]) [SDPStage stopGesture];
+        else if ([cmd isEqualToString:@"fit"])    [SDPStage fitTopApp:(a1 ?: [SDPHost frontmostBundleID])];
+        else if ([cmd isEqualToString:@"relaunchinfo"]) SDPLog(@"%@", [SDPStage relaunchInfo]);
         else if (([cmd isEqualToString:@"call"] || [cmd isEqualToString:@"callgr"]) && a2) {
             // call <gv|card|pane|mgr|helper|ClassName> <selector>   (void, no argument / the last swipe)
             id t = [SDPStage debugTarget:a1];
@@ -254,6 +258,8 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
             else if ([a1 isEqualToString:@"revealEndGap"]) gSDPTune.revealEndGap = a2.intValue;
             else if ([a1 isEqualToString:@"revealReset"]) gSDPTune.revealReset = a2.doubleValue;
             else if ([a1 isEqualToString:@"revealShouldBegin"]) gSDPTune.revealShouldBegin = a2.boolValue;
+            else if ([a1 isEqualToString:@"fitFrac"])    gSDPTune.fitFrac = a2.doubleValue;
+            else if ([a1 isEqualToString:@"fitDelay"])   gSDPTune.fitDelay = a2.doubleValue;
             SDPLog(@"tune: settle=%.2f guardKills=%d revealTo=%.2f frames=%d hold=%d gap=%d reset=%.2f swapStyle=%d",
                    gSDPTune.settle, gSDPTune.guardKills, gSDPTune.revealTo, gSDPTune.revealFrames,
                    gSDPTune.revealHold, gSDPTune.revealEndGap, gSDPTune.revealReset, gSDPTune.swapStyle);
@@ -294,6 +300,12 @@ static void hook_dsExpand(id self, SEL _cmd) {
     orig_dsExpand(self, _cmd);
 }
 
+static void (*orig_dsPrime)(id, SEL, id, CGRect);
+static void hook_dsPrime(id self, SEL _cmd, id bid, CGRect frame) {
+    SDPLog(@"trace DS relaunch-prime %@ frame %@  from %@", bid, NSStringFromCGRect(frame), SDPBacktrace(1, 4));
+    orig_dsPrime(self, _cmd, bid, frame);
+}
+
 static void SDPTraceHook(NSString *cls, NSString *sel, IMP repl, IMP *orig) {
     Class c = NSClassFromString(cls);
     SEL s = NSSelectorFromString(sel);
@@ -305,4 +317,5 @@ void SDPDebugInstall(void) {
     SDPTraceHook(@"SpringBoard", @"launchApplicationWithIdentifier:suspended:", (IMP)hook_sbLaunch, (IMP *)&orig_sbLaunch);
     SDPTraceHook(@"DS_IIllIIIIIIIlllIIIIllllllIllIll", @"DS_IIlIIlIIlllIlIIIlIIIIlIlIIlIII", (IMP)hook_dsOpen, (IMP *)&orig_dsOpen);
     SDPTraceHook(@"DS_lIllllIllIIlIIlIIllllIIIIIlllI", @"DS_llIIIlIIlIIllIllIIIllllIIlIlll", (IMP)hook_dsExpand, (IMP *)&orig_dsExpand);
+    SDPTraceHook(@"DS_IIlIIIlIlllIlIllIIIIIIlIlllIlI", @"DS_llIllIlllllIlllIlllIIllIIIIIIl:withFrame:", (IMP)hook_dsPrime, (IMP *)&orig_dsPrime);
 }

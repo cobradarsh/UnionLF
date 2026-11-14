@@ -35,7 +35,16 @@ static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // c
 
 SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
                      .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0,
-                     .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES };
+                     .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES,
+                     .fitFrac = 0.497, .fitDelay = 0.7 };
+
+// Dynamic Stage's "relaunch with frame" singleton (DS_IIlIIIlIl…: settings, bundle id, frame).
+// At the end of its own swipe, block sub_95e44 stores the top-window frame for the front app here
+// and relaunches it; Dynamic Stage's scene hooks then give the relaunched app that frame.
+static NSString *const kRelaunchClass = @"DS_IIlIIIlIlllIlIllIIIIIIlIlllIlI";
+static NSString *const kRelaunchPrime = @"DS_llIllIlllllIlllIlllIIllIIIIIIl:withFrame:";
+static NSString *const kRelaunchBid   = @"DS_IlIlllIllIlllIIllIIIlIlllIIIIl";
+static NSString *const kRelaunchFrame = @"DS_IIlIIIllIIIIIllIlIIIlIllIIlIIl";
 
 static NSString *const kGestureView  = @"DS_lIlIIlIIlllIllllIllllllIlIIIIl";  // the bottom-edge gesture view
 static NSString *const kGestureEntry = @"DS_lIllIlllIllIIIllllIIlllIllIIII:"; // its gesture action (any recognizer)
@@ -349,6 +358,28 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
 
 + (id)lastSwipe { return gLastSwipe; }
 
++ (NSString *)relaunchInfo {
+    id ri = SDPMsg(NSClassFromString(kRelaunchClass), @"sharedInstance");
+    SEL fs = NSSelectorFromString(kRelaunchFrame);
+    CGRect f = [ri respondsToSelector:fs] ? ((CGRect (*)(id, SEL))objc_msgSend)(ri, fs) : CGRectZero;
+    return [NSString stringWithFormat:@"relaunch{bid=%@ frame=%@}", SDPMsg(ri, kRelaunchBid) ?: @"-", NSStringFromCGRect(f)];
+}
+
+// What Dynamic Stage does when its own swipe finishes: remember the top-window frame for the
+// front app, then relaunch it so the frame is applied (no kill: a running app just refreshes).
++ (void)fitTopApp:(NSString *)bid {
+    if (bid.length == 0) return;
+    id ri = SDPMsg(NSClassFromString(kRelaunchClass), @"sharedInstance");
+    SEL prime = NSSelectorFromString(kRelaunchPrime);
+    if (![ri respondsToSelector:prime]) { SDPLog(@"fit: relaunch singleton not found"); return; }
+    CGRect s = UIScreen.mainScreen.bounds;
+    CGRect f = CGRectMake(0, 0, s.size.width, round(s.size.height * MAX(0.2, MIN(0.9, gSDPTune.fitFrac))));
+    @try { ((void (*)(id, SEL, id, CGRect))objc_msgSend)(ri, prime, bid, f); }
+    @catch (NSException *e) { SDPLog(@"fit threw %@", e.reason); return; }
+    BOOL launched = [SDPHost launchApp:bid];
+    SDPLog(@"fit %@ to %@ launch=%d %@", bid, NSStringFromCGRect(f), launched, [self relaunchInfo]);
+}
+
 + (id)debugTarget:(NSString *)name {
     if ([name isEqualToString:@"gv"])     return [self _gestureView];
     if ([name isEqualToString:@"card"])   return [self _card];
@@ -460,6 +491,7 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
             SDPLog(@"swap: %@ in front=%d %@", bottom, front, [self diagnostics]);
             SDPAfter(gSDPTune.settle, ^{
                 if (![self isOpen]) [self revealStage];
+                SDPAfter(0.35 + gSDPTune.fitDelay, ^{ [self fitTopApp:bottom]; });
                 if (refocus) {
                     SDPAfter(1.4, ^{
                         pid_t p = [SDPHost pidForBundleID:bottom];
@@ -507,7 +539,10 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
         } else if (![self openInStage:bottom]) {
             [SDPHost toast:@"Couldn't open the second app. Open Dynamic Stage once after a respring, then try again."];
         } else {
-            SDPAfter(0.5, ^{ if (![self isOpen]) [self revealStage]; });
+            SDPAfter(0.5, ^{
+                if (![self isOpen]) [self revealStage];
+                SDPAfter(0.35 + gSDPTune.fitDelay, ^{ [self fitTopApp:top]; });
+            });
         }
         SDPAfter(2.5, ^{ SDPLog(@"pair done %@", [self diagnostics]); });
         [self _releaseBusyAfter:1.8];
