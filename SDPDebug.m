@@ -14,6 +14,9 @@
         fit [bundle id]       fit the front (or given) app into the top window, like Dynamic Stage's swipe end
         relaunchinfo          log Dynamic Stage's stored relaunch bundle + frame
         finish                clear a leftover drag look on the stage card (blur, tint, scale)
+        kb                    log what the hide-keyboard button is watching and whether it shows
+        kbfocus [bundle id]   ask the front (or given) app to focus one of its text boxes (keyboard up)
+        kbtap                 what a tap on the hide-keyboard button does
         open <bundle id>      open an app in the stage window
         launch <bundle id>    bring an app to the front
         pair <top> <bottom>   launch an app pair
@@ -235,6 +238,13 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
         else if ([cmd isEqualToString:@"fit"])    [SDPStage fitTopApp:(a1 ?: [SDPHost frontmostBundleID])];
         else if ([cmd isEqualToString:@"relaunchinfo"]) SDPLog(@"%@", [SDPStage relaunchInfo]);
         else if ([cmd isEqualToString:@"finish"]) [SDPStage finishCard];
+        else if ([cmd isEqualToString:@"kb"])     SDPLog(@"%@", [[SDPKeyboardButton shared] debugState]);
+        else if ([cmd isEqualToString:@"kbtap"])  [[SDPKeyboardButton shared] debugTap];
+        else if ([cmd isEqualToString:@"kbfocus"]) {
+            pid_t pid = [SDPHost pidForBundleID:(a1 ?: [SDPHost frontmostBundleID])];
+            SDPLog(@"kbfocus -> pid %d", pid);
+            if (pid > 0) SDPPost(SDP_N_DBG_FOCUS, (uint64_t)pid);
+        }
         else if (([cmd isEqualToString:@"call"] || [cmd isEqualToString:@"callgr"]) && a2) {
             // call <gv|card|pane|mgr|helper|ClassName> <selector>   (void, no argument / the last swipe)
             id t = [SDPStage debugTarget:a1];
@@ -265,6 +275,14 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
             else if ([a1 isEqualToString:@"revealViewMode"]) gSDPTune.revealViewMode = a2.intValue;
             else if ([a1 isEqualToString:@"revealCleanup"]) gSDPTune.revealCleanup = a2.boolValue;
             else if ([a1 isEqualToString:@"guardSwap"])  gSDPTune.guardSwap = a2.intValue;
+            else if ([a1 hasPrefix:@"kb"]) {                 // the hide-keyboard button; apps read two of these from the config
+                if ([a1 isEqualToString:@"kbStrictActive"])   gSDPTune.kbStrictActive = a2.boolValue;
+                else if ([a1 isEqualToString:@"kbMinHeight"]) gSDPTune.kbMinHeight = a2.intValue;
+                else if ([a1 isEqualToString:@"kbLease"])     gSDPTune.kbLeaseDs = a2.intValue;
+                [[SDPSettings shared] reload];
+                SDPLog(@"tune: kbStrictActive=%d kbMinHeight=%d kbLease=%.1fs", gSDPTune.kbStrictActive, gSDPTune.kbMinHeight,
+                       gSDPTune.kbLeaseDs / 10.0);
+            }
             SDPLog(@"tune: settle=%.2f guardKills=%d revealTo=%.2f frames=%d hold=%d gap=%d reset=%.2f swapStyle=%d",
                    gSDPTune.settle, gSDPTune.guardKills, gSDPTune.revealTo, gSDPTune.revealFrames,
                    gSDPTune.revealHold, gSDPTune.revealEndGap, gSDPTune.revealReset, gSDPTune.swapStyle);
@@ -273,6 +291,26 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
         SDPLog(@"cmd '%@' threw %@", line, e.reason);
     }
     SDPAfterD(delay, ^{ SDPRunCommands(lines, i + 1); });
+}
+
+// An app's own account of its keyboard (SDPApp.m packs it; the layout is in SDPlus.h).
+void SDPDebugAppReport(uint64_t v) {
+    static NSArray<NSString *> *events;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        events = @[ @"beat", @"willShow", @"didShow", @"willHide", @"didHide", @"resignActive", @"becameActive",
+                    @"background", @"foreground", @"config", @"focus" ];
+    });
+    pid_t pid = (pid_t)(v & 0x3FFFFF);
+    BOOL up = (v >> 22) & 1, published = (v >> 23) & 1, resigned = (v >> 24) & 1;
+    int appState = (int)((v >> 25) & 3), height = (int)((v >> 27) & 0x3FF), bar = (int)((v >> 37) & 0x3FF);
+    NSUInteger ev = (NSUInteger)((v >> 47) & 0xF);
+    int uikit = (int)((v >> 51) & 3);
+    SDPLog(@"app kb: %@ (%d) %@: keyboard %d pt, bar %d pt -> %@%@%@ · UIKit says %@", [SDPHost bundleIDForPid:pid] ?: @"?", pid,
+           ev < events.count ? events[ev] : @"?", height, bar,
+           published ? @"UP" : (up ? @"up, but the app isn't active" : @"down"),
+           resigned ? @" [resigned]" : @"", appState == 2 ? @" [background]" : (appState == 1 ? @" [inactive]" : @""),
+           (uikit & 1) ? ((uikit & 2) ? @"on screen" : @"off screen") : @"?");
 }
 
 void SDPDebugTick(void) {

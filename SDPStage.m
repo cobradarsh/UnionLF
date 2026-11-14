@@ -37,7 +37,8 @@ SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardP
                      .revealTo = 0.68, .revealFrames = 18, .swapStyle = 2,
                      .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES,
                      .fitFrac = 0.5365, .fitDelay = 0.7, .revealViewMode = 1, .revealCleanup = YES,
-                     .guardSwap = 1 };
+                     .guardSwap = 1,
+                     .kbStrictActive = YES, .kbMinHeight = 150, .kbLeaseDs = 30 };
 
 // Dynamic Stage's "relaunch with frame" singleton (DS_IIlIIIlIl…: settings, bundle id, frame).
 // At the end of its own swipe, block sub_95e44 stores the top-window frame for the front app here

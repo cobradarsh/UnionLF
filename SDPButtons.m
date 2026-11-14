@@ -5,8 +5,8 @@
     foreground scene never renders). Touches anywhere else go straight to the apps.
     Drag a bubble anywhere: it snaps to the nearest side and remembers the spot.
 
-      • Hide-keyboard button: shows while an app's keyboard is up. Tap = that app drops its
-        keyboard. Long-press = swap the two apps.
+      • Hide-keyboard button: shows only while an app on screen really has its keyboard up.
+        Tap = that app drops its keyboard. Long-press = swap the two apps.
       • Swap button: shows while Dynamic Stage has two apps open. Tap = swap top and bottom. */
 
 #import "SDPlus.h"
@@ -174,9 +174,18 @@ static UIColor *SDPIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 green:
 
 #pragma mark - hide-keyboard button
 
+// The button is up exactly while a process that is ON SCREEN holds a fresh keyboard lease
+// (SDPApp.m explains the lease). Nothing is remembered between looks; every look checks:
+//   1. the process stamped "my keyboard is up" within the last 3 s (a frozen, backgrounded
+//      or killed app can't),
+//   2. it is the front app, the app in the open stage window, or a view service drawing
+//      inside one of them (in-app Safari, share sheet…): never an app that is merely running.
 @implementation SDPKeyboardButton {
     SDPBubble *_bubble;
-    NSMutableDictionary<NSNumber *, NSNumber *> *_kbPids;   // pid -> when its keyboard showed
+    NSMutableDictionary<NSNumber *, NSNumber *> *_leases;   // pid -> notify token of that process's lease
+    NSArray<NSNumber *> *_upPids;                            // on-screen processes with the keyboard up, as of the last look
+    NSString *_lastLogged;
+    CFAbsoluteTime _quietUntil;                              // after a tap, until the app has had time to react
 }
 
 + (instancetype)shared {
@@ -186,7 +195,8 @@ static UIColor *SDPIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 green:
 }
 
 - (void)_setup {
-    _kbPids = [NSMutableDictionary dictionary];
+    _leases = [NSMutableDictionary dictionary];
+    _upPids = @[];
     _bubble = [[SDPBubble alloc] initWithKey:@"com.adarsh.sdplus.kbButtonPos" symbol:@"keyboard.chevron.compact.down"
                                     fallback:@"chevron.down" level:99999
                                defaultOrigin:^CGPoint(CGFloat size) {
@@ -202,36 +212,97 @@ static UIColor *SDPIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 green:
     };
 }
 
-- (void)keyboardShownInPid:(pid_t)pid {
+// A ping from an app only means "read my lease". The lease is what counts.
+- (void)notePid:(pid_t)pid {
     if (pid <= 0) return;
-    _kbPids[@(pid)] = @(CFAbsoluteTimeGetCurrent());
+    NSNumber *k = @(pid);
+    if (!_leases[k]) {
+        int token = -1;
+        NSString *name = [NSString stringWithFormat:@"%s%d", SDP_N_KB_STATE, pid];
+        if (notify_register_check(name.UTF8String, &token) != NOTIFY_STATUS_OK) return;
+        _leases[k] = @(token);
+    }
     [self refresh];
 }
 
-- (void)keyboardHiddenInPid:(pid_t)pid {
-    [_kbPids removeObjectForKey:@(pid)];
-    [self refresh];
+- (void)_forget:(NSNumber *)k {
+    notify_cancel(_leases[k].intValue);
+    [_leases removeObjectForKey:k];
+}
+
+// Can the user see this process right now?
+- (BOOL)_onScreen:(pid_t)pid front:(NSString *)front frontPid:(pid_t)frontPid stage:(NSString *)stage stagePid:(pid_t)stagePid {
+    if (frontPid > 0 && pid == frontPid) return YES;
+    if (stagePid > 0 && pid == stagePid) return YES;
+    id app = [SDPHost applicationForPid:pid];
+    NSString *bid = SDPMsg(app, @"bundleIdentifier");
+    if ([bid isKindOfClass:NSString.class]) {
+        if (front && [bid isEqualToString:front]) return YES;
+        if (stage && [bid isEqualToString:stage]) return YES;
+    }
+    if (app && ![SDPHost appIsHidden:app]) return NO;   // an ordinary app that isn't in front: minimised or in the background
+    return front != nil;                                 // a view service drawing inside whatever is in front
+}
+
+- (NSString *)_nameForPid:(pid_t)pid {
+    return [SDPHost bundleIDForPid:pid] ?: [NSString stringWithFormat:@"pid %d", pid];
 }
 
 - (void)refresh {
-    for (NSNumber *p in _kbPids.allKeys) {
-        if (kill(p.intValue, 0) != 0 && errno == ESRCH) [_kbPids removeObjectForKey:p];
-    }
     SDPSettings *s = [SDPSettings shared];
-    BOOL stageOpen = [SDPStage isOpen];
-    BOOL want = s.enabled && s.keyboardButton && _kbPids.count > 0 && ([SDPHost frontmostBundleID] != nil || stageOpen);
+    NSMutableArray<NSNumber *> *up = [NSMutableArray array];
+    BOOL stageOpen = NO;
+    if (_leases.count) {
+        uint64_t now = SDPUptimeDs(), lease = (uint64_t)MAX(10, gSDPTune.kbLeaseDs);
+        NSString *front = [SDPHost frontmostBundleID];
+        stageOpen = [SDPStage isOpen];
+        NSString *stage = stageOpen ? [SDPStage stageBundleID] : nil;
+        pid_t frontPid = front ? [SDPHost pidForBundleID:front] : 0;
+        pid_t stagePid = stage ? [SDPHost pidForBundleID:stage] : 0;
+        for (NSNumber *k in _leases.allKeys) {
+            uint64_t stamp = SDPState(_leases[k].intValue);
+            BOOL fresh = stamp != 0 && (stamp >= now || now - stamp <= lease);
+            if (!fresh) { [self _forget:k]; continue; }      // down, frozen or dead; it pings again when it has news
+            if ([self _onScreen:k.intValue front:front frontPid:frontPid stage:stage stagePid:stagePid]) [up addObject:k];
+        }
+    }
+    _upPids = up;
+    BOOL want = s.enabled && s.keyboardButton && up.count > 0 && CFAbsoluteTimeGetCurrent() > _quietUntil;
     if (want && s.keyboardButtonOnlyInStage) want = stageOpen;
     [_bubble show:want size:s.keyboardButtonSize];
+
+    if (s.debugLog) {                                         // log changes only
+        NSMutableArray *names = [NSMutableArray array];
+        for (NSNumber *k in up) [names addObject:[self _nameForPid:k.intValue]];
+        NSString *line = [NSString stringWithFormat:@"%@ (keyboard up in: %@)", want ? @"SHOWN" : @"hidden",
+                          names.count ? [names componentsJoinedByString:@", "] : @"nothing on screen"];
+        if (![line isEqualToString:_lastLogged]) { _lastLogged = line; SDPLog(@"keyboard button: %@", line); }
+    }
+}
+
+- (NSString *)debugState {
+    uint64_t now = SDPUptimeDs();
+    NSMutableArray *parts = [NSMutableArray array];
+    for (NSNumber *k in _leases) {
+        uint64_t stamp = SDPState(_leases[k].intValue);
+        NSString *age = stamp ? [NSString stringWithFormat:@"stamped %.1f s ago", (now > stamp ? now - stamp : 0) / 10.0] : @"down";
+        [parts addObject:[NSString stringWithFormat:@"%@ (%d) %@%@", [self _nameForPid:k.intValue], k.intValue, age,
+                          [_upPids containsObject:k] ? @", on screen" : @""]];
+    }
+    return [NSString stringWithFormat:@"keyboard button %@ · front=%@ · watching %lu: %@", _bubble.visible ? @"SHOWN" : @"hidden",
+            [SDPHost frontmostBundleID] ?: @"home", (unsigned long)parts.count, [parts componentsJoinedByString:@"; "]];
 }
 
 - (void)_dismiss {
-    pid_t target = _kbPids.count == 1 ? (pid_t)[_kbPids.allKeys.firstObject intValue] : 0;   // 0 = every app
-    SDPLog(@"keyboard button: dismiss pid %d (%lu keyboards up)", target, (unsigned long)_kbPids.count);
+    pid_t target = _upPids.count == 1 ? _upPids.firstObject.intValue : 0;   // 0 = every app with a keyboard up
+    SDPLog(@"keyboard button: tapped, dismiss %@", target ? [self _nameForPid:target] : @"all");
     SDPPost(SDP_N_KB_DISMISS, (uint64_t)target);
     [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
-    [_kbPids removeAllObjects];
+    _quietUntil = CFAbsoluteTimeGetCurrent() + 0.8;
     [_bubble popAway];
 }
+
+- (void)debugTap { [self _dismiss]; }
 
 @end
 

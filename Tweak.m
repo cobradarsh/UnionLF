@@ -194,11 +194,15 @@ void SDPSpringBoardStart(void) {
         [[SDPKeyboardButton shared] refresh];
         [[SDPSwapButton shared] refresh];
     });
+    // Both pings only mean "pid's keyboard lease changed, go and read it": nothing is taken on trust.
     notify_register_dispatch(SDP_N_KB_SHOW, &tok, mq, ^(int t) {
-        [[SDPKeyboardButton shared] keyboardShownInPid:(pid_t)SDPState(t)];
+        [[SDPKeyboardButton shared] notePid:(pid_t)SDPState(t)];
     });
     notify_register_dispatch(SDP_N_KB_HIDE, &tok, mq, ^(int t) {
-        [[SDPKeyboardButton shared] keyboardHiddenInPid:(pid_t)SDPState(t)];
+        [[SDPKeyboardButton shared] notePid:(pid_t)SDPState(t)];
+    });
+    notify_register_dispatch(SDP_N_APPDBG, &tok, mq, ^(int t) {
+        if ([SDPSettings shared].debugLog) SDPDebugAppReport(SDPState(t));
     });
     notify_register_dispatch(SDP_N_TYPING, &tok, mq, ^(int t) {
         [SDPStage engagementFromPid:(pid_t)SDPState(t) typing:YES];

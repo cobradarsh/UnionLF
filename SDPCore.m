@@ -1,6 +1,7 @@
 /*  SDPCore.m — logging, Darwin-notify helpers, settings, SpringBoard host helpers.  */
 
 #import "SDPlus.h"
+#import <time.h>
 
 BOOL gSDPIsSpringBoard = NO;
 
@@ -65,6 +66,11 @@ uint64_t SDPState(int token) {
     return v;
 }
 
+// Kernel uptime, so a stamp written by one process can be aged by another.
+uint64_t SDPUptimeDs(void) {
+    return clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 100000000ull;
+}
+
 #pragma mark - settings
 
 @implementation SDPSettings {
@@ -107,6 +113,9 @@ uint64_t SDPState(int token) {
         if (self.swapMode == SDPSwapTyping) bits |= SDPConfigSwapTyping;
         if (self.swapMode == SDPSwapTouch)  bits |= SDPConfigSwapTouch;
     }
+    if (self.debugLog) bits |= SDPConfigDebug;
+    if (gSDPTune.kbStrictActive) bits |= SDPConfigStrictActive;
+    bits |= ((uint64_t)(MAX(0, MIN(510, gSDPTune.kbMinHeight)) / 2) & 0xFF) << SDPConfigKbMinShift;
     SDPPost(SDP_N_CONFIG, bits);
 }
 
@@ -180,16 +189,30 @@ static NSMutableArray<NSString *> *gRecent;
 
 + (pid_t)pidForBundleID:(NSString *)bid { return [self _pidOfApp:[self applicationForBundleID:bid]]; }
 
-+ (NSString *)bundleIDForPid:(pid_t)pid {
++ (id)applicationForPid:(pid_t)pid {
     if (pid <= 0) return nil;
     id ctl = [self _appController];
     SEL s = NSSelectorFromString(@"applicationWithPid:");
-    if ([ctl respondsToSelector:s]) {
-        id app = ((id (*)(id, SEL, int))objc_msgSend)(ctl, s, pid);
-        NSString *bid = SDPMsg(app, @"bundleIdentifier");
-        if (bid.length) return bid;
-    }
+    if ([ctl respondsToSelector:s]) return ((id (*)(id, SEL, int))objc_msgSend)(ctl, s, pid);
+    // no such method on this iOS: look through the running apps ourselves
+    NSArray *apps = SDPMsg(ctl, @"runningApplications") ?: SDPMsg(ctl, @"allApplications");
+    if (![apps isKindOfClass:NSArray.class]) return nil;
+    for (id app in apps) if ([self _pidOfApp:app] == pid) return app;
     return nil;
+}
+
+// View services (in-app Safari, mail/message compose, share sheets…) are registered as apps
+// with the "hidden" tag: they never show on the home screen and only draw inside another app.
++ (BOOL)appIsHidden:(id)app {
+    id info = SDPMsg(app, @"info");
+    SEL s = NSSelectorFromString(@"hasHiddenTag");
+    if (!info || ![info respondsToSelector:s]) return NO;
+    return ((BOOL (*)(id, SEL))objc_msgSend)(info, s);
+}
+
++ (NSString *)bundleIDForPid:(pid_t)pid {
+    NSString *bid = SDPMsg([self applicationForPid:pid], @"bundleIdentifier");
+    return ([bid isKindOfClass:NSString.class] && bid.length) ? bid : nil;
 }
 
 + (NSString *)displayNameForBundleID:(NSString *)bid {

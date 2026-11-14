@@ -32,6 +32,23 @@ only take a new size by relaunching. iPad-mode apps (Instagram, Safari) keep the
 
 **App Pair** = launch the first app → open the second in the (hidden) stage → reveal → fit.
 
+## When the hide-keyboard button shows
+
+Only while an app that is on screen really has its keyboard up. Nothing is remembered:
+
+- **Lease.** While its keyboard is up, an app stamps the system uptime into its own notify state
+  (`com.adarsh.sdplus.kb.state.<pid>`) once a second. SpringBoard believes a stamp for 3 s. A frozen,
+  backgrounded or killed app can't stamp, so it drops out by itself.
+- **A real keyboard.** iOS also posts `UIKeyboardWillShow` for a chat app's message bar (an input
+  accessory view, 60-100 pt, no keys). "Up" means the keyboard minus that bar is at least 150 pt.
+- **Active.** Not while the app is behind Control Center, Notification Center or the app switcher.
+- **On screen.** SpringBoard only counts the front app, the app in the open stage window, and view
+  services drawing inside them (in-app Safari, share sheets). An app that is merely running doesn't count.
+
+Up to 1.0.10 apps posted shown/hidden events and SpringBoard kept a list. iOS posts "shown" again
+while an app is being backgrounded, so frozen apps stayed on the list and the button floated over
+Camera, Contacts and everything else (the log once showed "3 keyboards up").
+
 These names only match **1.2**. Every call checks `respondsToSelector:` and fails soft (a toast and
 a log line), so a different version can't crash SpringBoard; the stage features just stop.
 

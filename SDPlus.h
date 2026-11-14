@@ -20,21 +20,35 @@
 #import <notify.h>
 
 #define SDP_N_CONFIG      "com.adarsh.sdplus.config"         // SB -> apps   state = SDPConfigBits
-#define SDP_N_KB_SHOW     "com.adarsh.sdplus.kb.show"        // app -> SB    state = pid
-#define SDP_N_KB_HIDE     "com.adarsh.sdplus.kb.hide"        // app -> SB    state = pid
+#define SDP_N_KB_SHOW     "com.adarsh.sdplus.kb.show"        // app -> SB    state = pid ("look at my lease": keyboard up, once a second)
+#define SDP_N_KB_HIDE     "com.adarsh.sdplus.kb.hide"        // app -> SB    state = pid ("look at my lease": keyboard gone)
+#define SDP_N_KB_STATE    "com.adarsh.sdplus.kb.state."      // + pid: that process's keyboard lease = uptime (0.1 s) of
+                                                             //   its last "keyboard is up" stamp, 0 = down (see SDPApp.m)
 #define SDP_N_KB_DISMISS  "com.adarsh.sdplus.kb.dismiss"     // SB -> apps   state = target pid (0 = every app)
+#define SDP_N_APPDBG      "com.adarsh.sdplus.dbg.app"        // app -> SB    state = packed keyboard report (Debug Log only)
+#define SDP_N_DBG_FOCUS   "com.adarsh.sdplus.dbg.focus"      // SB -> apps   state = pid that should focus a text box (tests)
 #define SDP_N_TYPING      "com.adarsh.sdplus.engage.typing"  // app -> SB    state = pid
 #define SDP_N_TOUCH       "com.adarsh.sdplus.engage.touch"   // app -> SB    state = pid
 #define SDP_N_REFOCUS     "com.adarsh.sdplus.refocus"        // SB -> apps   state = pid that should re-open its keyboard
 #define SDP_N_PREFS       "com.adarsh.stageduoplus/prefs"    // Settings -> SB (PostNotification)
 #define SDP_DOMAIN        @"com.adarsh.stageduoplus"
-#define SDP_VERSION       @"1.0.10"                          // keep in step with control
+#define SDP_VERSION       @"1.0.11"                          // keep in step with control
 
 typedef NS_OPTIONS(uint64_t, SDPConfigBits) {
-    SDPConfigKeyboardButton = 1 << 0,   // apps report keyboard show/hide
+    SDPConfigKeyboardButton = 1 << 0,   // apps keep a keyboard lease
     SDPConfigSwapTyping     = 1 << 1,   // apps report "started typing"
     SDPConfigSwapTouch      = 1 << 2,   // apps report "touched"
+    SDPConfigDebug          = 1 << 3,   // apps report keyboard events for the log, and honour test commands
+    SDPConfigStrictActive   = 1 << 4,   // an inactive app (Control Center, app switcher…) counts as keyboard down
     SDPConfigValid          = 1 << 7,   // SpringBoard has published a config
+};
+#define SDPConfigKbMinShift 8           // bits 8-15: least keyboard height that counts, in 2 pt steps (0 = 150 pt)
+
+// What an app tells the log about its keyboard (SDP_N_APPDBG):
+//   pid:22 | up:1 | published:1 | resigned:1 | appState:2 | height:10 | accessory:10 | event:4 | UIKit knows:1, says on screen:1
+typedef NS_ENUM(int, SDPKbEvent) {
+    SDPKbBeat = 0, SDPKbWillShow, SDPKbDidShow, SDPKbWillHide, SDPKbDidHide,
+    SDPKbResign, SDPKbActive, SDPKbBackground, SDPKbForeground, SDPKbConfig, SDPKbFocus,
 };
 
 typedef NS_ENUM(NSInteger, SDPSwapMode) { SDPSwapOff = 0, SDPSwapTyping = 1, SDPSwapTouch = 2 };
@@ -44,6 +58,7 @@ extern BOOL gSDPIsSpringBoard;
 void SDPLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
 void SDPPost(const char *name, uint64_t state);       // set the name's state, then post it
 uint64_t SDPState(int token);                         // read the state behind a registered token
+uint64_t SDPUptimeDs(void);                           // system uptime in 0.1 s: the same clock in every process
 
 // Send a no-argument message that returns an object, only if the target answers it.
 static inline id SDPMsg(id target, NSString *selName) {
@@ -75,6 +90,8 @@ static inline id SDPMsg(id target, NSString *selName) {
 + (NSString *)frontmostBundleID;                  // app on top, nil on the home screen
 + (id)applicationForBundleID:(NSString *)bid;     // SBApplication
 + (pid_t)pidForBundleID:(NSString *)bid;          // 0 if not running
++ (id)applicationForPid:(pid_t)pid;               // SBApplication running as pid, nil for anything else
++ (BOOL)appIsHidden:(id)app;                      // a view service (in-app Safari, share sheet…), not an app you open
 + (NSString *)bundleIDForPid:(pid_t)pid;
 + (NSString *)displayNameForBundleID:(NSString *)bid;
 + (UIImage *)iconForBundleID:(NSString *)bid;
@@ -105,6 +122,9 @@ typedef struct {
     int guardSwap;        // skip Dynamic Stage's kills during a swap: 0 none, 1 the app moving down (default), 2 both
     int swapStyle;        // 2 = expand, open old top while it's in the background, reveal, fit (default)
                           // 0 = open top in the stage first, raise bottom, reveal; 1 = native expand only
+    BOOL kbStrictActive;  // hide-keyboard button: an inactive app counts as keyboard down (SDPConfigStrictActive)
+    int kbMinHeight;      // ... least keyboard height (pt, without the accessory bar) that counts as a keyboard
+    int kbLeaseDs;        // ... how old (0.1 s) an app's last "keyboard is up" stamp may be
 } SDPTune;
 extern SDPTune gSDPTune;
 
@@ -131,11 +151,14 @@ extern SDPTune gSDPTune;
 @end
 
 // ── the floating hide-keyboard button ──
+// Shows only while an app that is on screen (the front app, the open stage app, or a view
+// service of theirs) holds a fresh keyboard lease. Nothing is remembered between looks.
 @interface SDPKeyboardButton : NSObject
 + (instancetype)shared;
-- (void)keyboardShownInPid:(pid_t)pid;
-- (void)keyboardHiddenInPid:(pid_t)pid;
+- (void)notePid:(pid_t)pid;                       // that process says its keyboard state changed: read its lease
 - (void)refresh;                                  // re-evaluate visibility (timer, prefs change)
+- (NSString *)debugState;                         // one line per watched process, for the log
+- (void)debugTap;                                 // what a tap on the button does (tests)
 @end
 
 // ── the floating swap button (shows while two apps are open) ──
@@ -155,4 +178,5 @@ void SDPAppTouch(UIEvent *event);              // called from the -[UIApplicatio
 extern BOOL gSDPTouchHookOK;
 void SDPDebugInstall(void);                        // call tracing (SpringBoard)
 void SDPDebugTick(void);                           // runs /var/mobile/Library/Logs/sdp_cmd.txt
+void SDPDebugAppReport(uint64_t packed);           // logs an app's keyboard report (SDP_N_APPDBG)
 NSString *SDPBacktrace(NSUInteger skip, NSUInteger count);
