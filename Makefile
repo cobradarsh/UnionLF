@@ -13,7 +13,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = StageDuoPlus
 
-StageDuoPlus_FILES = Tweak.m SDPCore.m SDPStage.m SDPKeyboardButton.m SDPPairsSheet.m SDPApp.m
+StageDuoPlus_FILES = Tweak.m SDPCore.m SDPStage.m SDPButtons.m SDPPairsSheet.m SDPApp.m SDPDebug.m
 StageDuoPlus_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
 StageDuoPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
 

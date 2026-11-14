@@ -58,6 +58,11 @@ items = [
     group("Button Size"),
     slider("kbButtonSize", 46, 34, 64),
 
+    group("Swap Button",
+          "A second floating button shows while two apps are open. Tap it to swap "
+          "the top and bottom apps. Drag it anywhere; it uses the button size above."),
+    switch("swapButton", "Show the Swap Button", True),
+
     group("Auto-Swap",
           "Moves the app you're using in the bottom window up to the top, and the "
           "top app down to the bottom.\n\n"
@@ -75,8 +80,9 @@ items = [
     switch("pairsEnabled", "Show in Icon Menus", True),
 
     group("Troubleshooting",
-          "Records what Dynamic Stage+ does in /var/mobile/Library/Logs/StageDuoPlus.log. "
-          "If a swap or a pair doesn't work, send that file."),
+          "Records what Dynamic Stage+ does in /var/mobile/Library/Logs/StageDuoPlus.log, "
+          "and lets a computer connected over SSH run test commands and take screenshots "
+          "(sdp_cmd.txt in the same folder). Turn it off when everything works."),
     switch("debugLog", "Debug Log", True),
 ]
 

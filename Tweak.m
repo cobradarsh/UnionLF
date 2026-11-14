@@ -133,6 +133,7 @@ static BOOL SDPShouldBlockKill(id process, id desc) {
         SDPLog(@"kept %@ alive while moving it (kill reason: %@)", bid, desc);
         return YES;
     }
+    if ([SDPSettings shared].debugLog) SDPLog(@"trace kill %@ (%@)  from %@", bid, desc, SDPBacktrace(2, 5));
     return NO;
 }
 
@@ -164,6 +165,8 @@ static void SDPTick(void) {
     [SDPHost noteFront:stage];
     [SDPHost noteFront:front];
     [[SDPKeyboardButton shared] refresh];
+    [[SDPSwapButton shared] refresh];
+    SDPDebugTick();
 }
 
 void SDPSpringBoardStart(void) {
@@ -179,6 +182,7 @@ void SDPSpringBoardStart(void) {
         SDPHook(@"FBProcess", NSStringFromSelector(killSel), NO, (IMP)hook_kill_fb, (IMP *)&orig_kill_fb);
     if (SDPImplements(NSClassFromString(@"FBApplicationProcess"), killSel))
         SDPHook(@"FBApplicationProcess", NSStringFromSelector(killSel), NO, (IMP)hook_kill_fbapp, (IMP *)&orig_kill_fbapp);
+    SDPDebugInstall();
 
     dispatch_queue_t mq = dispatch_get_main_queue();
     int tok;
@@ -188,6 +192,7 @@ void SDPSpringBoardStart(void) {
         SDPLog(@"settings: enabled=%d kbButton=%d onlyInStage=%d swapMode=%ld pairs=%lu",
                s.enabled, s.keyboardButton, s.keyboardButtonOnlyInStage, (long)s.swapMode, (unsigned long)s.pairs.count);
         [[SDPKeyboardButton shared] refresh];
+        [[SDPSwapButton shared] refresh];
     });
     notify_register_dispatch(SDP_N_KB_SHOW, &tok, mq, ^(int t) {
         [[SDPKeyboardButton shared] keyboardShownInPid:(pid_t)SDPState(t)];
@@ -204,7 +209,7 @@ void SDPSpringBoardStart(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), mq, ^{
         if (gTick) return;
-        gTick = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+        gTick = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *t) {
             @try { SDPTick(); } @catch (NSException *e) { SDPLog(@"tick threw %@", e.reason); }
         }];
         SDPLog(@"ready %@", [SDPStage diagnostics]);

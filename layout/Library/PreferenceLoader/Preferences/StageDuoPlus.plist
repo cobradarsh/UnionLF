@@ -99,6 +99,28 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>A second floating button shows while two apps are open. Tap it to swap the top and bottom apps. Drag it anywhere; it uses the button size above.</string>
+			<key>label</key>
+			<string>Swap Button</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.stageduoplus/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.stageduoplus</string>
+			<key>key</key>
+			<string>swapButton</string>
+			<key>label</key>
+			<string>Show the Swap Button</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>Moves the app you're using in the bottom window up to the top, and the top app down to the bottom.
 
 When Typing: only when you tap a text box in the bottom app, so the keyboard never covers what you're typing.
@@ -171,7 +193,7 @@ Any Tap: as soon as you touch the bottom app. That first touch moves the app; it
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Records what Dynamic Stage+ does in /var/mobile/Library/Logs/StageDuoPlus.log. If a swap or a pair doesn't work, send that file.</string>
+			<string>Records what Dynamic Stage+ does in /var/mobile/Library/Logs/StageDuoPlus.log, and lets a computer connected over SSH run test commands and take screenshots (sdp_cmd.txt in the same folder). Turn it off when everything works.</string>
 			<key>label</key>
 			<string>Troubleshooting</string>
 		</dict>

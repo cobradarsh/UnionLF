@@ -117,6 +117,7 @@ uint64_t SDPState(int token) {
 - (SDPSwapMode)swapMode           { NSInteger m = (NSInteger)[self _d:@"swapMode" def:0]; return (m >= 0 && m <= 2) ? (SDPSwapMode)m : SDPSwapOff; }
 - (BOOL)refocusAfterSwap          { return [self _b:@"refocusAfterSwap" def:YES]; }
 - (BOOL)pairsEnabled              { return [self _b:@"pairsEnabled" def:YES]; }
+- (BOOL)swapButton                { return [self _b:@"swapButton" def:YES]; }
 - (BOOL)debugLog                  { return [self _b:@"debugLog" def:YES]; }
 
 - (NSArray<NSDictionary *> *)pairs {

@@ -28,7 +28,7 @@
 #define SDP_N_REFOCUS     "com.adarsh.sdplus.refocus"        // SB -> apps   state = pid that should re-open its keyboard
 #define SDP_N_PREFS       "com.adarsh.stageduoplus/prefs"    // Settings -> SB (PostNotification)
 #define SDP_DOMAIN        @"com.adarsh.stageduoplus"
-#define SDP_VERSION       @"1.0.0"                          // keep in step with control
+#define SDP_VERSION       @"1.0.1"                          // keep in step with control
 
 typedef NS_OPTIONS(uint64_t, SDPConfigBits) {
     SDPConfigKeyboardButton = 1 << 0,   // apps report keyboard show/hide
@@ -64,6 +64,7 @@ static inline id SDPMsg(id target, NSString *selName) {
 @property (nonatomic, readonly) SDPSwapMode swapMode;
 @property (nonatomic, readonly) BOOL refocusAfterSwap;
 @property (nonatomic, readonly) BOOL pairsEnabled;
+@property (nonatomic, readonly) BOOL swapButton;
 @property (nonatomic, readonly) BOOL debugLog;
 - (NSArray<NSDictionary *> *)pairs;               // @[ @{ @"top": bundleID, @"bottom": bundleID } ]
 - (void)setPairs:(NSArray<NSDictionary *> *)pairs;
@@ -85,6 +86,15 @@ static inline id SDPMsg(id target, NSString *selName) {
 + (NSArray<NSDictionary *> *)installedApps;       // @[ @{ @"id", @"name" } ] A–Z, no Apple system apps
 @end
 
+// Swap/pair knobs, adjustable at runtime from the debug command file (SDPDebug.m).
+typedef struct {
+    double settle;        // seconds to wait after Dynamic Stage settles before opening the old top app
+    BOOL openOldTop;      // open the old top app in the stage if Dynamic Stage didn't move it there
+    BOOL guardKills;      // skip Dynamic Stage's kills of the two apps during a swap
+    BOOL guardPairs;      // same during a pair launch
+} SDPTune;
+extern SDPTune gSDPTune;
+
 // ── bridge to Dynamic Stage's (obfuscated) classes ──
 @interface SDPStage : NSObject
 + (BOOL)available;                                // Dynamic Stage 1.2 classes are present
@@ -92,6 +102,7 @@ static inline id SDPMsg(id target, NSString *selName) {
 + (NSString *)stageBundleID;                      // that app (the bottom one)
 + (BOOL)openInStage:(NSString *)bid;              // what tapping an app in Dynamic Stage's strip does
 + (void)swapWithReason:(NSString *)why refocus:(BOOL)refocus;
++ (BOOL)nativeExpand;                             // Dynamic Stage's own "bring the stage app to the front"
 + (void)engagementFromPid:(pid_t)pid typing:(BOOL)typing;
 + (void)launchPairTop:(NSString *)top bottom:(NSString *)bottom;
 + (BOOL)isKillGuarded:(NSString *)bid;            // YES while a swap/pair is moving this app
@@ -106,6 +117,12 @@ static inline id SDPMsg(id target, NSString *selName) {
 - (void)refresh;                                  // re-evaluate visibility (timer, prefs change)
 @end
 
+// ── the floating swap button (shows while two apps are open) ──
+@interface SDPSwapButton : NSObject
++ (instancetype)shared;
+- (void)refresh;
+@end
+
 // ── App Pairs manager sheet (opened from the icon menu) ──
 @interface SDPPairsSheet : UIViewController
 + (void)presentForBundleID:(NSString *)bid;
@@ -115,3 +132,6 @@ void SDPSpringBoardStart(void);
 void SDPAppHelperStart(void);
 void SDPAppTouch(UIEvent *event);              // called from the -[UIApplication sendEvent:] hook
 extern BOOL gSDPTouchHookOK;
+void SDPDebugInstall(void);                        // call tracing (SpringBoard)
+void SDPDebugTick(void);                           // runs /var/mobile/Library/Logs/sdp_cmd.txt
+NSString *SDPBacktrace(NSUInteger skip, NSUInteger count);

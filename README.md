@@ -35,7 +35,8 @@ a log line), so a different version can't crash SpringBoard; the stage features 
 |---|---|
 | `Tweak.m` | Entry point. SpringBoard vs app role; hooks (icon menu, kill guard, `sendEvent:`) installed only if the method exists. |
 | `SDPStage.m` | Bridge into Dynamic Stage: open in stage, swap, launch a pair, kill guard, diagnostics. |
-| `SDPKeyboardButton.m` | The floating hide-keyboard button. |
+| `SDPButtons.m` | The floating buttons: hide-keyboard and swap (shared Wingman-style bubble). |
+| `SDPDebug.m` | Debug Log extras: call tracing, screenshots, and test commands from `sdp_cmd.txt`. |
 | `SDPPairsSheet.m` | App Pairs sheet + app picker (no text fields, so SpringBoard never needs keyboard focus). |
 | `SDPApp.m` | In-app part: reports keyboard up/down, typing, taps; dismisses / refocuses the keyboard. |
 | `SDPCore.m` | Log, Darwin-notify helpers, settings, SpringBoard helpers. |

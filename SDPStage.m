@@ -66,7 +66,9 @@ static void SDPAfter(double sec, dispatch_block_t b) {
     SEL o = NSSelectorFromString(@"open");
     BOOL open = [pane respondsToSelector:o] ? ((BOOL (*)(id, SEL))objc_msgSend)(pane, o) : YES;
     UIView *v = pane;
-    return open && v.window != nil && !v.window.hidden && v.superview != nil;
+    if (!open || !v.window || v.window.hidden || !v.superview) return NO;
+    CGRect r = [v convertRect:v.bounds toView:nil];          // minimised = a small pill, not a window
+    return r.size.width > 120 && r.size.height > 120;
 }
 
 + (NSString *)stageBundleID {
@@ -164,24 +166,51 @@ static void SDPAfter(double sec, dispatch_block_t b) {
 
 + (BOOL)openInStage:(NSString *)bid { return [self _openInStage:bid from:CGRectZero]; }
 
-// Poll until `bid` is the front app (or time runs out), then call back on the main queue.
-+ (void)_waitForFront:(NSString *)bid timeout:(double)timeout then:(void (^)(BOOL ok))done {
+// Poll `cond` every 0.1 s until it's true or time runs out, then call back on the main queue.
++ (void)_waitUntil:(BOOL (^)(void))cond timeout:(double)timeout then:(void (^)(BOOL ok))done {
     CFAbsoluteTime start = SDPNow();
     __block void (^tick)(void);
     __block __weak void (^weakTick)(void);
     tick = ^{
-        if ([[SDPHost frontmostBundleID] isEqualToString:bid]) { done(YES); return; }
+        if (cond()) { done(YES); return; }
         if (SDPNow() - start > timeout) { done(NO); return; }
         void (^again)(void) = weakTick;
         if (again) SDPAfter(0.1, again);
     };
     weakTick = tick;
     SDPAfter(0.1, tick);
-    // keep `tick` alive until the timeout passes
-    SDPAfter(timeout + 0.5, ^{ (void)tick; });
+    SDPAfter(timeout + 0.5, ^{ (void)tick; });   // keep `tick` alive until the timeout passes
+}
+
++ (void)_waitForFront:(NSString *)bid timeout:(double)timeout then:(void (^)(BOOL ok))done {
+    [self _waitUntil:^BOOL { return [[SDPHost frontmostBundleID] isEqualToString:bid]; } timeout:timeout then:done];
 }
 
 #pragma mark - swap
+
+// Exactly what the end of Dynamic Stage's own drag-up gesture does (block sub_947a0 in 1.2):
+//     [[DS_llIIlIII… sharedInstance] DS_IlllIIII…];
+//     [[PaneClass DS_IIlIllIl…] DS_llIIIlIIlIIllIllIIIllllIIlIlll];   // bring the stage app to the front
+// Dynamic Stage's own hooks then resize the apps (in iPhone launch mode by killing and
+// relaunching them), so nothing may get in its way: no kill guard here by default.
++ (BOOL)nativeExpand {
+    id pane = SDPMsg(NSClassFromString(kPaneClass), kPaneCurrent) ?: [self _pane];
+    SEL expand = NSSelectorFromString(kPaneExpand);
+    if (!pane || ![pane respondsToSelector:expand]) {
+        SDPLog(@"nativeExpand: no pane / selector %@", [self diagnostics]);
+        return NO;
+    }
+    id helper = SDPMsg(NSClassFromString(kHelperClass), @"sharedInstance");
+    SEL prep = NSSelectorFromString(kHelperPrep);
+    @try {
+        if ([helper respondsToSelector:prep]) ((void (*)(id, SEL))objc_msgSend)(helper, prep);
+        ((void (*)(id, SEL))objc_msgSend)(pane, expand);
+    } @catch (NSException *e) {
+        SDPLog(@"nativeExpand threw %@", e.reason);
+        return NO;
+    }
+    return YES;
+}
 
 + (void)swapWithReason:(NSString *)why refocus:(BOOL)refocus {
     if (SDPNow() - gLastSwap < 1.5) return;                  // never ping-pong
@@ -193,29 +222,40 @@ static void SDPAfter(double sec, dispatch_block_t b) {
     }
     if (![self _claimBusy]) return;
     gLastSwap = SDPNow();
-    [self _guard:top];
-    [self _guard:bottom];
+    if (gSDPTune.guardKills) { [self _guard:top]; [self _guard:bottom]; }
 
     UIView *pane = [self _pane];
     CGRect paneRect = [pane isKindOfClass:UIView.class] ? [pane convertRect:pane.bounds toView:nil] : CGRectZero;
     SDPLog(@"swap(%@): top %@ <-> stage %@ %@", why, top, bottom, [self diagnostics]);
 
-    BOOL launched = [SDPHost launchApp:bottom];
-    [self _waitForFront:bottom timeout:2.5 then:^(BOOL ok) {
-        SDPLog(@"swap: launch(%@)=%d front=%d %@", bottom, launched, ok, [self diagnostics]);
-        SDPAfter(ok ? 0.35 : 0.05, ^{
-            BOOL opened = [self _openInStage:top from:paneRect];
-            if (!opened) [SDPHost toast:@"Dynamic Stage+ couldn't swap the windows."];
-            if (refocus) {
-                SDPAfter(0.9, ^{
-                    pid_t p = [SDPHost pidForBundleID:bottom];
-                    if (p > 0) SDPPost(SDP_N_REFOCUS, (uint64_t)p);
-                });
-            }
-            SDPAfter(1.5, ^{ SDPLog(@"swap done %@", [self diagnostics]); });
-            [self _releaseBusyAfter:1.2];
-            gLastSwap = SDPNow();
-        });
+    BOOL native = [self nativeExpand];
+    if (!native) [SDPHost launchApp:bottom];
+    SDPLog(@"swap: %@", native ? @"native expand called" : @"fallback: launched the stage app");
+
+    // 1) the stage app reaches the front, 2) Dynamic Stage finishes reacting (closes or
+    // re-fills its stage window), 3) if the old top app isn't in the stage yet, open it there.
+    [self _waitForFront:bottom timeout:3.0 then:^(BOOL front) {
+        SDPLog(@"swap: front=%d %@", front, [self diagnostics]);
+        [self _waitUntil:^BOOL { return ![self isOpen] || ![[self stageBundleID] isEqualToString:bottom]; }
+                 timeout:2.5 then:^(BOOL settled) {
+            SDPAfter(gSDPTune.settle, ^{
+                SDPLog(@"swap: settled=%d %@", settled, [self diagnostics]);
+                if ([self isOpen] && [[self stageBundleID] isEqualToString:top]) {
+                    SDPLog(@"swap: Dynamic Stage already moved %@ into the stage", top);
+                } else if (gSDPTune.openOldTop) {
+                    if (![self _openInStage:top from:paneRect]) [SDPHost toast:@"Dynamic Stage+ couldn't swap the windows."];
+                }
+                if (refocus) {
+                    SDPAfter(1.2, ^{
+                        pid_t p = [SDPHost pidForBundleID:bottom];
+                        if (p > 0) SDPPost(SDP_N_REFOCUS, (uint64_t)p);
+                    });
+                }
+                SDPAfter(2.0, ^{ SDPLog(@"swap done %@", [self diagnostics]); });
+                [self _releaseBusyAfter:1.5];
+                gLastSwap = SDPNow();
+            });
+        }];
     }];
 }
 
@@ -243,8 +283,7 @@ static void SDPAfter(double sec, dispatch_block_t b) {
         return;
     }
     if (![self _claimBusy]) return;
-    [self _guard:top];
-    [self _guard:bottom];
+    if (gSDPTune.guardPairs) { [self _guard:top]; [self _guard:bottom]; }
     SDPLog(@"pair: top %@ + stage %@ %@", top, bottom, [self diagnostics]);
 
     void (^openBottom)(void) = ^{
