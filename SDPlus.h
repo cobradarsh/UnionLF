@@ -28,7 +28,7 @@
 #define SDP_N_REFOCUS     "com.adarsh.sdplus.refocus"        // SB -> apps   state = pid that should re-open its keyboard
 #define SDP_N_PREFS       "com.adarsh.stageduoplus/prefs"    // Settings -> SB (PostNotification)
 #define SDP_DOMAIN        @"com.adarsh.stageduoplus"
-#define SDP_VERSION       @"1.0.7"                          // keep in step with control
+#define SDP_VERSION       @"1.0.8"                          // keep in step with control
 
 typedef NS_OPTIONS(uint64_t, SDPConfigBits) {
     SDPConfigKeyboardButton = 1 << 0,   // apps report keyboard show/hide
@@ -102,7 +102,8 @@ typedef struct {
     double fitDelay;      // seconds after the reveal before the top app is fitted
     int revealViewMode;   // view the synthetic swipe reports: 0 gesture view, 1 its window, 2 its superview
     BOOL revealCleanup;   // if Dynamic Stage leaves the card in its "dragging" look, finish it ourselves
-    int swapStyle;        // 0 = keep the stage (open top in stage, raise bottom, reveal); 1 = native expand
+    int swapStyle;        // 2 = expand, open old top while it's in the background, reveal, fit (default)
+                          // 0 = open top in the stage first, raise bottom, reveal; 1 = native expand only
 } SDPTune;
 extern SDPTune gSDPTune;
 

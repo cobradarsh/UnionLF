@@ -34,7 +34,7 @@ static NSString *const kHelperClass = @"DS_llIIlIIIIIIlIllIllIlllIlIIllII"; // +
 static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // called right before the expand
 
 SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
-                     .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0,
+                     .revealTo = 0.68, .revealFrames = 18, .swapStyle = 2,
                      .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES,
                      .fitFrac = 0.5365, .fitDelay = 0.7, .revealViewMode = 1, .revealCleanup = YES };
 
@@ -322,9 +322,19 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
            NSStringFromClass([reported class]), NSStringFromCGRect(reported.bounds));
     CGFloat x = s.size.width / 2, y0 = s.size.height - 6, y1 = s.size.height * MAX(0.2, MIN(0.95, gSDPTune.revealTo));
     int frames = MAX(3, MIN(90, gSDPTune.revealFrames));
+    // Dynamic Stage's stage window records where the finger is (touchLocation, set from its hit
+    // testing on real touches); its "finger lifted" logic reads it. A synthetic swipe has no
+    // touches, so keep it in step with the scripted finger.
+    UIWindow *stageWindow = gv.window;
+    SEL setTouch = NSSelectorFromString(@"setTouchLocation:");
+    BOOL feedTouch = [stageWindow respondsToSelector:setTouch];
     void (^send)(UIGestureRecognizerState, CGFloat) = ^(UIGestureRecognizerState st, CGFloat y) {
         g.fakeState = st;
         g.fakePoint = CGPointMake(x, y);
+        if (feedTouch) {
+            CGPoint p = [stageWindow convertPoint:CGPointMake(x, y) fromWindow:nil];
+            ((void (*)(id, SEL, CGPoint))objc_msgSend)(stageWindow, setTouch, p);
+        }
         @try { ((void (*)(id, SEL, id))objc_msgSend)(gv, entry, g); }
         @catch (NSException *e) { SDPLog(@"reveal threw %@", e.reason); }
     };
@@ -492,6 +502,7 @@ static void SDPCollectViews(UIView *v, Class c, NSMutableArray *out, int depth) 
     if (![self _claimBusy]) return;
     gLastSwap = SDPNow();
     if (gSDPTune.swapStyle == 0) { [self _swapKeepingStageTop:top bottom:bottom why:why refocus:refocus]; return; }
+    if (gSDPTune.swapStyle == 2) { [self _swapByExpandTop:top bottom:bottom why:why refocus:refocus]; return; }
     if (gSDPTune.guardKills) { [self _guard:top]; [self _guard:bottom]; }
 
     UIView *pane = [self _pane];
@@ -524,6 +535,44 @@ static void SDPCollectViews(UIView *v, Class c, NSMutableArray *out, int depth) 
                 SDPAfter(2.0, ^{ SDPLog(@"swap done %@", [self diagnostics]); });
                 [self _releaseBusyAfter:1.5];
                 gLastSwap = SDPNow();
+            });
+        }];
+    }];
+}
+
+// Swap the way you would by hand: Dynamic Stage's own expand brings the stage app to the front
+// (its stage window closes, the old top app goes to the background but stays alive), then the
+// old top app is opened in the stage while it's in the background (the case its app strip
+// handles, so its window connects), then the stage is revealed and the new top app fitted.
++ (void)_swapByExpandTop:(NSString *)top bottom:(NSString *)bottom why:(NSString *)why refocus:(BOOL)refocus {
+    SDPLog(@"swap(%@, expand): top %@ <-> stage %@ %@", why, top, bottom, [self diagnostics]);
+    CGRect paneRect = [self stageFrame];
+    if (![self nativeExpand]) [SDPHost launchApp:bottom];
+    [self _waitForFront:bottom timeout:3.0 then:^(BOOL front) {
+        [self _waitUntil:^BOOL { return ![self isOpen]; } timeout:2.0 then:^(BOOL closed) {
+            SDPAfter(gSDPTune.settle, ^{
+                SDPLog(@"swap: %@ in front=%d stage closed=%d %@", bottom, front, closed, [self diagnostics]);
+                if (![self _openInStage:top from:paneRect]) {
+                    [SDPHost toast:@"Dynamic Stage+ couldn't swap the windows."];
+                    [self _releaseBusyAfter:0.2];
+                    return;
+                }
+                SDPAfter(0.5, ^{
+                    if (![self isOpen]) [self revealStage];
+                    SDPAfter(0.35 + gSDPTune.fitDelay, ^{
+                        [self fitTopApp:bottom];
+                        SDPAfter(0.5, ^{ if (gSDPTune.revealCleanup) [self finishCard]; });
+                    });
+                    if (refocus) {
+                        SDPAfter(1.8, ^{
+                            pid_t p = [SDPHost pidForBundleID:bottom];
+                            if (p > 0) SDPPost(SDP_N_REFOCUS, (uint64_t)p);
+                        });
+                    }
+                    SDPAfter(2.5, ^{ SDPLog(@"swap done %@", [self diagnostics]); });
+                    [self _releaseBusyAfter:2.2];
+                    gLastSwap = SDPNow();
+                });
             });
         }];
     }];
