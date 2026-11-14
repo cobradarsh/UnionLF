@@ -37,7 +37,7 @@ SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardP
                      .revealTo = 0.68, .revealFrames = 18, .swapStyle = 2,
                      .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES,
                      .fitFrac = 0.5365, .fitDelay = 0.7, .revealViewMode = 1, .revealCleanup = YES,
-                     .guardSwap = YES };
+                     .guardSwap = 1 };
 
 // Dynamic Stage's "relaunch with frame" singleton (DS_IIlIIIlIl…: settings, bundle id, frame).
 // At the end of its own swipe, block sub_95e44 stores the top-window frame for the front app here
@@ -546,10 +546,13 @@ static void SDPCollectViews(UIView *v, Class c, NSMutableArray *out, int depth) 
 // old top app is opened in the stage while it's in the background (the case its app strip
 // handles, so its window connects), then the stage is revealed and the new top app fitted.
 + (void)_swapByExpandTop:(NSString *)top bottom:(NSString *)bottom why:(NSString *)why refocus:(BOOL)refocus {
-    // Dynamic Stage kills an app when its stage window closes (Auto Kill) and when it resizes the
-    // old top app. During a swap both apps are only changing windows, so those two kills are
-    // skipped for a few seconds and the apps keep their state (same process before and after).
-    if (gSDPTune.guardSwap) { [self _guard:top]; [self _guard:bottom]; }
+    // Dynamic Stage kills apps during a swap (Auto Kill, and its resize of the old top app).
+    // The app moving DOWN gets a fresh stage scene, so it can stay alive and keep its state.
+    // The app moving UP is left to Dynamic Stage: iPad-mode apps (Instagram, Safari) resize live
+    // and are never killed; iPhone-mode apps (WhatsApp) can only take the new top-window size and
+    // insets by relaunching, so their kill has to happen (kept alive, the layout comes out wrong).
+    if (gSDPTune.guardSwap >= 1) [self _guard:top];
+    if (gSDPTune.guardSwap >= 2) [self _guard:bottom];
     pid_t topPid = [SDPHost pidForBundleID:top], bottomPid = [SDPHost pidForBundleID:bottom];
     SDPLog(@"swap(%@, expand): top %@ (pid %d) <-> stage %@ (pid %d) guard=%d %@", why, top, topPid,
            bottom, bottomPid, gSDPTune.guardSwap, [self diagnostics]);
