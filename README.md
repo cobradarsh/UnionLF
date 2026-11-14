@@ -14,17 +14,23 @@ Settings → **Dynamic Stage+** (plist-only page; changes apply without a respri
 ## How it talks to Dynamic Stage
 
 Dynamic Stage's classes and selectors are obfuscated (`DS_lIlIIl…`). The ones used here were
-recovered from the 1.2 binary (`SDPStage.m` documents each). The key one is what Dynamic Stage's
-own app strip does when you tap an app:
+recovered from the 1.2 binary and confirmed on device with call tracing (`SDPStage.m` documents
+each). Everything replays what Dynamic Stage does itself:
 
-```objc
-[[DS_IIllIIIIIIIlllIIIIllllllIllIll DS_IlIIIlIllllllIIIlIIIIlIIlIIIII]
-    DS_IIlIIlIIlllIlIIIlIIIIlIlIIlIII:@{ @"app": SBApplication, @"view": originView }];
-```
+| Step | What Dynamic Stage does natively | How Dynamic Stage+ triggers it |
+|---|---|---|
+| Open an app in the stage | App strip fills a global `@{view, app}` (0xe5c10 arm64e), then calls the card's open method with nil | Fill the same global (checked to be in its `__common`), call open with nil |
+| Bring the stage app up | End of its drag-up gesture: `[[pane class] current]` → `DS_llIIIlIIlIIllIllIIIllllIIlIlll` | Same call (`nativeExpand`) |
+| Show a hidden stage | Swipe up from the bottom edge | A scripted swipe into its gesture view (`gestureRecognizerShouldBegin:` first, `touchLocation` fed per frame) |
+| Fit the top app | Swipe end stores `bundleID + {0,0,W,500}` in its relaunch singleton, then relaunches the app | Same two calls (`fitTopApp:`) |
 
-A swap is: bring the stage app to the front (`launchApplicationWithIdentifier:suspended:`), then
-open the previous front app in the stage. While that happens, kills of the two apps (Dynamic
-Stage's Auto Kill) are skipped for a few seconds.
+**Swap** = expand the stage app → open the old top app in the stage once it's in the background
+(the case its app strip handles, so its window connects) → reveal → fit. The app moving down is
+kept alive (Dynamic Stage's Auto Kill is skipped for it for a few seconds). The app moving up is
+only restarted if it's in Dynamic Stage's **iPhone launch mode** (e.g. WhatsApp): those apps can
+only take a new size by relaunching. iPad-mode apps (Instagram, Safari) keep their state both ways.
+
+**App Pair** = launch the first app → open the second in the (hidden) stage → reveal → fit.
 
 These names only match **1.2**. Every call checks `respondsToSelector:` and fails soft (a toast and
 a log line), so a different version can't crash SpringBoard; the stage features just stop.
