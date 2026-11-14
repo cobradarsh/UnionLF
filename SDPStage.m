@@ -36,7 +36,8 @@ static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // c
 SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
                      .revealTo = 0.68, .revealFrames = 18, .swapStyle = 2,
                      .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES,
-                     .fitFrac = 0.5365, .fitDelay = 0.7, .revealViewMode = 1, .revealCleanup = YES };
+                     .fitFrac = 0.5365, .fitDelay = 0.7, .revealViewMode = 1, .revealCleanup = YES,
+                     .guardSwap = YES };
 
 // Dynamic Stage's "relaunch with frame" singleton (DS_IIlIIIlIl…: settings, bundle id, frame).
 // At the end of its own swipe, block sub_95e44 stores the top-window frame for the front app here
@@ -545,7 +546,13 @@ static void SDPCollectViews(UIView *v, Class c, NSMutableArray *out, int depth) 
 // old top app is opened in the stage while it's in the background (the case its app strip
 // handles, so its window connects), then the stage is revealed and the new top app fitted.
 + (void)_swapByExpandTop:(NSString *)top bottom:(NSString *)bottom why:(NSString *)why refocus:(BOOL)refocus {
-    SDPLog(@"swap(%@, expand): top %@ <-> stage %@ %@", why, top, bottom, [self diagnostics]);
+    // Dynamic Stage kills an app when its stage window closes (Auto Kill) and when it resizes the
+    // old top app. During a swap both apps are only changing windows, so those two kills are
+    // skipped for a few seconds and the apps keep their state (same process before and after).
+    if (gSDPTune.guardSwap) { [self _guard:top]; [self _guard:bottom]; }
+    pid_t topPid = [SDPHost pidForBundleID:top], bottomPid = [SDPHost pidForBundleID:bottom];
+    SDPLog(@"swap(%@, expand): top %@ (pid %d) <-> stage %@ (pid %d) guard=%d %@", why, top, topPid,
+           bottom, bottomPid, gSDPTune.guardSwap, [self diagnostics]);
     CGRect paneRect = [self stageFrame];
     if (![self nativeExpand]) [SDPHost launchApp:bottom];
     [self _waitForFront:bottom timeout:3.0 then:^(BOOL front) {
@@ -569,7 +576,12 @@ static void SDPCollectViews(UIView *v, Class c, NSMutableArray *out, int depth) 
                             if (p > 0) SDPPost(SDP_N_REFOCUS, (uint64_t)p);
                         });
                     }
-                    SDPAfter(2.5, ^{ SDPLog(@"swap done %@", [self diagnostics]); });
+                    SDPAfter(2.5, ^{
+                        pid_t nt = [SDPHost pidForBundleID:bottom], nb = [SDPHost pidForBundleID:top];
+                        SDPLog(@"swap done: %@ pid %d->%d %@, %@ pid %d->%d %@ %@",
+                               bottom, bottomPid, nt, nt == bottomPid ? @"(kept)" : @"(RESTARTED)",
+                               top, topPid, nb, nb == topPid ? @"(kept)" : @"(RESTARTED)", [self diagnostics]);
+                    });
                     [self _releaseBusyAfter:2.2];
                     gLastSwap = SDPNow();
                 });

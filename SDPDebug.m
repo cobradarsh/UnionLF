@@ -264,6 +264,7 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
             else if ([a1 isEqualToString:@"fitDelay"])   gSDPTune.fitDelay = a2.doubleValue;
             else if ([a1 isEqualToString:@"revealViewMode"]) gSDPTune.revealViewMode = a2.intValue;
             else if ([a1 isEqualToString:@"revealCleanup"]) gSDPTune.revealCleanup = a2.boolValue;
+            else if ([a1 isEqualToString:@"guardSwap"])  gSDPTune.guardSwap = a2.boolValue;
             SDPLog(@"tune: settle=%.2f guardKills=%d revealTo=%.2f frames=%d hold=%d gap=%d reset=%.2f swapStyle=%d",
                    gSDPTune.settle, gSDPTune.guardKills, gSDPTune.revealTo, gSDPTune.revealFrames,
                    gSDPTune.revealHold, gSDPTune.revealEndGap, gSDPTune.revealReset, gSDPTune.swapStyle);
