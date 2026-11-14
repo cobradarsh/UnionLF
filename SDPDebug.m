@@ -11,6 +11,7 @@
         launch <bundle id>    bring an app to the front
         pair <top> <bottom>   launch an app pair
         set <knob> <value>    settle | openOldTop | guardKills | guardPairs
+        trace on|off          log every action method Dynamic Stage runs (to copy a native gesture)
         wait <seconds>        pause before the next line
 
     Tracing: every app launch SpringBoard does, every FBProcess kill, and Dynamic Stage's
@@ -108,6 +109,103 @@ static void SDPShot(NSString *name) {
     SDPLog(@"shot -> %@ (%lu bytes) %@", path.lastPathComponent, (unsigned long)jpg.length, ok ? @"" : @"WRITE FAILED");
 }
 
+#pragma mark - method tracing ("trace on")
+
+// Wraps every action-style method of Dynamic Stage's classes (no return value; no argument,
+// one object or one BOOL) so a native gesture's exact call sequence lands in the log.
+// Signatures come from the ObjC type encodings, so the generic wrappers are exact.
+static NSMutableDictionary<NSString *, NSValue *> *gTraceOrig;   // "-Class|sel" -> original IMP
+static NSMutableDictionary<NSString *, NSNumber *> *gTraceLast;  // per-selector rate limit
+static BOOL gTraceOn;
+
+static IMP SDPTraceOrig(id self, SEL cmd, NSString **owner) {
+    BOOL meta = class_isMetaClass(object_getClass(self));
+    for (Class c = object_getClass(self); c; c = class_getSuperclass(c)) {
+        NSString *k = [NSString stringWithFormat:@"%c%s|%s", meta ? '+' : '-', class_getName(c), sel_getName(cmd)];
+        NSValue *v = gTraceOrig[k];
+        if (v) { if (owner) *owner = k; return (IMP)v.pointerValue; }
+    }
+    return NULL;
+}
+
+static void SDPTraceNote(NSString *key, NSString *arg) {
+    if (!gTraceOn) return;
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (now - [gTraceLast[key] doubleValue] < 0.25) return;      // scroll/gesture handlers fire per frame
+    gTraceLast[key] = @(now);
+    NSString *k = [key stringByReplacingOccurrencesOfString:@"|" withString:@" "];
+    SDPLog(@"T %@%@", k, arg ?: @"");
+}
+
+static NSString *SDPArgDesc(id a) {
+    if (!a) return @"(nil)";
+    NSString *bid = [a respondsToSelector:@selector(bundleIdentifier)] ? SDPMsg(a, @"bundleIdentifier") : nil;
+    if ([a isKindOfClass:UIGestureRecognizer.class])
+        return [NSString stringWithFormat:@"<%@ state=%ld>", NSStringFromClass([a class]), (long)((UIGestureRecognizer *)a).state];
+    return [NSString stringWithFormat:@"<%@%@%@>", NSStringFromClass([a class]), bid ? @" " : @"", bid ?: @""];
+}
+
+static void trace0(id self, SEL _cmd) {
+    NSString *key = nil; IMP o = SDPTraceOrig(self, _cmd, &key);
+    SDPTraceNote(key, nil);
+    if (o) ((void (*)(id, SEL))o)(self, _cmd);
+}
+static void trace1(id self, SEL _cmd, id a) {
+    NSString *key = nil; IMP o = SDPTraceOrig(self, _cmd, &key);
+    SDPTraceNote(key, [@" " stringByAppendingString:SDPArgDesc(a)]);
+    if (o) ((void (*)(id, SEL, id))o)(self, _cmd, a);
+}
+static void traceB(id self, SEL _cmd, BOOL b) {
+    NSString *key = nil; IMP o = SDPTraceOrig(self, _cmd, &key);
+    SDPTraceNote(key, b ? @" YES" : @" NO");
+    if (o) ((void (*)(id, SEL, BOOL))o)(self, _cmd, b);
+}
+
+static void SDPTraceInstall(void) {
+    if (gTraceOrig) { gTraceOn = YES; return; }
+    gTraceOrig = [NSMutableDictionary dictionary];
+    gTraceLast = [NSMutableDictionary dictionary];
+    Class card = NSClassFromString(@"DS_IIllIIIIIIIlllIIIIllllllIllIll");
+    const char *image = card ? class_getImageName(card) : NULL;
+    if (!image) { SDPLog(@"trace: Dynamic Stage image not found"); return; }
+    NSSet *skip = [NSSet setWithArray:@[ @"layoutSubviews", @"dealloc", @".cxx_destruct", @"setup", @"layoutBars",
+        @"animateBars", @"startAnimating", @"stopAnimating", @"centerActiveDot", @"createDots", @"viewDidLoad",
+        @"traitCollectionDidChange:", @"willMoveToSuperview:", @"scrollViewDidScroll:", @"pauseDisplayLink",
+        @"playVideo", @"gestureAnimLoop:", @"viewWillAppear" ]];
+    unsigned int n = 0, hooked = 0;
+    const char **names = objc_copyClassNamesForImage(image, &n);
+    for (unsigned int i = 0; i < n; i++) {
+        if (strncmp(names[i], "DS_", 3) != 0 && strcmp(names[i], "SDGestureViewWrap") != 0) continue;
+        Class c = objc_getClass(names[i]);
+        for (int meta = 0; meta < 2 && c; meta++) {
+            Class k = meta ? object_getClass(c) : c;
+            unsigned int mc = 0;
+            Method *ms = class_copyMethodList(k, &mc);
+            for (unsigned int j = 0; j < mc; j++) {
+                SEL s = method_getName(ms[j]);
+                NSString *sn = NSStringFromSelector(s);
+                const char *enc = method_getTypeEncoding(ms[j]);
+                if (!enc || [sn hasPrefix:@"set"] || [skip containsObject:sn]) continue;
+                IMP repl = NULL;
+                if (!strcmp(enc, "v16@0:8")) repl = (IMP)trace0;
+                else if (!strcmp(enc, "v24@0:8@16")) repl = (IMP)trace1;
+                else if (!strcmp(enc, "v20@0:8B16")) repl = (IMP)traceB;
+                if (!repl) continue;
+                IMP orig = NULL;
+                MSHookMessageEx(k, s, repl, &orig);
+                if (orig) {
+                    gTraceOrig[[NSString stringWithFormat:@"%c%s|%@", meta ? '+' : '-', names[i], sn]] = [NSValue valueWithPointer:(const void *)orig];
+                    hooked++;
+                }
+            }
+            free(ms);
+        }
+    }
+    free(names);
+    gTraceOn = YES;
+    SDPLog(@"trace: wrapped %u Dynamic Stage methods", hooked);
+}
+
 #pragma mark - command file
 
 static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
@@ -128,6 +226,7 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
         else if ([cmd isEqualToString:@"open"] && a1)   SDPLog(@"open -> %d", [SDPStage openInStage:a1]);
         else if ([cmd isEqualToString:@"launch"] && a1) SDPLog(@"launch -> %d", [SDPHost launchApp:a1]);
         else if ([cmd isEqualToString:@"pair"] && a2)   [SDPStage launchPairTop:a1 bottom:a2];
+        else if ([cmd isEqualToString:@"trace"])         { if ([a1 isEqualToString:@"off"]) gTraceOn = NO; else SDPTraceInstall(); }
         else if ([cmd isEqualToString:@"set"] && a2) {
             if ([a1 isEqualToString:@"settle"])          gSDPTune.settle = a2.doubleValue;
             else if ([a1 isEqualToString:@"openOldTop"]) gSDPTune.openOldTop = a2.boolValue;
