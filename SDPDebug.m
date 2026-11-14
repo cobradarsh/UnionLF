@@ -8,6 +8,7 @@
         swap                  swap top and bottom (same as the swap button)
         expand                only Dynamic Stage's native "bring the stage app to the front"
         reveal                synthetic swipe-up that shows a hidden stage window
+        dsstop                Dynamic Stage's own gesture stop (un-sticks a half-revealed card)
         open <bundle id>      open an app in the stage window
         launch <bundle id>    bring an app to the front
         pair <top> <bottom>   launch an app pair
@@ -225,6 +226,7 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
         else if ([cmd isEqualToString:@"swap"])   [SDPStage swapWithReason:@"cmd" refocus:NO];
         else if ([cmd isEqualToString:@"expand"]) SDPLog(@"expand -> %d", [SDPStage nativeExpand]);
         else if ([cmd isEqualToString:@"reveal"]) SDPLog(@"reveal -> %d", [SDPStage revealStage]);
+        else if ([cmd isEqualToString:@"dsstop"]) [SDPStage stopGesture];
         else if ([cmd isEqualToString:@"open"] && a1)   SDPLog(@"open -> %d", [SDPStage openInStage:a1]);
         else if ([cmd isEqualToString:@"launch"] && a1) SDPLog(@"launch -> %d", [SDPHost launchApp:a1]);
         else if ([cmd isEqualToString:@"pair"] && a2)   [SDPStage launchPairTop:a1 bottom:a2];
@@ -237,9 +239,12 @@ static void SDPRunCommands(NSArray<NSString *> *lines, NSUInteger i) {
             else if ([a1 isEqualToString:@"revealTo"])   gSDPTune.revealTo = a2.doubleValue;
             else if ([a1 isEqualToString:@"revealFrames"]) gSDPTune.revealFrames = a2.intValue;
             else if ([a1 isEqualToString:@"swapStyle"])  gSDPTune.swapStyle = a2.intValue;
-            SDPLog(@"tune: settle=%.2f openOldTop=%d guardKills=%d guardPairs=%d revealTo=%.2f revealFrames=%d swapStyle=%d",
-                   gSDPTune.settle, gSDPTune.openOldTop, gSDPTune.guardKills, gSDPTune.guardPairs,
-                   gSDPTune.revealTo, gSDPTune.revealFrames, gSDPTune.swapStyle);
+            else if ([a1 isEqualToString:@"revealHold"]) gSDPTune.revealHold = a2.intValue;
+            else if ([a1 isEqualToString:@"revealEndGap"]) gSDPTune.revealEndGap = a2.intValue;
+            else if ([a1 isEqualToString:@"revealReset"]) gSDPTune.revealReset = a2.doubleValue;
+            SDPLog(@"tune: settle=%.2f guardKills=%d revealTo=%.2f frames=%d hold=%d gap=%d reset=%.2f swapStyle=%d",
+                   gSDPTune.settle, gSDPTune.guardKills, gSDPTune.revealTo, gSDPTune.revealFrames,
+                   gSDPTune.revealHold, gSDPTune.revealEndGap, gSDPTune.revealReset, gSDPTune.swapStyle);
         } else if (cmd.length) SDPLog(@"cmd: unknown '%@'", line);
     } @catch (NSException *e) {
         SDPLog(@"cmd '%@' threw %@", line, e.reason);

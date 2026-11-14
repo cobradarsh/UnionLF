@@ -34,7 +34,8 @@ static NSString *const kHelperClass = @"DS_llIIlIIIIIIlIllIllIlllIlIIllII"; // +
 static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // called right before the expand
 
 SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
-                     .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0 };
+                     .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0,
+                     .revealHold = 4, .revealEndGap = 2, .revealReset = 0.05 };
 
 static NSString *const kGestureView  = @"DS_lIlIIlIIlllIllllIllllllIlIIIIl";  // the bottom-edge gesture view
 static NSString *const kGestureEntry = @"DS_lIllIlllIllIIIllllIIlllIllIIII:"; // its gesture action (any recognizer)
@@ -59,6 +60,8 @@ static NSString *const kGestureEntry = @"DS_lIllIlllIllIIIllllIIlllIllIIII:"; //
 - (CGPoint)translationInView:(UIView *)v { return CGPointZero; }
 - (CGPoint)velocityInView:(UIView *)v { return CGPointMake(0, -1200); }
 @end
+
+static SDPFakeSwipe *gLastSwipe;   // kept alive: Dynamic Stage holds on to the recognizer it is given
 
 static NSMutableDictionary<NSString *, NSNumber *> *gKillGuard;   // bundle id -> guarded until
 static BOOL gBusy;                                                // a swap / pair launch is running
@@ -309,20 +312,36 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
         @try { ((void (*)(id, SEL, id))objc_msgSend)(gv, entry, g); }
         @catch (NSException *e) { SDPLog(@"reveal threw %@", e.reason); }
     };
-    SDPLog(@"reveal: swipe %.0f -> %.0f over %d frames %@", y0, y1, frames, [self diagnostics]);
+    int hold = MAX(0, MIN(60, gSDPTune.revealHold)), gap = MAX(1, MIN(30, gSDPTune.revealEndGap));
+    double reset = gSDPTune.revealReset;
+    gLastSwipe = g;
+    SDPLog(@"reveal: swipe %.0f -> %.0f, %d frames + hold %d + gap %d, reset %.2f %@",
+           y0, y1, frames, hold, gap, reset, [self diagnostics]);
     send(UIGestureRecognizerStateBegan, y0);
     __block int i = 0;
+    // one event per display frame, like a real finger: move, hold still, lift on its own frame
     [NSTimer scheduledTimerWithTimeInterval:1.0 / 60 repeats:YES block:^(NSTimer *t) {
         i++;
-        double p = (double)i / frames, e = 1 - (1 - p) * (1 - p);          // ease out
-        CGFloat y = y0 + (y1 - y0) * MIN(1.0, e);
-        if (i < frames) { send(UIGestureRecognizerStateChanged, y); return; }
-        send(UIGestureRecognizerStateChanged, y1);
+        if (i <= frames) {
+            double p = (double)i / frames, e = 1 - (1 - p) * (1 - p);      // ease out
+            send(UIGestureRecognizerStateChanged, y0 + (y1 - y0) * MIN(1.0, e));
+            return;
+        }
+        if (i <= frames + hold) { send(UIGestureRecognizerStateChanged, y1); return; }
+        if (i < frames + hold + gap) return;                                // finger still down, no event
         send(UIGestureRecognizerStateEnded, y1);
         [t invalidate];
-        SDPAfter(1.2, ^{ SDPLog(@"reveal done %@", [self diagnostics]); });
+        if (reset >= 0) SDPAfter(reset, ^{ g.fakeState = UIGestureRecognizerStatePossible; });
+        SDPAfter(1.5, ^{ SDPLog(@"reveal done %@", [self diagnostics]); });
     }];
     return YES;
+}
+
++ (void)stopGesture {
+    UIView *gv = [self _gestureView];
+    SEL stop = NSSelectorFromString(@"stop");
+    if ([gv respondsToSelector:stop]) ((void (*)(id, SEL))objc_msgSend)(gv, stop);
+    SDPLog(@"gesture stop -> %@", gv ? @"called" : @"no gesture view");
 }
 
 #pragma mark - swap
