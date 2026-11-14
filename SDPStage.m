@@ -35,7 +35,7 @@ static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // c
 
 SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
                      .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0,
-                     .revealHold = 4, .revealEndGap = 2, .revealReset = 0.05 };
+                     .revealHold = 0, .revealEndGap = 1, .revealReset = 0.05, .revealShouldBegin = YES };
 
 static NSString *const kGestureView  = @"DS_lIlIIlIIlllIllllIllllllIlIIIIl";  // the bottom-edge gesture view
 static NSString *const kGestureEntry = @"DS_lIllIlllIllIIIllllIIlllIllIIII:"; // its gesture action (any recognizer)
@@ -317,6 +317,16 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
     gLastSwipe = g;
     SDPLog(@"reveal: swipe %.0f -> %.0f, %d frames + hold %d + gap %d, reset %.2f %@",
            y0, y1, frames, hold, gap, reset, [self diagnostics]);
+    // Dynamic Stage's hook on SpringBoard's pull gesture asks this first; it records the start
+    // point and resets the flags the "finger lifted" branch relies on.
+    g.fakeState = UIGestureRecognizerStatePossible;
+    g.fakePoint = CGPointMake(x, y0);
+    if (gSDPTune.revealShouldBegin && [gv respondsToSelector:@selector(gestureRecognizerShouldBegin:)]) {
+        BOOL ok = NO;
+        @try { ok = [(id<UIGestureRecognizerDelegate>)gv gestureRecognizerShouldBegin:g]; }
+        @catch (NSException *e) { SDPLog(@"reveal: shouldBegin threw %@", e.reason); }
+        SDPLog(@"reveal: gestureRecognizerShouldBegin -> %d", ok);
+    }
     send(UIGestureRecognizerStateBegan, y0);
     __block int i = 0;
     // one event per display frame, like a real finger: move, hold still, lift on its own frame
@@ -335,6 +345,18 @@ static UIView *SDPFindView(UIView *v, Class c, int depth) {
         SDPAfter(1.5, ^{ SDPLog(@"reveal done %@", [self diagnostics]); });
     }];
     return YES;
+}
+
++ (id)lastSwipe { return gLastSwipe; }
+
++ (id)debugTarget:(NSString *)name {
+    if ([name isEqualToString:@"gv"])     return [self _gestureView];
+    if ([name isEqualToString:@"card"])   return [self _card];
+    if ([name isEqualToString:@"pane"])   return [self _pane];
+    if ([name isEqualToString:@"mgr"])    return SDPMsg(NSClassFromString(@"DS_IIIlIIllllIlllIlllllIlIIIIlIIl"), @"sharedInstance");
+    if ([name isEqualToString:@"helper"]) return SDPMsg(NSClassFromString(kHelperClass), @"sharedInstance");
+    Class c = NSClassFromString(name);
+    return c;                                                   // a class name: call a class method
 }
 
 + (void)stopGesture {
