@@ -1,0 +1,9 @@
+Package: com.adarsh.bluetoothnoclicks
+Name: BluetoothNoClicks
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: Turns the keyboard click sound off while audio goes to AirPods or any other Bluetooth device and puts it back afterwards, and keeps notification sounds out of your ear while you're on a call. An iOS 16 take on MiRO's BluetoothNoClicks.
+Maintainer: Adarsh
+Author: Adarsh
+Section: Tweaks
+Depends: ellekit, preferenceloader

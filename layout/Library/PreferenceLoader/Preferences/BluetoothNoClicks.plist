@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>entry</key>
+	<dict>
+		<key>cell</key>
+		<string>PSLinkCell</string>
+		<key>icon</key>
+		<string>BluetoothNoClicks.png</string>
+		<key>label</key>
+		<string>BluetoothNoClicks</string>
+	</dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>While sound goes to AirPods or any other Bluetooth device, Keyboard Feedback → Sound (Sounds &amp; Haptics) is switched off. It goes back to how you had it as soon as the sound leaves Bluetooth. If you keep keyboard sounds off yourself, they stay off.</string>
+			<key>label</key>
+			<string>Keyboard</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.bluetoothnoclicks/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.bluetoothnoclicks</string>
+			<key>key</key>
+			<string>kbClicks</string>
+			<key>label</key>
+			<string>Mute Clicks on Bluetooth</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>While you're on a call, notifications arrive without their sound, in Ring and in Silent mode. Alarms, timers and critical alerts still play.
+
+Only on the Earpiece: keep the sounds when the call is on speaker, AirPods or the car.
+
+Vibrate Instead: a short buzz replaces the muted sound.</string>
+			<key>label</key>
+			<string>Calls</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.bluetoothnoclicks/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.bluetoothnoclicks</string>
+			<key>key</key>
+			<string>callMute</string>
+			<key>label</key>
+			<string>Mute Notification Sounds</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.bluetoothnoclicks/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.bluetoothnoclicks</string>
+			<key>key</key>
+			<string>callEarpieceOnly</string>
+			<key>label</key>
+			<string>Only on the Earpiece</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.bluetoothnoclicks/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.bluetoothnoclicks</string>
+			<key>key</key>
+			<string>callVibrate</string>
+			<key>label</key>
+			<string>Vibrate Instead</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Records what the tweak does in /var/mobile/Library/Logs/BluetoothNoClicks.log. Turn it off when everything works.</string>
+			<key>label</key>
+			<string>Troubleshooting</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.bluetoothnoclicks/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.bluetoothnoclicks</string>
+			<key>key</key>
+			<string>debugLog</string>
+			<key>label</key>
+			<string>Debug Log</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>BluetoothNoClicks</string>
+</dict>
+</plist>
