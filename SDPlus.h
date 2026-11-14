@@ -28,7 +28,7 @@
 #define SDP_N_REFOCUS     "com.adarsh.sdplus.refocus"        // SB -> apps   state = pid that should re-open its keyboard
 #define SDP_N_PREFS       "com.adarsh.stageduoplus/prefs"    // Settings -> SB (PostNotification)
 #define SDP_DOMAIN        @"com.adarsh.stageduoplus"
-#define SDP_VERSION       @"1.0.2"                          // keep in step with control
+#define SDP_VERSION       @"1.0.3"                          // keep in step with control
 
 typedef NS_OPTIONS(uint64_t, SDPConfigBits) {
     SDPConfigKeyboardButton = 1 << 0,   // apps report keyboard show/hide
@@ -92,6 +92,9 @@ typedef struct {
     BOOL openOldTop;      // open the old top app in the stage if Dynamic Stage didn't move it there
     BOOL guardKills;      // skip Dynamic Stage's kills of the two apps during a swap
     BOOL guardPairs;      // same during a pair launch
+    double revealTo;      // synthetic reveal swipe ends at this fraction of the screen height
+    int revealFrames;     // ... over this many 60 Hz frames
+    int swapStyle;        // 0 = keep the stage (open top in stage, raise bottom, reveal); 1 = native expand
 } SDPTune;
 extern SDPTune gSDPTune;
 
@@ -104,6 +107,7 @@ extern SDPTune gSDPTune;
 + (BOOL)openInStage:(NSString *)bid;              // what tapping an app in Dynamic Stage's strip does
 + (void)swapWithReason:(NSString *)why refocus:(BOOL)refocus;
 + (BOOL)nativeExpand;                             // Dynamic Stage's own "bring the stage app to the front"
++ (BOOL)revealStage;                              // a synthetic swipe-up: shows a hidden stage window
 + (void)engagementFromPid:(pid_t)pid typing:(BOOL)typing;
 + (void)launchPairTop:(NSString *)top bottom:(NSString *)bottom;
 + (BOOL)isKillGuarded:(NSString *)bid;            // YES while a swap/pair is moving this app

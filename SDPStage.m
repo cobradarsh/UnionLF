@@ -33,7 +33,32 @@ static NSString *const kPaneExpand  = @"DS_llIIIlIIlIIllIllIIIllllIIlIlll"; // -
 static NSString *const kHelperClass = @"DS_llIIlIIIIIIlIllIllIlllIlIIllII"; // +sharedInstance (UIView)
 static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // called right before the expand
 
-SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO };
+SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO,
+                     .revealTo = 0.68, .revealFrames = 18, .swapStyle = 0 };
+
+static NSString *const kGestureView  = @"DS_lIlIIlIIlllIllllIllllllIlIIIIl";  // the bottom-edge gesture view
+static NSString *const kGestureEntry = @"DS_lIllIlllIllIIIllllIIlllIllIIII:"; // its gesture action (any recognizer)
+
+// A recognizer that reports a scripted swipe. Dynamic Stage's handler only reads
+// state, locationInView: and view from the recognizer it is given.
+@interface SDPFakeSwipe : UIPanGestureRecognizer
+@property (nonatomic) UIGestureRecognizerState fakeState;
+@property (nonatomic) CGPoint fakePoint;                 // screen coordinates
+@property (nonatomic, weak) UIView *fakeView;
+@end
+
+@implementation SDPFakeSwipe
+- (UIGestureRecognizerState)state { return _fakeState; }
+- (UIView *)view { return _fakeView; }
+- (NSUInteger)numberOfTouches { return 1; }
+- (CGPoint)locationInView:(UIView *)v {
+    if (!v || !v.window) return _fakePoint;
+    CGPoint inWindow = [v.window convertPoint:_fakePoint fromWindow:nil];
+    return [v convertPoint:inWindow fromView:nil];
+}
+- (CGPoint)translationInView:(UIView *)v { return CGPointZero; }
+- (CGPoint)velocityInView:(UIView *)v { return CGPointMake(0, -1200); }
+@end
 
 static NSMutableDictionary<NSString *, NSNumber *> *gKillGuard;   // bundle id -> guarded until
 static BOOL gBusy;                                                // a swap / pair launch is running
@@ -242,6 +267,64 @@ static void **SDPSelectedAppSlot(void) {
     [self _waitUntil:^BOOL { return [[SDPHost frontmostBundleID] isEqualToString:bid]; } timeout:timeout then:done];
 }
 
+#pragma mark - reveal (synthetic swipe-up)
+
+static UIView *SDPFindView(UIView *v, Class c, int depth) {
+    if ([v isKindOfClass:c]) return v;
+    if (depth > 14) return nil;
+    for (UIView *s in v.subviews) { UIView *r = SDPFindView(s, c, depth + 1); if (r) return r; }
+    return nil;
+}
+
++ (UIView *)_gestureView {
+    static __weak UIView *cached;
+    if (cached.window) return cached;
+    Class gc = NSClassFromString(kGestureView);
+    if (!gc) return nil;
+    NSMutableArray<UIWindow *> *wins = [NSMutableArray array];
+    for (UIScene *s in UIApplication.sharedApplication.connectedScenes)
+        if ([s isKindOfClass:UIWindowScene.class]) [wins addObjectsFromArray:((UIWindowScene *)s).windows];
+    for (UIWindow *w in [UIApplication.sharedApplication windows]) if (![wins containsObject:w]) [wins addObject:w];
+    for (UIWindow *w in wins) {
+        UIView *v = SDPFindView(w, gc, 0);
+        if (v) { cached = v; return v; }
+    }
+    return nil;
+}
+
+// Replays a short swipe up from the bottom edge into Dynamic Stage's own gesture handler:
+// with an app waiting in the (hidden) stage card, that's exactly how you bring it back.
++ (BOOL)revealStage {
+    UIView *gv = [self _gestureView];
+    SEL entry = NSSelectorFromString(kGestureEntry);
+    if (!gv || ![gv respondsToSelector:entry]) { SDPLog(@"reveal: gesture view not found"); return NO; }
+    CGRect s = UIScreen.mainScreen.bounds;
+    SDPFakeSwipe *g = [[SDPFakeSwipe alloc] initWithTarget:nil action:NULL];
+    g.fakeView = gv;
+    CGFloat x = s.size.width / 2, y0 = s.size.height - 6, y1 = s.size.height * MAX(0.2, MIN(0.95, gSDPTune.revealTo));
+    int frames = MAX(3, MIN(90, gSDPTune.revealFrames));
+    void (^send)(UIGestureRecognizerState, CGFloat) = ^(UIGestureRecognizerState st, CGFloat y) {
+        g.fakeState = st;
+        g.fakePoint = CGPointMake(x, y);
+        @try { ((void (*)(id, SEL, id))objc_msgSend)(gv, entry, g); }
+        @catch (NSException *e) { SDPLog(@"reveal threw %@", e.reason); }
+    };
+    SDPLog(@"reveal: swipe %.0f -> %.0f over %d frames %@", y0, y1, frames, [self diagnostics]);
+    send(UIGestureRecognizerStateBegan, y0);
+    __block int i = 0;
+    [NSTimer scheduledTimerWithTimeInterval:1.0 / 60 repeats:YES block:^(NSTimer *t) {
+        i++;
+        double p = (double)i / frames, e = 1 - (1 - p) * (1 - p);          // ease out
+        CGFloat y = y0 + (y1 - y0) * MIN(1.0, e);
+        if (i < frames) { send(UIGestureRecognizerStateChanged, y); return; }
+        send(UIGestureRecognizerStateChanged, y1);
+        send(UIGestureRecognizerStateEnded, y1);
+        [t invalidate];
+        SDPAfter(1.2, ^{ SDPLog(@"reveal done %@", [self diagnostics]); });
+    }];
+    return YES;
+}
+
 #pragma mark - swap
 
 // Exactly what the end of Dynamic Stage's own drag-up gesture does (block sub_947a0 in 1.2):
@@ -278,6 +361,7 @@ static void **SDPSelectedAppSlot(void) {
     }
     if (![self _claimBusy]) return;
     gLastSwap = SDPNow();
+    if (gSDPTune.swapStyle == 0) { [self _swapKeepingStageTop:top bottom:bottom why:why refocus:refocus]; return; }
     if (gSDPTune.guardKills) { [self _guard:top]; [self _guard:bottom]; }
 
     UIView *pane = [self _pane];
@@ -315,6 +399,40 @@ static void **SDPSelectedAppSlot(void) {
     }];
 }
 
+// The swap that works with Dynamic Stage 1.2 (tested on the phone):
+//   1. open the top app in the (visible) stage window: Dynamic Stage swaps the pane over
+//      (and would kill the old stage app, so that kill is skipped: it's about to go on top),
+//   2. bring the old stage app to the front: Dynamic Stage hides its stage window, as it
+//      does on any app switch, but keeps the new pane in it,
+//   3. replay a swipe-up so Dynamic Stage shows the stage window again and lays both out.
++ (void)_swapKeepingStageTop:(NSString *)top bottom:(NSString *)bottom why:(NSString *)why refocus:(BOOL)refocus {
+    [self _guard:bottom];
+    SDPLog(@"swap(%@): top %@ <-> stage %@ %@", why, top, bottom, [self diagnostics]);
+    if (![self _openInStage:top from:[self stageFrame]]) {
+        [SDPHost toast:@"Dynamic Stage+ couldn't swap the windows."];
+        [self _releaseBusyAfter:0.2];
+        return;
+    }
+    SDPAfter(0.45, ^{
+        [SDPHost launchApp:bottom];
+        [self _waitForFront:bottom timeout:3.0 then:^(BOOL front) {
+            SDPLog(@"swap: %@ in front=%d %@", bottom, front, [self diagnostics]);
+            SDPAfter(gSDPTune.settle, ^{
+                if (![self isOpen]) [self revealStage];
+                if (refocus) {
+                    SDPAfter(1.4, ^{
+                        pid_t p = [SDPHost pidForBundleID:bottom];
+                        if (p > 0) SDPPost(SDP_N_REFOCUS, (uint64_t)p);
+                    });
+                }
+                SDPAfter(2.0, ^{ SDPLog(@"swap done %@", [self diagnostics]); });
+                [self _releaseBusyAfter:1.8];
+                gLastSwap = SDPNow();
+            });
+        }];
+    });
+}
+
 + (void)engagementFromPid:(pid_t)pid typing:(BOOL)typing {
     SDPSettings *s = [SDPSettings shared];
     if (!s.enabled || s.swapMode == SDPSwapOff) return;
@@ -347,9 +465,11 @@ static void **SDPSelectedAppSlot(void) {
             SDPLog(@"pair: %@ already in the stage", bottom);
         } else if (![self openInStage:bottom]) {
             [SDPHost toast:@"Couldn't open the second app. Open Dynamic Stage once after a respring, then try again."];
+        } else {
+            SDPAfter(0.5, ^{ if (![self isOpen]) [self revealStage]; });
         }
-        SDPAfter(1.5, ^{ SDPLog(@"pair done %@", [self diagnostics]); });
-        [self _releaseBusyAfter:1.0];
+        SDPAfter(2.5, ^{ SDPLog(@"pair done %@", [self diagnostics]); });
+        [self _releaseBusyAfter:1.8];
     };
 
     if ([[SDPHost frontmostBundleID] isEqualToString:top]) { openBottom(); return; }
