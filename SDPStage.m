@@ -24,7 +24,13 @@ static NSString *const kCardClass  = @"DS_IIllIIIIIIIlllIIIIllllllIllIll";
 static NSString *const kCardShared = @"DS_IlIIIlIllllllIIIlIIIIlIIlIIIII";
 static NSString *const kCardOpen   = @"DS_IIlIIlIIlllIlIIIlIIIIlIlIIlIII";
 static NSString *const kCardPane   = @"DS_lllIlIlIIlIlIlIIllllllllllIllI";
-static NSString *const kPaneClass  = @"DS_lIllllIllIIlIIlIIllllIIIIIlllI";
+static NSString *const kPaneClass  = @"DS_lIllllIllIIlIIlIIllllIIIIIlllI";  // pane: .application .open .containerView
+static NSString *const kPaneCurrent = @"DS_IIlIllIlIIIllllllIIlIlllIlIlII"; // +pane: the current pane
+static NSString *const kPaneExpand  = @"DS_llIIIlIIlIIllIllIIIllllIIlIlll"; // -pane: bring its app to the front
+static NSString *const kHelperClass = @"DS_llIIlIIIIIIlIllIllIlllIlIIllII"; // +sharedInstance (UIView)
+static NSString *const kHelperPrep  = @"DS_IlllIIIIIllIllIIlIlIlIIlIIlIll"; // called right before the expand
+
+SDPTune gSDPTune = { .settle = 0.6, .openOldTop = YES, .guardKills = NO, .guardPairs = NO };
 
 static NSMutableDictionary<NSString *, NSNumber *> *gKillGuard;   // bundle id -> guarded until
 static BOOL gBusy;                                                // a swap / pair launch is running
