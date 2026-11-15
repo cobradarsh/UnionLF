@@ -232,8 +232,13 @@
                     "she did there (hiked, flew, stayed). BANNED: a bare 'you're beautiful' or 'great smile' with "
                     "nothing specific, 'nice pic', 'main character energy', stock lines like 'should be illegal', "
                     "calling her a 'thing' or a 'view', pickup-line cliches, and anything crude, creepy or "
-                    "objectifying. Warm, confident, a little magnetic. Make the three about THREE DIFFERENT photos "
-                    "and three different moves.";
+                    "objectifying. Warm, confident, a little magnetic. Emojis, the way a real guy texts: each reply "
+                    "gets ONE emoji that fits its mood or the photo (a smirk, a wink, a grin, a laugh, heart eyes, "
+                    "looking eyes, sparkles, or one for the scene such as a mountain, a wave or city lights), dropped "
+                    "where he'd naturally put it, usually at the very end or right after the punchline. Two at the "
+                    "very most in one reply, a different emoji in each of the three, nothing suggestive, never a row "
+                    "of them, never one after every phrase, and never an emoji standing in for a word. Make the three "
+                    "about THREE DIFFERENT photos and three different moves.";
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
