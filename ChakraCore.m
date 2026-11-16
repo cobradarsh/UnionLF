@@ -23,6 +23,18 @@ NSString *ChakraLogDir(void) {
     return dir;
 }
 
+static dispatch_queue_t ChakraLogQueue(void) {
+    static dispatch_queue_t q;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ q = dispatch_queue_create("com.adarsh.chakra.log", DISPATCH_QUEUE_SERIAL); });
+    return q;
+}
+
+// Returns once every line logged so far is in the file.
+void ChakraLogFlush(void) {
+    dispatch_sync(ChakraLogQueue(), ^{});
+}
+
 void ChakraLog(NSString *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -31,18 +43,16 @@ void ChakraLog(NSString *fmt, ...) {
     NSLog(@"[Chakra] %@", msg);
     if (!atomic_load(&gChakraDebugLog)) return;
 
-    static dispatch_queue_t q;
     static NSDateFormatter *df;
     static NSString *path;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        q = dispatch_queue_create("com.adarsh.chakra.log", DISPATCH_QUEUE_SERIAL);
         df = [NSDateFormatter new];
         df.dateFormat = @"MM-dd HH:mm:ss.SSS";
         path = [ChakraLogDir() stringByAppendingPathComponent:@"Chakra.log"];
     });
     NSDate *now = [NSDate date];
-    dispatch_async(q, ^{
+    dispatch_async(ChakraLogQueue(), ^{
         NSString *line = [NSString stringWithFormat:@"%@  %@\n", [df stringFromDate:now], msg];
         NSFileManager *fm = [NSFileManager defaultManager];
         if (![fm fileExistsAtPath:path]) [fm createFileAtPath:path contents:nil attributes:nil];
@@ -150,6 +160,16 @@ BOOL ChakraSendObj(id target, NSString *selName, id arg) {
     if (!ChakraShape(target, s, kChakraPlainReturns, 1) || !ChakraArgIs(target, s, 2, "@#")) return NO;
     @try { ((void (*)(id, SEL, id))objc_msgSend)(target, s, arg); return YES; } @catch (NSException *e) { ChakraLog(@"%@ threw %@", selName, e.reason); }
     return NO;
+}
+
+// SpringBoard's shared controller of a class. Where the class can say whether its controller
+// exists yet, it is asked that way, so Chakra never creates one of SpringBoard's own controllers
+// before SpringBoard has.
+id ChakraSingleton(NSString *className) {
+    Class cls = NSClassFromString(className);
+    if (!cls) return nil;
+    if ([cls respondsToSelector:NSSelectorFromString(@"sharedInstanceIfExists")]) return ChakraMsg(cls, @"sharedInstanceIfExists");
+    return ChakraMsg(cls, @"sharedInstance");
 }
 
 #pragma mark - haptics
@@ -352,7 +372,7 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
 }
 
 + (BOOL)isLocked {
-    id mgr = ChakraMsg(NSClassFromString(@"SBLockScreenManager"), @"sharedInstance");
+    id mgr = ChakraSingleton(@"SBLockScreenManager");
     if (ChakraShape(mgr, NSSelectorFromString(@"isUILocked"), "Bc", 0)) return ChakraBoolMsg(mgr, @"isUILocked", NO);
     return ChakraBoolMsg(UIApplication.sharedApplication, @"isLocked", NO);
 }
@@ -383,7 +403,7 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
 
 + (id)applicationForBundleID:(NSString *)bid {
     if (bid.length == 0) return nil;
-    id ctl = ChakraMsg(NSClassFromString(@"SBApplicationController"), @"sharedInstance");
+    id ctl = ChakraSingleton(@"SBApplicationController");
     SEL s = NSSelectorFromString(@"applicationWithBundleIdentifier:");
     if (!ChakraShape(ctl, s, "@", 1)) return nil;
     @try { return ((id (*)(id, SEL, id))objc_msgSend)(ctl, s, bid); } @catch (__unused id e) {}
@@ -538,30 +558,50 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
     while (gRecent.count > 8) [gRecent removeLastObject];
 }
 
-// The app before the one in front. SpringBoard's own App Switcher order is asked first (it is
-// exact, and survives a respring); what Chakra saw in front itself is the fallback.
-+ (NSString *)previousApp {
-    [self noteFront];
-    NSString *front = [self frontmostBundleID];
+// The App Switcher's apps, in the order SpringBoard keeps them (bundle ids, each once).
++ (NSArray<NSString *> *)switcherApps {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
     @try {
-        id coordinator = ChakraMsg(NSClassFromString(@"SBMainSwitcherControllerCoordinator"), @"sharedInstance");
+        id coordinator = ChakraSingleton(@"SBMainSwitcherControllerCoordinator");
         NSArray *layouts = ChakraMsg(coordinator, @"recentAppLayouts");
-        if ([layouts isKindOfClass:NSArray.class]) {
-            for (id layout in layouts) {
-                NSArray *items = ChakraMsg(layout, @"allItems");
-                if (![items isKindOfClass:NSArray.class]) continue;
-                for (id item in items) {
-                    NSString *bid = ChakraMsg(item, @"bundleIdentifier");
-                    if (![bid isKindOfClass:NSString.class] || bid.length == 0) continue;
-                    if (front && [bid isEqualToString:front]) continue;
-                    if ([self applicationForBundleID:bid]) return bid;
-                }
+        if (![layouts isKindOfClass:NSArray.class]) return out;
+        for (id layout in layouts) {
+            NSArray *items = ChakraMsg(layout, @"allItems");
+            if (![items isKindOfClass:NSArray.class]) continue;
+            for (id item in items) {
+                NSString *bid = ChakraMsg(item, @"bundleIdentifier");
+                if ([bid isKindOfClass:NSString.class] && bid.length && ![out containsObject:bid]) [out addObject:bid];
             }
         }
     } @catch (__unused id e) {}
+    return out;
+}
+
++ (NSArray<NSString *> *)seenApps { return gRecent ? [gRecent copy] : @[]; }
+
+// The app before the one in front.
+//   1. SpringBoard's App Switcher list knows it exactly, and survives a respring. Which end of
+//      that list is "newest" is not taken on trust: the app in front must be at one end of it,
+//      and its neighbour is the answer.
+//   2. Otherwise, what Chakra itself has seen in front since it started (newest first).
+//   3. On the Home Screen with nothing seen yet: the head of the switcher list.
++ (NSString *)previousApp {
+    [self noteFront];
+    NSString *front = [self frontmostBundleID];
+    NSMutableArray<NSString *> *list = [NSMutableArray array];
+    for (NSString *bid in [self switcherApps]) if ([self applicationForBundleID:bid]) [list addObject:bid];
+    if (front && list.count > 1) {
+        NSUInteger at = [list indexOfObject:front];
+        if (at == 0) return list[1];
+        if (at == list.count - 1) return list[at - 1];
+    }
     for (NSString *bid in gRecent) {
         if (front && [bid isEqualToString:front]) continue;
         if ([self applicationForBundleID:bid]) return bid;
+    }
+    for (NSString *bid in list) {
+        if (front && [bid isEqualToString:front]) continue;
+        return bid;
     }
     return nil;
 }

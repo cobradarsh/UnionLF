@@ -68,11 +68,32 @@ jobs:
           xcodebuild -version || true
           clang --version || true
 
-      - name: Install packaging deps (ldid, xz, dpkg)
+      - name: Install packaging deps (ldid, xz)
+        # Only what Theos needs: it signs with ldid and packs the .deb itself (dm.pl, lzma through xz).
+        # Homebrew has no ready-made packages for Intel Macs any more, so "brew install ldid dpkg"
+        # compiled OpenSSL and friends from source there and ran into the job's time limit. ldid comes
+        # as a ready binary from its own releases instead; Homebrew is only the fallback.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: |
-          brew update || true
-          brew install ldid xz dpkg || true
-          echo "ldid: $(command -v ldid)  xz: $(command -v xz)  dpkg-deb: $(command -v dpkg-deb)"
+          mkdir -p "$HOME/bin"
+          if ! command -v ldid > /dev/null; then
+            url="https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_macosx_$(uname -m)"
+            curl -fsSL -o "$HOME/bin/ldid" "$url" || true
+            if file "$HOME/bin/ldid" 2>/dev/null | grep -q "Mach-O"; then
+              chmod +x "$HOME/bin/ldid"
+            else
+              echo "no ready-made ldid at $url: building it with Homebrew (slow on Intel)"
+              rm -f "$HOME/bin/ldid"
+              brew install ldid
+            fi
+          fi
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          command -v xz > /dev/null || brew install xz || true
+          export PATH="$HOME/bin:$PATH"
+          echo "ldid: $(command -v ldid)  xz: $(command -v xz)"
 
       - name: Install RootHide Theos (git clone)
         run: |
@@ -120,8 +141,8 @@ jobs:
           echo "--- links against ---"
           otool -arch arm64e -L "$DY" || true
           echo "--- what is in the package ---"
-          dpkg-deb -c packages/*.deb || true
-          dpkg-deb -I packages/*.deb || true
+          ls -la packages/
+          mkdir -p "$RUNNER_TEMP/deb" && (cd "$RUNNER_TEMP/deb" && ar x "$GITHUB_WORKSPACE"/packages/*.deb && ls -la && tar tvf data.tar.* && tar xOf control.tar.* ./control) || true
 
       - name: Upload build log (always)
         if: always()
@@ -144,7 +165,7 @@ jobs:
       matrix:
         runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 

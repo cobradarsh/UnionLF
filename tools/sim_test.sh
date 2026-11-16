@@ -60,60 +60,52 @@ xcrun simctl bootstatus "$UDID" -b > "$OUT/boot.log" 2>&1 || { tail -5 "$OUT/boo
 tail -2 "$OUT/boot.log"
 
 echo "== load Chakra into SpringBoard"
+# The library goes in through launchd's environment: set DYLD_INSERT_LIBRARIES, restart SpringBoard,
+# and take the variable away again so that nothing else started later carries the library.
+# (Booting the whole simulator with the library in its environment was tried on 16 Nov 2026: every
+#  process then loads UIKit and the boot never finishes.)
 touch "$RUN/chakra_test"                              # switches the test commands on
+REPORTS=~/Library/Logs/DiagnosticReports
+mkdir -p "$REPORTS"
+touch "$OUT/.before"                                  # crash reports newer than this are ours
 sb_pid() { xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | awk '$3 == "com.apple.SpringBoard" { print $1 }'; }
-restart_springboard() {
-  local pid; pid=$(sb_pid)
-  echo "  SpringBoard pid $pid: restarting it"
-  if [ -n "$pid" ] && [ "$pid" != "-" ]; then kill -9 "$pid" 2>/dev/null || true
-  else xcrun simctl spawn "$UDID" launchctl stop com.apple.SpringBoard || true; fi
-}
-wait_started() {                                      # wait_started <seconds>: has Chakra written its first log line?
-  local n=$(( $1 / 2 ))
-  for i in $(seq 1 "$n"); do
-    sleep 2
-    if grep -q "started:" "$RUN/Chakra.log" 2>/dev/null; then return 0; fi
+collect_crashes() {                                   # copies new SpringBoard crash reports and prints their gist
+  local found=""
+  for f in "$REPORTS"/SpringBoard*.ips; do
+    [ -f "$f" ] && [ "$f" -nt "$OUT/.before" ] || continue
+    cp "$f" "$OUT/" && found="$found $OUT/$(basename "$f")"
   done
-  return 1
+  if [ -n "$found" ]; then echo "-- SpringBoard crash reports:"; python3 tools/ips_summary.py $found; else echo "-- no SpringBoard crash report"; fi
 }
 
-# Three ways in, tried in turn; the first that works is used.
-started=""
-echo "-- way 1: launchctl setenv, then restart SpringBoard"
 xcrun simctl spawn "$UDID" launchctl setenv DYLD_INSERT_LIBRARIES "$OUT/Chakra.dylib"
 xcrun simctl spawn "$UDID" launchctl setenv CHAKRA_DIR "$RUN"
-restart_springboard
-if wait_started 50; then started="launchctl setenv"; fi
-# later processes should start without the library
+xcrun simctl spawn "$UDID" launchctl setenv CHAKRA_NO_GUARD 1      # show every start, even after failed ones
+OLD=$(sb_pid)
+echo "SpringBoard pid $OLD: restarting it"
+if [ -n "$OLD" ] && [ "$OLD" != "-" ]; then kill -9 "$OLD" 2>/dev/null || true
+else xcrun simctl spawn "$UDID" launchctl stop com.apple.SpringBoard || true; fi
+
+started=""
+for i in $(seq 1 90); do                              # up to three minutes: this can be a slow machine
+  sleep 2
+  if grep -q "started:" "$RUN/Chakra.log" 2>/dev/null; then started=yes; break; fi
+done
 xcrun simctl spawn "$UDID" launchctl unsetenv DYLD_INSERT_LIBRARIES || true
-
-if [ -z "$started" ]; then
-  echo "-- way 2: launchctl debug (environment for SpringBoard's next start only)"
-  for target in system/com.apple.SpringBoard "user/$(id -u)/com.apple.SpringBoard" "gui/$(id -u)/com.apple.SpringBoard"; do
-    xcrun simctl spawn "$UDID" launchctl debug "$target" --environment "DYLD_INSERT_LIBRARIES=$OUT/Chakra.dylib" "CHAKRA_DIR=$RUN" 2>&1 | tail -1 || true
-  done
-  restart_springboard
-  if wait_started 50; then started="launchctl debug"; fi
-fi
-
-if [ -z "$started" ]; then
-  echo "-- way 3: boot the simulator with the library in its environment"
-  xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
-  SIMCTL_CHILD_DYLD_INSERT_LIBRARIES="$OUT/Chakra.dylib" SIMCTL_CHILD_CHAKRA_DIR="$RUN" xcrun simctl boot "$UDID" || true
-  xcrun simctl bootstatus "$UDID" -b > "$OUT/boot2.log" 2>&1 || tail -5 "$OUT/boot2.log"
-  if wait_started 90; then started="boot environment"; fi
-fi
-
 echo "SpringBoard pid now: $(sb_pid)"
+echo "-- Chakra.log so far:"
+cat "$RUN/Chakra.log" 2>/dev/null || echo "(no log: the library was not loaded)"
 if [ -z "$started" ]; then
-  echo "Chakra did NOT start inside SpringBoard"
-  xcrun simctl spawn "$UDID" log show --last 5m --style compact --predicate 'process == "SpringBoard" AND (eventMessage CONTAINS[c] "chakra" OR eventMessage CONTAINS[c] "dyld")' 2>/dev/null | tail -80 > "$OUT/springboard-log.txt"
-  tail -40 "$OUT/springboard-log.txt"
-  cp ~/Library/Logs/DiagnosticReports/SpringBoard*.ips "$OUT/" 2>/dev/null || true
+  echo "Chakra did NOT finish starting inside SpringBoard"
+  collect_crashes
+  xcrun simctl spawn "$UDID" log show --last 4m --style compact --predicate 'process == "SpringBoard" AND (eventMessage CONTAINS[c] "chakra" OR eventMessage CONTAINS[c] "dyld")' 2>/dev/null | tail -60 > "$OUT/springboard-log.txt"
+  tail -25 "$OUT/springboard-log.txt"
+  cp "$RUN/Chakra.log" "$OUT/Chakra.log" 2>/dev/null || true
   xcrun simctl io "$UDID" screenshot "$OUT/00-not-started.png" > /dev/null 2>&1 || true
+  xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
   exit 1
 fi
-echo "Chakra is running in SpringBoard (loaded by: $started)" | tee -a "$OUT/simulator.txt"
+echo "Chakra is running in SpringBoard" | tee -a "$OUT/simulator.txt"
 sleep 8
 
 # ---- helpers ----
@@ -171,10 +163,13 @@ cmd "action home" "wait 1" "state"
 sleep 4
 
 cp "$RUN/Chakra.log" "$OUT/Chakra.log" 2>/dev/null || true
-cp ~/Library/Logs/DiagnosticReports/SpringBoard*.ips "$OUT/" 2>/dev/null || true
 echo "== Chakra.log"
-cat "$OUT/Chakra.log" 2>/dev/null | tail -150
-ls -la "$OUT" | head -60
+cat "$OUT/Chakra.log" 2>/dev/null | tail -170
+collect_crashes
+ls -la "$OUT" | head -70
 xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
+starts=$(grep -c "start: Chakra" "$OUT/Chakra.log" 2>/dev/null || echo 0)
+echo "Chakra started $starts time(s) during the test"
+if [ "$starts" != "1" ]; then echo "SpringBoard restarted during the test: see the crash reports"; exit 1; fi
 if grep -q "threw" "$OUT/Chakra.log" 2>/dev/null; then echo "an exception was caught: see the log"; exit 1; fi
 exit 0

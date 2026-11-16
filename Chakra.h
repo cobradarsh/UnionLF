@@ -35,6 +35,7 @@ typedef NS_ENUM(NSInteger, ChakraHaptic) { ChakraHapticOpen = 0, ChakraHapticTic
 // ── log ──
 NSString *ChakraLogDir(void);                              // /var/mobile/Library/Logs (a folder of your choice in the simulator)
 void ChakraLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
+void ChakraLogFlush(void);                             // returns once every line logged so far is in the file
 
 // ── careful messaging: each of these only sends when the method exists with the expected shape ──
 BOOL ChakraShape(id target, SEL sel, const char *returns, NSUInteger args);
@@ -46,6 +47,7 @@ BOOL ChakraSendBool(id target, NSString *selName, BOOL arg);
 BOOL ChakraSendInt(id target, NSString *selName, long long arg);
 BOOL ChakraSendObj(id target, NSString *selName, id arg);
 
+id ChakraSingleton(NSString *className);                                   // a SpringBoard controller, never created early
 void ChakraAfter(double seconds, dispatch_block_t block);                 // on the main queue
 void ChakraHapticPlay(ChakraHaptic event);
 
@@ -102,6 +104,8 @@ void ChakraHapticPlay(ChakraHaptic event);
 + (NSArray<NSDictionary *> *)installedApps;           // @[ @{ @"id", @"name" } ] A–Z, the ones you can open
 + (void)noteFront;                                    // remember what is in front (called every tick)
 + (NSString *)previousApp;                            // the app used before the one in front
++ (NSArray<NSString *> *)switcherApps;                // the App Switcher's apps, in SpringBoard's order
++ (NSArray<NSString *> *)seenApps;                    // apps Chakra has seen in front, newest first
 @end
 
 // ── drawn icons ──

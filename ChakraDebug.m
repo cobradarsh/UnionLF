@@ -65,9 +65,13 @@ static NSString *ChakraStateLine(void) {
     for (ChakraItem *item in [ChakraItems all]) [entries addObject:[NSString stringWithFormat:@"%@%@", item.key, item.available ? @"" : @"(n/a)"]];
     CGSize sz = [ChakraHost screenSize];
     UIEdgeInsets safe = [ChakraHost safeInsets];
-    return [NSString stringWithFormat:@"%@ · %@ · wheel [%@] · front %@ · previous %@ · locked %d · orientation %lld · screen %.0fx%.0f safe %.0f/%.0f · editor %d",
+    NSArray<NSString *> *switcher = [ChakraHost switcherApps];
+    if (switcher.count > 5) switcher = [switcher subarrayWithRange:NSMakeRange(0, 5)];
+    return [NSString stringWithFormat:@"%@ · %@ · wheel [%@] · front %@ · previous %@ · switcher starts [%@] · seen [%@] · locked %d · orientation %lld · screen %.0fx%.0f safe %.0f/%.0f · editor %d",
             [[ChakraBall shared] debugState], [[ChakraWheel shared] debugState], [entries componentsJoinedByString:@" "],
-            [ChakraHost frontmostBundleID] ?: @"home", [ChakraHost previousApp] ?: @"-", [ChakraHost isLocked], [ChakraHost interfaceOrientation],
+            [ChakraHost frontmostBundleID] ?: @"home", [ChakraHost previousApp] ?: @"-",
+            [switcher componentsJoinedByString:@" "], [[ChakraHost seenApps] componentsJoinedByString:@" "],
+            [ChakraHost isLocked], [ChakraHost interfaceOrientation],
             sz.width, sz.height, safe.top, safe.bottom, [ChakraEditor isOpen]];
 }
 

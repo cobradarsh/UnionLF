@@ -1,7 +1,8 @@
 /*  Tweak.m — Chakra's entry point. Loads into SpringBoard only.
 
-    Nothing is hooked. The constructor only arranges for Chakra to start a few seconds after
-    SpringBoard is up; everything else happens on the main thread from notifications:
+    Nothing is hooked. The constructor only sets up listeners; Chakra starts a few seconds after
+    SpringBoard reports that it has finished starting (com.apple.springboard.finishedstartup), and
+    everything after that happens on the main thread from notifications:
 
       com.adarsh.chakra/prefs                    a switch was flipped under Settings → Chakra
       com.apple.springboard.lockstate            locked / unlocked: the ball leaves the lock screen
@@ -11,15 +12,18 @@
     plus a slow tick (every 2 s, only while the screen is on) that notes which app is in front,
     for "Last App", and catches any lock or orientation change that came without a notification.
 
-    Start-up guard: Chakra counts SpringBoard starts in <log dir>/Chakra.boot and clears the
-    count once it has been running for 25 s. Four starts in a row that never got that far mean
-    something is restarting SpringBoard right after launch, so Chakra stays out of the way until
-    one of its settings is changed.                                                           */
+    Start-up guard: each time Chakra starts it adds one to <log dir>/Chakra.boot, and clears the
+    file once it has been running for 25 s. Three starts in a row that never got that far mean
+    SpringBoard keeps restarting right after Chakra comes up, so on the fourth Chakra stays out
+    of the way until one of its settings is changed. The start writes its steps to the log as
+    it goes, so the log shows which step was the last.                                       */
 
 #import "Chakra.h"
+#import <unistd.h>
 
 static NSTimer *gTick;
 static BOOL gStarted, gHeld;
+static NSString *gStartReason;
 
 #pragma mark - start-up guard
 
@@ -32,6 +36,13 @@ static NSInteger ChakraBootCount(void) {
 
 static void ChakraSetBootCount(NSInteger n) {
     [[NSString stringWithFormat:@"%ld\n", (long)n] writeToFile:ChakraBootPath() atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+static BOOL ChakraGuardOn(void) {
+#if TARGET_OS_SIMULATOR
+    if (getenv("CHAKRA_NO_GUARD")) return NO;           // the simulator test wants to see every start
+#endif
+    return YES;
 }
 
 #pragma mark - events
@@ -93,49 +104,89 @@ static void ChakraLockChanged(void) {
 
 #pragma mark - start
 
+// Each step of the start is in the log file before the next one begins, so if SpringBoard dies
+// during the start the log says how far it got.
+static void ChakraStep(NSString *what) {
+    ChakraLog(@"start: %@", what);
+    ChakraLogFlush();
+}
+
 static void ChakraBegin(NSInteger attempt) {
-    if (gStarted) return;
+    if (gStarted || gHeld) return;
     if (!UIApplication.sharedApplication || ![ChakraHost mainScene]) {
         if (attempt < 90) ChakraAfter(1.0, ^{ ChakraBegin(attempt + 1); });
         else ChakraLog(@"gave up: SpringBoard never showed a main scene");
         return;
     }
+
+    // The guard counts starts that got this far and then did not last 25 seconds.
+    NSInteger failed = ChakraBootCount();
+    if (failed >= 3 && ChakraGuardOn()) {
+        gHeld = YES;
+        ChakraLog(@"standing by: the last %ld times Chakra started, SpringBoard restarted within 25 seconds. "
+               "Change any setting under Settings → Chakra to start it again.", (long)failed);
+        ChakraLogFlush();
+        return;
+    }
     gStarted = YES;
+    ChakraSetBootCount(failed + 1);
+    ChakraAfter(25.0, ^{ ChakraSetBootCount(0); });
+
     [[ChakraSettings shared] reload];
     CGSize sz = [ChakraHost screenSize];
     UIEdgeInsets safe = [ChakraHost safeInsets];
-    ChakraLog(@"Chakra %@ started: iOS %@, screen %.0fx%.0f (safe %.0f/%.0f), %lu entries on the wheel, enabled=%d",
-          CHAKRA_VERSION, UIDevice.currentDevice.systemVersion, sz.width, sz.height, safe.top, safe.bottom,
-          (unsigned long)[ChakraItems visible].count, (int)[ChakraSettings shared].enabled);
+    ChakraStep([NSString stringWithFormat:@"Chakra %@ in SpringBoard (pid %d), iOS %@, screen %.0fx%.0f (safe %.0f/%.0f), enabled=%d, start %ld (%@)",
+                CHAKRA_VERSION, (int)getpid(), UIDevice.currentDevice.systemVersion, sz.width, sz.height, safe.top, safe.bottom,
+                (int)[ChakraSettings shared].enabled, (long)(failed + 1), gStartReason ?: @"?"]);
+
+    @try {
+        static ChakraOrientationWatcher *watcher;
+        watcher = [ChakraOrientationWatcher new];
+        if (!ChakraSendObj(UIApplication.sharedApplication, @"addActiveOrientationObserver:", watcher))
+            ChakraLog(@"no orientation observer on this iOS: the tick covers it");
+
+        int token = 0;
+        notify_register_dispatch("com.apple.springboard.lockstate", &token, dispatch_get_main_queue(), ^(int t) {
+            ChakraLockChanged();
+            ChakraAfter(0.7, ^{ ChakraLockChanged(); });       // the lock screen is still on its way in or out
+        });
+        notify_register_dispatch("com.apple.springboard.hasBlankedScreen", &token, dispatch_get_main_queue(), ^(int t) {
+            uint64_t blank = 0;
+            notify_get_state(t, &blank);
+            if (blank) {
+                ChakraStopTick();
+                if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:NO completion:nil];
+            } else {
+                ChakraStartTick();
+            }
+            ChakraLockChanged();
+        });
+        ChakraStartTick();
+    } @catch (NSException *e) {
+        ChakraLog(@"start: the observers threw %@", e.reason);
+    }
+    ChakraStep(@"observers in place, building the ball");
+
+    @try {
+        [[ChakraBall shared] refresh];
+    } @catch (NSException *e) {
+        ChakraLog(@"start: the ball threw %@", e.reason);
+    }
+    ChakraStep([[ChakraBall shared] debugState]);
+
+    ChakraDebugStart();
+    NSUInteger entries = 0;
+    @try {
+        entries = [ChakraItems visible].count;
+    } @catch (NSException *e) {
+        ChakraLog(@"start: the wheel's entries threw %@", e.reason);
+    }
+    ChakraLog(@"started: %lu entries on the wheel", (unsigned long)entries);
+    ChakraLogFlush();
+
     // (a little later: asking which actions work touches SpringBoard's own singletons, and those
     //  should be the ones SpringBoard made for itself, not ones made early on Chakra's account)
     ChakraAfter(6.0, ^{ ChakraLog(@"%@", [ChakraActions report]); });
-
-    static ChakraOrientationWatcher *watcher;
-    watcher = [ChakraOrientationWatcher new];
-    if (!ChakraSendObj(UIApplication.sharedApplication, @"addActiveOrientationObserver:", watcher))
-        ChakraLog(@"no orientation observer on this iOS: the tick covers it");
-
-    int token = 0;
-    notify_register_dispatch("com.apple.springboard.lockstate", &token, dispatch_get_main_queue(), ^(int t) {
-        ChakraLockChanged();
-        ChakraAfter(0.7, ^{ ChakraLockChanged(); });           // the lock screen is still on its way in or out
-    });
-    notify_register_dispatch("com.apple.springboard.hasBlankedScreen", &token, dispatch_get_main_queue(), ^(int t) {
-        uint64_t blank = 0;
-        notify_get_state(t, &blank);
-        if (blank) {
-            ChakraStopTick();
-            if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:NO completion:nil];
-        } else {
-            ChakraStartTick();
-        }
-        ChakraLockChanged();
-    });
-
-    ChakraStartTick();
-    [[ChakraBall shared] refresh];
-    ChakraDebugStart();
 }
 
 static void ChakraBoot(void) {
@@ -145,7 +196,6 @@ static void ChakraBoot(void) {
         if (gHeld) {                                    // the way back in after the start-up guard stepped in
             gHeld = NO;
             ChakraSetBootCount(0);
-            [[ChakraSettings shared] reload];
             ChakraLog(@"a setting changed: starting again");
             ChakraBegin(0);
             return;
@@ -158,23 +208,32 @@ static void ChakraBoot(void) {
               (long)s.haptics, (int)s.lockScreen, (int)s.hideLandscape);
     });
 
-    NSInteger starts = ChakraBootCount();
-    if (starts >= 4) {
-        gHeld = YES;
-        ChakraLog(@"standing by: SpringBoard has restarted %ld times in a row right after Chakra started. "
-               "Change any setting under Settings → Chakra to start it again.", (long)starts);
-        return;
-    }
-    ChakraSetBootCount(starts + 1);
-    ChakraAfter(3.0, ^{ ChakraBegin(0); });
-    ChakraAfter(25.0, ^{ if (gStarted) ChakraSetBootCount(0); });
+    // Chakra starts only once SpringBoard says it has finished starting, and a few seconds after
+    // that. Started earlier (3 s after the library loaded, as first written) it asked SpringBoard
+    // for controllers SpringBoard had not made yet, in the middle of its launch; in the simulator
+    // that restarted SpringBoard five times in a row. Two fallbacks, in case the first signal
+    // never comes: UIKit's own "finished launching" notice, and half a minute after loading.
+    __block BOOL scheduled = NO;
+    void (^go)(NSString *) = ^(NSString *why) {
+        if (scheduled) return;
+        scheduled = YES;
+        gStartReason = why;
+        ChakraAfter(4.0, ^{ ChakraBegin(0); });
+    };
+    notify_register_dispatch("com.apple.springboard.finishedstartup", &token, dispatch_get_main_queue(), ^(int t) {
+        go(@"SpringBoard finished starting");
+    });
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
+                                                       queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        ChakraAfter(8.0, ^{ go(@"8 s after UIKit's launch notice"); });
+    }];
+    ChakraAfter(30.0, ^{ go(@"30 s after loading"); });
 }
 
 __attribute__((constructor)) static void ChakraInit(void) {
     @autoreleasepool {
         if (![[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"]) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            @try { ChakraBoot(); } @catch (NSException *e) { NSLog(@"[Chakra] start threw %@", e.reason); }
-        });
+        // Only listeners are set up here, before SpringBoard has started; they run on the main queue later.
+        @try { ChakraBoot(); } @catch (NSException *e) { NSLog(@"[Chakra] start threw %@", e.reason); }
     }
 }

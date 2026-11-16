@@ -44,10 +44,7 @@ static BOOL ChakraTakes(id target, NSString *selName, const char *args) {
     return NO;
 }
 
-static id ChakraShared(NSString *className) {
-    Class cls = NSClassFromString(className);
-    return cls ? ChakraMsg(cls, @"sharedInstance") : nil;
-}
+static id ChakraShared(NSString *className) { return ChakraSingleton(className); }
 
 static UIColor *ChakraHex(int hex) {
     return [UIColor colorWithRed:((hex >> 16) & 0xFF) / 255.0 green:((hex >> 8) & 0xFF) / 255.0 blue:(hex & 0xFF) / 255.0 alpha:1];
@@ -148,6 +145,10 @@ static BOOL ChakraCanRespring(void) {
 // nil = available; otherwise what this iOS lacks
 + (NSString *)_missingFor:(NSString *)ident {
     UIApplication *app = UIApplication.sharedApplication;
+#if TARGET_OS_SIMULATOR
+    // no torch, radios or battery in a simulator: leave their controllers alone there
+    if ([@[ @"flashlight", @"wifi", @"bluetooth", @"airplane", @"lowpower" ] containsObject:ident]) return @"hardware a simulator does not have";
+#endif
     if ([ident isEqualToString:@"home"]) {
         return (ChakraTakes(app, @"_simulateHomeButtonPressWithCompletion:", "@") || ChakraTakes(app, @"_simulateHomeButtonPress", "")) ? nil : @"_simulateHomeButtonPress";
     }
