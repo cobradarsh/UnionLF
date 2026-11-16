@@ -39,6 +39,7 @@ static void ChakraSetBootCount(NSInteger n) {
 static void ChakraTick(void) {
     @try {
         [ChakraHost noteFront];
+        [[ChakraWheel shared] closeIfFrontChanged];
         [[ChakraBall shared] refresh];
     } @catch (NSException *e) {
         ChakraLog(@"tick threw %@", e.reason);
@@ -106,7 +107,9 @@ static void ChakraBegin(NSInteger attempt) {
     ChakraLog(@"Chakra %@ started: iOS %@, screen %.0fx%.0f (safe %.0f/%.0f), %lu entries on the wheel, enabled=%d",
           CHAKRA_VERSION, UIDevice.currentDevice.systemVersion, sz.width, sz.height, safe.top, safe.bottom,
           (unsigned long)[ChakraItems visible].count, (int)[ChakraSettings shared].enabled);
-    ChakraLog(@"%@", [ChakraActions report]);
+    // (a little later: asking which actions work touches SpringBoard's own singletons, and those
+    //  should be the ones SpringBoard made for itself, not ones made early on Chakra's account)
+    ChakraAfter(6.0, ^{ ChakraLog(@"%@", [ChakraActions report]); });
 
     static ChakraOrientationWatcher *watcher;
     watcher = [ChakraOrientationWatcher new];

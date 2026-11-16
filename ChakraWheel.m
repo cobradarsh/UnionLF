@@ -124,6 +124,7 @@
     CGPoint _hub;
     ChakraEdge _edge;
     CGFloat _angle;              // how far entries are turned to read upright
+    NSString *_frontAtOpen;      // the app that was in front when the menu opened
     BOOL _open, _closing;
     NSUInteger _idleGen;
 }
@@ -221,7 +222,7 @@
     _caption.userInteractionEnabled = NO;
     _caption.clipsToBounds = YES;
     _caption.layer.cornerRadius = 16;
-    _caption.alpha = 0;
+    _caption.hidden = YES;
     _captionLabel = [UILabel new];
     _captionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
     _captionLabel.textColor = UIColor.whiteColor;
@@ -259,10 +260,12 @@
     [self _buildWithItems:items];
     _open = YES;
     _closing = NO;
+    _frontAtOpen = [ChakraHost frontmostBundleID];
     _window.hidden = NO;
 
+    // (A blur view shows nothing but its tint unless it and everything above it is fully opaque,
+    //  so the plate grows out of the ball instead of fading in.)
     _backdrop.alpha = 0;
-    _plate.alpha = 0;
     CGPoint plateHome = _plate.center;
     if (s.style == ChakraStyleColumn) _plate.center = CGPointMake((plateHome.x + hub.x) / 2.0, plateHome.y);
     _plate.transform = CGAffineTransformMakeScale(0.25, 0.25);
@@ -271,7 +274,6 @@
     [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.6 options:live animations:^{
         self->_plate.transform = CGAffineTransformIdentity;
         self->_plate.center = plateHome;
-        self->_plate.alpha = 1;
     } completion:nil];
     CGAffineTransform upright = [self _upright];
     for (NSUInteger i = 0; i < _views.count; i++) {
@@ -308,11 +310,13 @@
     if (!animated) { finish(); return; }
     CGAffineTransform folded = [self _folded];
     CGPoint hub = _hub;
+    CGPoint plateAway = ([ChakraSettings shared].style == ChakraStyleColumn)
+                      ? CGPointMake((_plate.center.x + hub.x) / 2.0, _plate.center.y) : _plate.center;
+    _caption.hidden = YES;
     [UIView animateWithDuration:0.17 delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseIn animations:^{
         self->_backdrop.alpha = 0;
-        self->_plate.alpha = 0;
-        self->_plate.transform = CGAffineTransformMakeScale(0.3, 0.3);
-        self->_caption.alpha = 0;
+        self->_plate.transform = CGAffineTransformMakeScale(0.05, 0.05);
+        self->_plate.center = plateAway;
         for (ChakraItemView *v in self->_views) {
             v.center = hub;
             v.alpha = 0;
@@ -359,7 +363,7 @@
 
 - (void)_showCaptionFor:(ChakraItemView *)v {
     if (!v) {
-        [UIView animateWithDuration:0.12 animations:^{ self->_caption.alpha = 0; }];
+        _caption.hidden = YES;
         return;
     }
     ChakraItem *item = v.item;
@@ -396,7 +400,7 @@
     _caption.center = c;
     _captionLabel.frame = CGRectMake(0, 0, w, h);
     _caption.transform = [self _upright];
-    [UIView animateWithDuration:0.12 animations:^{ self->_caption.alpha = 1; }];
+    _caption.hidden = NO;
 }
 
 - (void)_run:(ChakraItemView *)v stay:(BOOL)stay {
@@ -437,6 +441,15 @@
 }
 
 - (void)clearHover { [self _setHover:nil]; }
+
+// Called on every tick: the app underneath went away (a swipe home, a call coming in), so the
+// menu that was opened over it goes too.
+- (void)closeIfFrontChanged {
+    if (!_open || _closing) return;
+    NSString *front = [ChakraHost frontmostBundleID];
+    if (front == _frontAtOpen || [front isEqualToString:_frontAtOpen]) return;
+    [self closeAnimated:YES completion:nil];
+}
 
 - (void)_touchAt:(CGPoint)p phase:(NSInteger)phase {
     if (!_open || _closing) return;

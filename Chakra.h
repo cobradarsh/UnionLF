@@ -184,6 +184,7 @@ typedef struct {
 - (void)hoverAtScreenPoint:(CGPoint)point;            // the finger, while sliding from the ball
 - (BOOL)commitHover;                                  // the finger lifted: run what is under it (NO = nothing was)
 - (void)clearHover;
+- (void)closeIfFrontChanged;                          // every tick: the app underneath is no longer the one it opened over
 - (NSUInteger)itemCount;
 - (void)debugTapIndex:(NSUInteger)index;
 - (void)debugHoverIndex:(NSUInteger)index;

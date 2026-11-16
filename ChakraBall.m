@@ -55,9 +55,8 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
 @implementation ChakraBall {
     UIWindow *_window;
     ChakraBallView *_view;              // the whole window: the touch target
-    UIView *_disc;                  // the ball you see
-    UIVisualEffectView *_glass;
-    UIView *_tint;
+    UIView *_disc;                  // the ball you see (it carries the shadow and fades while resting)
+    UIView *_face;                  // its dark, tinted face with the coloured rim
     UIImageView *_mark;
     CGFloat _size;                  // the ball's diameter as built
     ChakraEdge _edge;
@@ -129,17 +128,12 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     _disc.layer.shadowOffset = CGSizeMake(0, 2);
     [_view addSubview:_disc];
 
-    _glass = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
-    _glass.frame = _disc.bounds;
-    _glass.userInteractionEnabled = NO;
-    _glass.clipsToBounds = YES;
-    _glass.layer.cornerRadius = _size / 2.0;
-    _glass.layer.borderWidth = 2;
-    [_disc addSubview:_glass];
-
-    _tint = [[UIView alloc] initWithFrame:_glass.bounds];
-    _tint.userInteractionEnabled = NO;
-    [_glass.contentView addSubview:_tint];
+    // A plain disc, not a blur: the ball rests half-transparent, and a blur view only works at full strength.
+    _face = [[UIView alloc] initWithFrame:_disc.bounds];
+    _face.userInteractionEnabled = NO;
+    _face.layer.cornerRadius = _size / 2.0;
+    _face.layer.borderWidth = 2;
+    [_disc addSubview:_face];
 
     _mark = [[UIImageView alloc] initWithFrame:_disc.bounds];
     _mark.contentMode = UIViewContentModeCenter;
@@ -154,8 +148,11 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
 - (void)_paint {
     ChakraSettings *s = [ChakraSettings shared];
     UIColor *accent = s.accentColor;
-    _glass.layer.borderColor = accent.CGColor;
-    _tint.backgroundColor = [accent colorWithAlphaComponent:0.30];
+    CGFloat r = 0, g = 0, b = 0, a = 1;
+    [accent getRed:&r green:&g blue:&b alpha:&a];
+    // night blue-black with a quarter of the accent mixed in
+    _face.backgroundColor = [UIColor colorWithRed:0.105 * 0.74 + r * 0.26 green:0.105 * 0.74 + g * 0.26 blue:0.150 * 0.74 + b * 0.26 alpha:0.95];
+    _face.layer.borderColor = accent.CGColor;
     _mark.transform = CGAffineTransformMakeRotation([ChakraHost interfaceAngle] + _markTurn);
 }
 
@@ -279,7 +276,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     [self _wake];
     [self _scaleDisc:0.92];
     NSUInteger gen = ++_holdGen;
-    ChakraAfter(0.45, ^{
+    ChakraAfter(0.5, ^{
         if (gen == self->_holdGen && self->_mode == ChakraTouchPending) [self _lift];
     });
 }
