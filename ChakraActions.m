@@ -69,7 +69,8 @@ static id ChakraStyleMode(void) {
     Class cls = NSClassFromString(@"UISUserInterfaceStyleMode");
     if (!cls) return nil;
     @try {
-        if ([cls instancesRespondToSelector:@selector(initWithDelegate:)]) mode = [[cls alloc] initWithDelegate:nil];
+        id nobody = nil;        // (a variable: some SDK class declares its own initWithDelegate: as taking nonnull)
+        if ([cls instancesRespondToSelector:@selector(initWithDelegate:)]) mode = [[cls alloc] initWithDelegate:nobody];
         else mode = [[cls alloc] init];
     } @catch (__unused id e) { mode = nil; }
     return mode;
