@@ -1,0 +1,13 @@
+# Frameworks whose Objective-C headers .github/workflows/probe.yml dumps from the iOS 16.5
+# (20F66, iPhone15,3) dyld shared cache. One per line: <image name> [class-name regex].
+# Changing this file and pushing runs the probe.
+SpringBoard
+SpringBoardUI
+SpringBoardServices
+SpringBoardFoundation
+FrontBoardServices
+UIKitServices
+BluetoothManager
+CoreDuet ^_CDBatterySaver$
+UIKitCore ^(UIWindow|UIApplication|UIImage|UIScreen|UIWindowScene|UISystemShellApplication)$
+CoreServices ^LSApplication(Workspace|Proxy)$

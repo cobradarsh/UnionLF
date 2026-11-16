@@ -1,0 +1,72 @@
+# Dumps Objective-C headers for a handful of system frameworks from the firmware Chakra targets
+# (iPhone 14 Pro Max = iPhone15,3, iOS 16.5, build 20F66), so every private class and method the
+# tweak calls can be checked against the real thing without a phone on the cable.
+#
+# Runs only when the list (tools/probe.txt) or this file changes. The headers come back as a
+# short-lived artifact: gh run download <id> --name headers-20F66
+name: Probe iOS 16.5 headers (20F66)
+on:
+  push:
+    branches: [chakra]
+    paths:
+      - tools/probe.txt
+      - .github/workflows/probe.yml
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ipsw
+        run: |
+          brew install blacktop/tap/ipsw
+          ipsw version
+
+      - name: Fetch the dyld shared cache (iPhone15,3 / 20F66)
+        run: |
+          mkdir -p "$RUNNER_TEMP/fw"
+          cd "$RUNNER_TEMP/fw"
+          ipsw download ipsw --device iPhone15,3 --build 20F66 --dyld --dyld-arch arm64e --confirm --output . < /dev/null
+          find . -type f -exec ls -la {} + | head -40
+          du -sh .
+
+      - name: Dump headers
+        run: |
+          DSC=$(find "$RUNNER_TEMP/fw" -type f -name 'dyld_shared_cache_arm64e' | head -1)
+          [ -n "$DSC" ] || { echo "no dyld_shared_cache_arm64e found"; exit 1; }
+          echo "cache: $DSC"
+          mkdir -p headers
+          ipsw dyld info "$DSC" --dylibs --no-color < /dev/null > headers/_images.txt 2>&1 || true
+          grep -i -E "springboard|frontboard|coversheet|controlcenter|UIKitServices|CoreDuet|BluetoothManager" headers/_images.txt | head -60 || true
+          grep -v '^#' tools/probe.txt | while read -r image filter; do
+            [ -n "$image" ] || continue
+            echo "::group::$image $filter"
+            if [ -n "$filter" ]; then
+              ipsw class-dump "$DSC" "$image" --headers --output "headers/$image" --class "$filter" < /dev/null || echo "FAILED (headers): $image"
+            else
+              ipsw class-dump "$DSC" "$image" --headers --output "headers/$image" < /dev/null || echo "FAILED (headers): $image"
+            fi
+            n=$(find "headers/$image" -name '*.h' 2>/dev/null | wc -l | tr -d ' ')
+            echo "$n headers"
+            if [ "$n" = "0" ]; then
+              # no header files written: keep the plain text dump instead
+              mkdir -p "headers/$image"
+              if [ -n "$filter" ]; then
+                ipsw class-dump "$DSC" "$image" --class "$filter" --no-color < /dev/null > "headers/$image/_dump.txt" 2>&1 || echo "FAILED (text): $image"
+              else
+                ipsw class-dump "$DSC" "$image" --no-color < /dev/null > "headers/$image/_dump.txt" 2>&1 || echo "FAILED (text): $image"
+              fi
+              wc -l "headers/$image/_dump.txt" || true
+            fi
+            echo "::endgroup::"
+          done
+          du -sh headers
+
+      - name: Upload headers
+        uses: actions/upload-artifact@v4
+        with:
+          name: headers-20F66
+          path: headers
+          retention-days: 3
