@@ -14,7 +14,7 @@ on:
 
 jobs:
   probe:
-    runs-on: macos-latest
+    runs-on: macos-15-intel      # the arm64 macOS runners were out of capacity on 16 Nov 2026
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

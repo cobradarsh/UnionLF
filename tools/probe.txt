@@ -11,3 +11,4 @@ BluetoothManager
 CoreDuet ^_CDBatterySaver$
 UIKitCore ^(UIWindow|UIApplication|UIImage|UIScreen|UIWindowScene|UISystemShellApplication)$
 CoreServices ^LSApplication(Workspace|Proxy)$
+LowPowerMode
