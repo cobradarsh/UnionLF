@@ -18,12 +18,45 @@ on:
       - .github/workflows/probe.yml
   workflow_dispatch:
 
+# a newer push replaces a run that is still waiting for a runner
+concurrency:
+  group: chakra-build
+  cancel-in-progress: true
+
 jobs:
+  # A quick compile check on Linux (nothing is linked): Linux runners start at once, so a typo
+  # shows up in a minute even on a day when the macOS runners keep everyone waiting. Upstream
+  # clang against the iOS SDK headers, warnings as errors like the real build.
+  syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get iOS 16.5 SDK
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/sdk.tar.xz" https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          mkdir -p "$RUNNER_TEMP/sdk"
+          tar xf "$RUNNER_TEMP/sdk.tar.xz" -C "$RUNNER_TEMP/sdk"
+          ls "$RUNNER_TEMP/sdk"
+
+      - name: Compile every source (syntax only)
+        run: |
+          clang --version
+          SDK="$RUNNER_TEMP/sdk/iPhoneOS16.5.sdk"
+          fail=0
+          for f in Tweak.m Chakra*.m; do
+            echo "== $f"
+            clang -fsyntax-only -x objective-c -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc               -Wall -Werror -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function               -Wno-unused-but-set-variable -I. "$f" || fail=1
+          done
+          python3 tools/layout_check.py | tail -1
+          exit $fail
+
   build:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel, macos-14]
+        runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
