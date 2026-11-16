@@ -461,7 +461,9 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
     if (message.length == 0) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         CGSize sz = [ChakraHost screenSize];
-        CGRect b = CGRectMake(0, 0, sz.width, sz.height);
+        CGFloat angle = [ChakraHost interfaceAngle];
+        BOOL sideways = fabs(fabs(angle) - M_PI_2) < 0.01;
+        CGFloat room = (sideways ? sz.height : sz.width) - 60;          // the width the words may take, as they are read
         UILabel *t = [UILabel new];
         t.text = message;
         t.textColor = UIColor.whiteColor;
@@ -471,22 +473,23 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
         t.numberOfLines = 0;
         t.layer.cornerRadius = 14;
         t.clipsToBounds = YES;
-        CGSize fit = [t sizeThatFits:CGSizeMake(b.size.width - 100, 200)];
-        CGFloat w = MIN(b.size.width - 60, fit.width + 34), h = fit.height + 22;
-        t.frame = CGRectMake((b.size.width - w) / 2, [ChakraHost safeInsets].top + 14, w, h);
-        UIWindowScene *scene = [ChakraHost mainScene];
-        UIWindow *win = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:b];
-        win.frame = b;
-        win.windowLevel = 100030;
-        win.backgroundColor = UIColor.clearColor;
+        CGSize fit = [t sizeThatFits:CGSizeMake(room - 34, 200)];
+        CGFloat w = MIN(room, fit.width + 34), h = fit.height + 22;
+        t.bounds = CGRectMake(0, 0, w, h);
+        // near the top of the screen as the reader sees it
+        CGFloat inset = [ChakraHost safeInsets].top + 14 + h / 2.0;
+        if (angle == 0)            t.center = CGPointMake(sz.width / 2.0, inset);
+        else if (!sideways)        t.center = CGPointMake(sz.width / 2.0, sz.height - inset);
+        else if (angle > 0)        t.center = CGPointMake(sz.width - 24 - h / 2.0, sz.height / 2.0);
+        else                       t.center = CGPointMake(24 + h / 2.0, sz.height / 2.0);
+        t.transform = CGAffineTransformMakeRotation(angle);
+        UIWindow *win = [ChakraHost overlayWindowAtLevel:100030];
         win.userInteractionEnabled = NO;
-        win.rootViewController = [UIViewController new];
-        win.rootViewController.view.backgroundColor = UIColor.clearColor;
         [win.rootViewController.view addSubview:t];
         win.hidden = NO;
         t.alpha = 0;
         [UIView animateWithDuration:0.2 animations:^{ t.alpha = 1; }];
-        ChakraAfter(2.2, ^{
+        ChakraAfter(2.4, ^{
             [UIView animateWithDuration:0.25 animations:^{ t.alpha = 0; } completion:^(BOOL done) { win.hidden = YES; }];
         });
     });
