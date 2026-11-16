@@ -1,0 +1,9 @@
+Package: com.adarsh.chakra
+Name: Chakra
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: A wheel of your apps on the edge of the screen. Tap the ball, or slide from it, to open apps, run system actions (Home, App Switcher, Last App, Lock, Screenshot, Torch, Wi-Fi, Bluetooth and more) and your own links and Shortcuts. Lives in SpringBoard: no helper app to keep running.
+Maintainer: Adarsh
+Author: Adarsh
+Section: Tweaks
+Depends: ellekit, preferenceloader
