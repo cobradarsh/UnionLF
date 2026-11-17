@@ -21,6 +21,7 @@
         unset <key>
         action <id>                 run a system action
         launch <bundle id>          open an app
+        spawn <bundle id>           start an app in the background; nothing shows (Settings, for PrefsHelper.m's report)
         url <link>                  open a link the way a shortcut entry would
         shot [name]                 screenshot → <log dir>/chakra_<name>.jpg
         state                       log the ball, the menu, the wheel's entries and what is in front
@@ -156,6 +157,14 @@ static void ChakraRun(NSArray<NSString *> *lines, NSUInteger index) {
             [ChakraActions perform:a1];
         } else if ([cmd isEqualToString:@"launch"] && a1) {
             ChakraLog(@"launch -> %d", [ChakraHost launchApp:a1]);
+        } else if ([cmd isEqualToString:@"spawn"] && a1) {
+            UIApplication *app = UIApplication.sharedApplication;
+            SEL s = NSSelectorFromString(@"launchApplicationWithIdentifier:suspended:");
+            BOOL ok = NO;
+            if (ChakraShape(app, s, "Bc", 2)) {
+                @try { ok = ((BOOL (*)(id, SEL, id, BOOL))objc_msgSend)(app, s, a1, YES); } @catch (__unused id e) {}
+            }
+            ChakraLog(@"spawn %@ -> %d", a1, (int)ok);
         } else if ([cmd isEqualToString:@"url"] && a1) {
             [ChakraHost openURL:[NSURL URLWithString:a1]];
         } else if ([cmd isEqualToString:@"shot"]) {

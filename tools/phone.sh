@@ -4,6 +4,8 @@
 #   install <deb>        copy the package over, dpkg -i, respring
 #   remove               dpkg -r com.adarsh.chakra, respring
 #   log [n]              the last n lines of Chakra.log (default 40)
+#   settings             start Settings in the background and show what Chakra's helper found there
+#                        (needs "test on"; see PrefsHelper.m)
 #   test on|off          switch the test commands on or off (the chakra_test marker file)
 #   run <line> [<line>…] run test command lines in order (see the top of ChakraDebug.m)
 #   fetch <name> <dir>   copy the screenshot made by "shot <name>" into <dir>, then delete it on the phone
@@ -20,6 +22,8 @@ case "${1:-}" in
     [ -f "$deb" ] || { echo "no such file: $deb"; exit 1; }
     $SSH 'cat > /tmp/chakra.deb' < "$deb" || exit 1
     $SSH 'dpkg -i /tmp/chakra.deb; rc=$?; rm -f /tmp/chakra.deb; echo "dpkg exit $rc"; dpkg -s com.adarsh.chakra | grep -E "^(Version|Status)"; exit $rc' || exit 1
+    # Settings is closed so that its next start loads the new ChakraPrefs library
+    $SSH 'killall -9 Preferences 2>/dev/null; true'
     echo "respringing…"
     $SSH 'sbreload' || true
     ;;
@@ -27,9 +31,17 @@ case "${1:-}" in
     $SSH 'dpkg -r com.adarsh.chakra; sbreload' ;;
   log)
     $SSH "tail -n ${2:-40} $LOGS/Chakra.log" ;;
+  settings)
+    $SSH "rm -f $LOGS/ChakraSettings.log; killall -9 Preferences 2>/dev/null; true"
+    printf 'spawn com.apple.Preferences\n' | $SSH "cat > $LOGS/chakra_cmd.tmp && chown mobile:mobile $LOGS/chakra_cmd.tmp && mv $LOGS/chakra_cmd.tmp $LOGS/chakra_cmd.txt"
+    for i in 1 2 3 4 5 6 7 8; do
+      $SSH "test -f $LOGS/ChakraSettings.log" && break
+      sleep 2
+    done
+    $SSH "cat $LOGS/ChakraSettings.log 2>/dev/null || echo 'no report: Settings did not start, or the helper is not in it'; tail -n 2 $LOGS/Chakra.log" ;;
   test)
     if [ "${2:-}" = "on" ]; then $SSH "touch $LOGS/chakra_test && chown mobile:mobile $LOGS/chakra_test && echo 'test commands: on'"
-    else $SSH "rm -f $LOGS/chakra_test $LOGS/chakra_cmd.txt && echo 'test commands: off'"; fi ;;
+    else $SSH "rm -f $LOGS/chakra_test $LOGS/chakra_cmd.txt $LOGS/ChakraSettings.log && echo 'test commands: off'"; fi ;;
   run)
     shift
     [ $# -gt 0 ] || { echo "usage: phone.sh run <line> [<line>…]"; exit 1; }
@@ -40,5 +52,5 @@ case "${1:-}" in
     $SSH "cat $LOGS/chakra_$name.jpg" > "$dir/chakra_$name.jpg" && $SSH "rm -f $LOGS/chakra_$name.jpg"
     ls -la "$dir/chakra_$name.jpg" ;;
   *)
-    sed -n '2,11p' "$0" ;;
+    sed -n '2,13p' "$0" ;;
 esac

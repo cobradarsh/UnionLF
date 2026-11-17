@@ -52,10 +52,8 @@ To change the order, or to add actions and shortcuts, open the wheel and tap Edi
 			<string>com.adarsh.chakra/prefs</string>
 			<key>alphabeticIndexingEnabled</key>
 			<true/>
-			<key>bundle</key>
-			<string>AltList</string>
 			<key>cell</key>
-			<string>PSLinkListCell</string>
+			<string>PSLinkCell</string>
 			<key>defaultApplicationSwitchValue</key>
 			<false/>
 			<key>defaults</key>
@@ -64,14 +62,10 @@ To change the order, or to add actions and shortcuts, open the wheel and tap Edi
 			<string>ATLApplicationListMultiSelectionController</string>
 			<key>hideSearchBarWhileScrolling</key>
 			<false/>
-			<key>isController</key>
-			<true/>
 			<key>key</key>
 			<string>apps</string>
 			<key>label</key>
 			<string>Apps on the Wheel</string>
-			<key>overridePrincipalClass</key>
-			<true/>
 			<key>sections</key>
 			<array>
 				<dict>
@@ -533,26 +527,20 @@ While a double or triple tap is set, a single tap waits a quarter of a second to
 			<string>com.adarsh.chakra/prefs</string>
 			<key>alphabeticIndexingEnabled</key>
 			<true/>
-			<key>bundle</key>
-			<string>AltList</string>
 			<key>cell</key>
 			<string>PSLinkListCell</string>
-			<key>defaultApplicationSwitchValue</key>
-			<false/>
+			<key>cellClass</key>
+			<string>ATLApplicationSelectionCell</string>
 			<key>defaults</key>
 			<string>com.adarsh.chakra</string>
 			<key>detail</key>
 			<string>ATLApplicationListSelectionController</string>
 			<key>hideSearchBarWhileScrolling</key>
 			<false/>
-			<key>isController</key>
-			<true/>
 			<key>key</key>
 			<string>gestureDoubleApp</string>
 			<key>label</key>
 			<string>App for Double Tap</string>
-			<key>overridePrincipalClass</key>
-			<true/>
 			<key>sections</key>
 			<array>
 				<dict>
@@ -636,26 +624,20 @@ While a double or triple tap is set, a single tap waits a quarter of a second to
 			<string>com.adarsh.chakra/prefs</string>
 			<key>alphabeticIndexingEnabled</key>
 			<true/>
-			<key>bundle</key>
-			<string>AltList</string>
 			<key>cell</key>
 			<string>PSLinkListCell</string>
-			<key>defaultApplicationSwitchValue</key>
-			<false/>
+			<key>cellClass</key>
+			<string>ATLApplicationSelectionCell</string>
 			<key>defaults</key>
 			<string>com.adarsh.chakra</string>
 			<key>detail</key>
 			<string>ATLApplicationListSelectionController</string>
 			<key>hideSearchBarWhileScrolling</key>
 			<false/>
-			<key>isController</key>
-			<true/>
 			<key>key</key>
 			<string>gestureTripleApp</string>
 			<key>label</key>
 			<string>App for Triple Tap</string>
-			<key>overridePrincipalClass</key>
-			<true/>
 			<key>sections</key>
 			<array>
 				<dict>
@@ -739,26 +721,20 @@ While a double or triple tap is set, a single tap waits a quarter of a second to
 			<string>com.adarsh.chakra/prefs</string>
 			<key>alphabeticIndexingEnabled</key>
 			<true/>
-			<key>bundle</key>
-			<string>AltList</string>
 			<key>cell</key>
 			<string>PSLinkListCell</string>
-			<key>defaultApplicationSwitchValue</key>
-			<false/>
+			<key>cellClass</key>
+			<string>ATLApplicationSelectionCell</string>
 			<key>defaults</key>
 			<string>com.adarsh.chakra</string>
 			<key>detail</key>
 			<string>ATLApplicationListSelectionController</string>
 			<key>hideSearchBarWhileScrolling</key>
 			<false/>
-			<key>isController</key>
-			<true/>
 			<key>key</key>
 			<string>gestureHoldApp</string>
 			<key>label</key>
 			<string>App for Hold</string>
-			<key>overridePrincipalClass</key>
-			<true/>
 			<key>sections</key>
 			<array>
 				<dict>

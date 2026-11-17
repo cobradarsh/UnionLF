@@ -10,10 +10,16 @@ INSTALL_TARGET_PROCESSES = SpringBoard
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = Chakra
+TWEAK_NAME = Chakra ChakraPrefs
 
 Chakra_FILES = Tweak.m ChakraCore.m ChakraGlyphs.m ChakraGlass.m ChakraItems.m ChakraActions.m ChakraLayout.m ChakraWheel.m ChakraBall.m ChakraEditor.m ChakraDebug.m
 Chakra_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 Chakra_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
+
+# ChakraPrefs goes into the Settings app (ChakraPrefs.plist) and does one thing there: it loads
+# AltList, so that the app lists on the plist-only Settings page can open. See PrefsHelper.m.
+ChakraPrefs_FILES = PrefsHelper.m
+ChakraPrefs_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
+ChakraPrefs_FRAMEWORKS = Foundation
 
 include $(THEOS_MAKE_PATH)/tweak.mk

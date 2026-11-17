@@ -45,7 +45,7 @@ jobs:
           clang --version
           SDK="$RUNNER_TEMP/sdk/iPhoneOS16.5.sdk"
           fail=0
-          for f in Tweak.m Chakra*.m; do
+          for f in Tweak.m Chakra*.m PrefsHelper.m; do
             echo "== $f"
             clang -fsyntax-only -x objective-c -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc               -Wall -Werror -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function               -Wno-unused-but-set-variable -I. "$f" || fail=1
           done
@@ -132,14 +132,17 @@ jobs:
 
       - name: Verify arm64e slice is the VERSIONED ptrauth ABI (gate)
         run: |
-          # the staged (fat) copy, not a thin per-arch one from .theos/obj/<arch>/
-          DY=$(find . -path '*DynamicLibraries/Chakra.dylib' | head -1)
-          [ -n "$DY" ] || DY=.theos/obj/Chakra.dylib
-          echo "dylib under test: $DY"
-          lipo -detailed_info "$DY" || true
-          python3 tools/verify_arm64e.py "$DY"
-          echo "--- links against ---"
-          otool -arch arm64e -L "$DY" || true
+          # the staged (fat) copies, not thin per-arch ones from .theos/obj/<arch>/
+          # Chakra goes into SpringBoard, ChakraPrefs into Settings: both are arm64e processes
+          for name in Chakra ChakraPrefs; do
+            DY=$(find . -path "*DynamicLibraries/$name.dylib" | head -1)
+            [ -n "$DY" ] || DY=.theos/obj/$name.dylib
+            echo "dylib under test: $DY"
+            lipo -detailed_info "$DY" || true
+            python3 tools/verify_arm64e.py "$DY"
+            echo "--- links against ---"
+            otool -arch arm64e -L "$DY" || true
+          done
           echo "--- what is in the package ---"
           ls -la packages/
           mkdir -p "$RUNNER_TEMP/deb" && (cd "$RUNNER_TEMP/deb" && ar x "$GITHUB_WORKSPACE"/packages/*.deb && ls -la && tar tvf data.tar.* && tar xOf control.tar.* ./control) || true

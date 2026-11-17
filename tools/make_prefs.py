@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build Chakra's plist-only Settings page (and its icon).
 
-Plist-only, like Wingman and Dynamic Stage+: Preferences.app is arm64e and a
-preference *bundle* would need a compiled binary; a plist has none, so it
-always loads.
+Plist-only, like Wingman and Dynamic Stage+: the page itself has no compiled
+code. The one thing a plist cannot do, bring AltList into Settings for the app
+lists, is done by ChakraPrefs.dylib (PrefsHelper.m).
 
 Every control posts com.adarsh.chakra/prefs, and SpringBoard re-reads the
 settings the moment you change something - no respring.
@@ -97,16 +97,24 @@ def app_list(key, label, many):
     """A list of every app, from AltList (com.opa334.altlist): searchable, A to Z.
 
     many=True: a switch per app, the bundle ids that are on are saved as an array.
-    many=False: pick one, its bundle id is saved.
-    "bundle" makes Settings load AltList's own preference bundle first, which is what brings its
-    classes in: this page has no compiled code of its own to do that.
+    many=False: pick one, its bundle id is saved, and the row shows that app's name.
+
+    The rows only name AltList's classes, the way a compiled settings bundle's plist does, so
+    AltList has to be in Settings before the page is read. This page has no code to do that, and
+    "bundle = AltList" on a row does not do it either (1.0.1 and 1.0.2 tried: PreferenceLoader
+    finds AltList's bundle for a top-level entry only, and shows an error page for a row). So
+    ChakraPrefs.dylib (PrefsHelper.m) loads AltList when Settings starts.
     """
-    return {"cell": "PSLinkListCell", "bundle": "AltList", "isController": True, "overridePrincipalClass": True,
-            "detail": "ATLApplicationListMultiSelectionController" if many else "ATLApplicationListSelectionController",
-            "defaults": D, "key": key, "label": label, "PostNotification": NOTE,
-            "sections": [{"sectionType": "Visible"}],
-            "useSearchBar": True, "hideSearchBarWhileScrolling": False, "alphabeticIndexingEnabled": True,
-            "defaultApplicationSwitchValue": False}
+    row = {"cell": "PSLinkCell" if many else "PSLinkListCell",
+           "detail": "ATLApplicationListMultiSelectionController" if many else "ATLApplicationListSelectionController",
+           "defaults": D, "key": key, "label": label, "PostNotification": NOTE,
+           "sections": [{"sectionType": "Visible"}],
+           "useSearchBar": True, "hideSearchBarWhileScrolling": False, "alphabeticIndexingEnabled": True}
+    if many:
+        row["defaultApplicationSwitchValue"] = False
+    else:
+        row["cellClass"] = "ATLApplicationSelectionCell"
+    return row
 
 
 # What a double tap, a triple tap or a hold on the ball can do. Values are read by

@@ -59,6 +59,8 @@ haptics; what a double tap, triple tap and hold do; Lock Screen, landscape and s
 four shortcuts; the debug log. Everything applies at once, no respring.
 
 The app lists there come from AltList (`com.opa334.altlist`), which the package depends on.
+The page is a plist with no code of its own, so a second small library, `ChakraPrefs.dylib`,
+is loaded into the Settings app to bring AltList in; that is all it does.
 
 ## How it is put together
 
@@ -75,6 +77,7 @@ The app lists there come from AltList (`com.opa334.altlist`), which the package 
 | `ChakraGlass.m` | the pane behind the wheel: glass, or frosted |
 | `ChakraCore.m` | log, settings, SpringBoard helpers |
 | `ChakraDebug.m` | test commands |
+| `PrefsHelper.m` | `ChakraPrefs.dylib`: loads AltList in the Settings app, for the app lists |
 | `tools/make_prefs.py` | the plist-only Settings page and its icon |
 
 No method is hooked. Every private class and method is looked up at run time and its arguments
