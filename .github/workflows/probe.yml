@@ -1,0 +1,118 @@
+# Looks at the real thing: the Objective-C classes and the machine code of the firmware the tweak
+# is for (iPhone 14 Pro Max = iPhone15,3, iOS 16.5, build 20F66), without a phone on the cable.
+#
+# For the frameworks in tools/probe.txt it dumps the headers of the listed classes; for the
+# functions in tools/probe_symbols.txt it writes the disassembly. That is how the questions the
+# simulator cannot answer are settled: is the menu's list view its collection view's delegate on
+# 16.5, how is a separator view put together, what does applying layout attributes do to "hidden".
+#
+# Runs only when one of the two lists or this file changes. The result comes back as a
+# short-lived artifact: gh run download <id> --name probe-20F66
+name: Probe iOS 16.5 (20F66)
+on:
+  push:
+    branches: [iwanttranslucent]
+    paths:
+      - tools/probe.txt
+      - tools/probe_symbols.txt
+      - .github/workflows/probe.yml
+  workflow_dispatch:
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ipsw
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+        run: |
+          brew install blacktop/tap/ipsw
+          ipsw version
+
+      - name: Fetch the dyld shared cache (iPhone15,3 / 20F66)
+        run: |
+          mkdir -p "$RUNNER_TEMP/fw"
+          cd "$RUNNER_TEMP/fw"
+          ipsw download ipsw --device iPhone15,3 --build 20F66 --dyld --dyld-arch arm64e --confirm --output . < /dev/null
+          find . -type f -exec ls -la {} + | head -60
+          du -sh .
+
+      - name: Dump headers
+        run: |
+          DSC=$(find "$RUNNER_TEMP/fw" -type f -name 'dyld_shared_cache_arm64e' | head -1)
+          [ -n "$DSC" ] || { echo "no dyld_shared_cache_arm64e found"; exit 1; }
+          echo "cache: $DSC"
+          echo "DSC=$DSC" >> "$GITHUB_ENV"
+          mkdir -p probe/headers
+          grep -v '^#' tools/probe.txt | while read -r image filter; do
+            [ -n "$image" ] || continue
+            echo "::group::$image $filter"
+            ipsw class-dump "$DSC" "$image" --headers --output "probe/headers/$image" --class "$filter" < /dev/null || echo "FAILED (headers): $image"
+            n=$(find "probe/headers/$image" -name '*.h' 2>/dev/null | wc -l | tr -d ' ')
+            echo "$n headers"
+            if [ "$n" = "0" ]; then
+              mkdir -p "probe/headers/$image"
+              ipsw class-dump "$DSC" "$image" --class "$filter" --no-color < /dev/null > "probe/headers/$image/_dump.txt" 2>&1 || echo "FAILED (text): $image"
+              wc -l "probe/headers/$image/_dump.txt" || true
+            fi
+            echo "::endgroup::"
+          done
+          du -sh probe/headers
+
+      - name: Disassemble
+        run: |
+          mkdir -p probe/disasm probe/help
+          ipsw dyld disass --help > probe/help/disass.txt 2>&1 || true
+          ipsw dyld symaddr --help > probe/help/symaddr.txt 2>&1 || true
+          ipsw dyld a2s --help > probe/help/a2s.txt 2>&1 || true
+          ipsw dyld macho --help > probe/help/macho.txt 2>&1 || true
+          ipsw class-dump --help > probe/help/class-dump.txt 2>&1 || true
+          cat probe/help/disass.txt
+          grep -v '^#' tools/probe_symbols.txt | while IFS='|' read -r image symbol; do
+            [ -n "$image" ] && [ -n "$symbol" ] || continue
+            safe=$(printf '%s' "$symbol" | tr -c 'A-Za-z0-9_.' '_' | cut -c1-120)
+            out="probe/disasm/${image}__${safe}.txt"
+            echo "::group::$image $symbol"
+            ipsw dyld disass "$DSC" --image "$image" --symbol "$symbol" --no-color < /dev/null > "$out" 2>&1 || echo "FAILED: $image $symbol"
+            wc -l "$out" || true
+            head -8 "$out" || true
+            echo "::endgroup::"
+          done
+          du -sh probe/disasm
+
+      - name: Symbols of the menu classes (to find the blocks)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          mkdir -p probe/symbols
+          ipsw dyld symaddr "$DSC" --image UIKitCore --no-color < /dev/null > "$RUNNER_TEMP/uikit-symbols.txt" 2> probe/symbols/_errors.txt || true
+          wc -l "$RUNNER_TEMP/uikit-symbols.txt" || true
+          grep -E "_UIContextMenu(ListView|ReusableSeparatorView|HeaderView|CollectionViewLayout|Cell )|_UIContextMenuSeparator|kContextMenu|UICollectionReusableView _set(Base)?LayoutAttributes" \
+            "$RUNNER_TEMP/uikit-symbols.txt" > probe/symbols/UIKitCore-menu.txt || true
+          wc -l probe/symbols/UIKitCore-menu.txt || true
+          head -80 probe/symbols/UIKitCore-menu.txt || true
+          # the blocks of the list view's data source: where a supplementary view is made and set up
+          grep -E "_UIContextMenuListView.*block_invoke" probe/symbols/UIKitCore-menu.txt | head -40 | while read -r line; do
+            addr=$(printf '%s' "$line" | grep -o -E '0x[0-9a-fA-F]+' | head -1)
+            [ -n "$addr" ] || continue
+            safe=$(printf '%s' "$line" | tr -c 'A-Za-z0-9_.' '_' | cut -c1-120)
+            ipsw dyld disass "$DSC" --vaddr "$addr" --no-color < /dev/null > "probe/disasm/block__${safe}.txt" 2>&1 || echo "FAILED: $line"
+          done
+          ls -la probe/disasm | head -80
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-20F66-${{ matrix.runner }}
+          path: probe
+          retention-days: 5

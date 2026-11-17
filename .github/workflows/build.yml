@@ -1,0 +1,222 @@
+# Builds IWantTranslucent Lean for RootHide on macOS with Xcode's toolchain, and measures it
+# against the original tweak in a simulator.
+#
+# Same recipe as Chakra and the other tweaks in this repository: Xcode's clang tags the arm64e
+# slice with the VERSIONED ptrauth ABI (cpusubtype 0x80000002), which dyld requires before it
+# loads a library into arm64e platform processes. The gate (tools/verify_dylib.py) also refuses a
+# library that links anything but iOS's own libraries, so that nothing rides along into every app.
+#
+# The macOS jobs run on two kinds of runner at once: the hosted arm64 runners have been out of
+# capacity before; whichever frees up first does the work.
+name: Build IWantTranslucent Lean (RootHide)
+on:
+  push:
+    branches: [iwanttranslucent]
+    paths-ignore:
+      - README.md
+      - tools/probe.txt
+      - tools/probe_symbols.txt
+      - .github/workflows/probe.yml
+  workflow_dispatch:
+
+# a newer push replaces a run that is still waiting for a runner
+concurrency:
+  group: iwanttranslucent-build
+  cancel-in-progress: true
+
+jobs:
+  # A quick compile check on Linux (nothing is linked): Linux runners start at once, so a typo
+  # shows up in a minute. Upstream clang against the iOS SDK headers, warnings as errors.
+  syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get iOS 16.5 SDK
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/sdk.tar.xz" https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          mkdir -p "$RUNNER_TEMP/sdk"
+          tar xf "$RUNNER_TEMP/sdk.tar.xz" -C "$RUNNER_TEMP/sdk"
+          ls "$RUNNER_TEMP/sdk"
+
+      - name: Compile every source (syntax only)
+        run: |
+          clang --version
+          SDK="$RUNNER_TEMP/sdk/iPhoneOS16.5.sdk"
+          fail=0
+          for f in Tweak.m bench/harness.m bench/substrate_shim.m; do
+            echo "== $f"
+            clang -fsyntax-only -x objective-c -target arm64-apple-ios16.0 -isysroot "$SDK" -fobjc-arc \
+              -Wall -Werror -Wno-deprecated-declarations -Ibench "$f" || fail=1
+          done
+          echo "== Tweak.m again, as arm64e (for information: this clang may not know the target)"
+          clang -fsyntax-only -x objective-c -target arm64e-apple-ios16.0 -isysroot "$SDK" -fobjc-arc \
+            -Wall -Werror -Wno-deprecated-declarations Tweak.m || echo "arm64e syntax check did not pass here"
+          echo "== diag/iwtdiag.c"
+          clang -fsyntax-only -x c -target arm64-apple-ios15.0 -isysroot "$SDK" -Wall -Werror diag/iwtdiag.c || fail=1
+          echo "== scripts"
+          python3 -m py_compile tools/*.py || fail=1
+          for f in tools/*.sh; do bash -n "$f" || fail=1; done
+          exit $fail
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers || true
+          xcodebuild -version || true
+          clang --version || true
+
+      - name: Install packaging deps (ldid, xz)
+        # Only what Theos needs: it signs with ldid and packs the .deb itself (dm.pl, lzma through xz).
+        # ldid comes as a ready binary from its own releases; Homebrew is only the fallback (on Intel
+        # runners Homebrew compiles its dependencies from source and runs into the time limit).
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+        run: |
+          mkdir -p "$HOME/bin"
+          if ! command -v ldid > /dev/null; then
+            url="https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_macosx_$(uname -m)"
+            curl -fsSL -o "$HOME/bin/ldid" "$url" || true
+            if file "$HOME/bin/ldid" 2>/dev/null | grep -q "Mach-O"; then
+              chmod +x "$HOME/bin/ldid"
+            else
+              echo "no ready-made ldid at $url: building it with Homebrew (slow on Intel)"
+              rm -f "$HOME/bin/ldid"
+              brew install ldid
+            fi
+          fi
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          command -v xz > /dev/null || brew install xz || true
+          export PATH="$HOME/bin:$PATH"
+          echo "ldid: $(command -v ldid)  xz: $(command -v xz)"
+
+      - name: Install RootHide Theos (git clone)
+        run: |
+          export THEOS=$HOME/theos
+          git clone --recursive https://github.com/roothide/theos.git "$THEOS"
+          git -C "$THEOS" submodule update --init --recursive
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Get iOS 16.5 SDK
+        run: |
+          mkdir -p "$HOME/theos/sdks"
+          cd "$HOME/theos/sdks"
+          curl -fsSL -o iPhoneOS16.5.sdk.tar.xz \
+            https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          tar xf iPhoneOS16.5.sdk.tar.xz
+          ls -d iPhoneOS*.sdk
+
+      - name: Build the .deb (Xcode clang => versioned arm64e)
+        run: |
+          export THEOS="$HOME/theos"
+          make clean || true
+          set -o pipefail
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" 2>&1 | tee build.log
+          ls -la packages/
+
+      - name: Gate (both slices, system libraries only, nothing for RootHide's patch loader)
+        run: |
+          # the staged (fat) copy, not a thin per-arch one from .theos/obj/<arch>/
+          DY=$(find . -path "*DynamicLibraries/IWantTranslucent.dylib" | head -1)
+          [ -n "$DY" ] || DY=.theos/obj/IWantTranslucent.dylib
+          echo "dylib under test: $DY"
+          lipo -detailed_info "$DY" || true
+          python3 tools/verify_dylib.py "$DY"
+          for arch in arm64 arm64e; do
+            echo "--- $arch: links against ---"
+            otool -arch $arch -L "$DY" || true
+            echo "--- $arch: size ---"
+            size -arch $arch "$DY" || true
+          done
+          echo "--- what is in the package ---"
+          mkdir -p "$RUNNER_TEMP/deb"
+          (cd "$RUNNER_TEMP/deb" && ar x "$GITHUB_WORKSPACE"/packages/*.deb && ls -la && tar tvf data.tar.* > listing.txt && cat listing.txt && tar xOf control.tar.* ./control)
+          if grep -E "roothidepatch|pkgmirror" "$RUNNER_TEMP/deb/listing.txt"; then
+            echo "the package carries files for RootHide's patch loader"; exit 1
+          fi
+
+      - name: Build the diagnostic tool (not part of the package)
+        run: |
+          export PATH="$HOME/bin:$PATH"
+          mkdir -p diag-out
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -O2 -Wall \
+            -o diag-out/iwtdiag diag/iwtdiag.c -framework CoreFoundation -framework IOKit
+          ldid -Sdiag/entitlements.plist diag-out/iwtdiag
+          file diag-out/iwtdiag
+          ls -la diag-out
+
+      - name: Upload build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iwanttranslucent-build-log-${{ matrix.runner }}
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: iwanttranslucent-roothide-deb-${{ matrix.runner }}
+          path: packages/*.deb
+
+      - name: Upload diagnostic tool
+        uses: actions/upload-artifact@v4
+        with:
+          name: iwanttranslucent-iwtdiag-${{ matrix.runner }}
+          path: diag-out/iwtdiag
+
+  # The original tweak and the rebuild side by side in a simulator: what each hook costs, what the
+  # menu looks like, whether anything keeps running while a menu is open.
+  simulator:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain and simulator runtimes
+        run: |
+          xcodebuild -version || true
+          xcrun simctl list runtimes || true
+
+      - name: Get an iOS 16.4 simulator (the nearest to the phone's 16.5)
+        # Without it the benchmark still runs, on whatever iOS the runner has; its report then says
+        # that the checks are for information only.
+        continue-on-error: true
+        timeout-minutes: 35
+        run: |
+          if xcrun simctl list runtimes | grep -q "iOS 16\.4"; then echo "already there"; exit 0; fi
+          df -h / | tail -1
+          xcodebuild -downloadPlatform iOS -buildVersion 16.4 || xcodebuild -downloadPlatform iOS -buildVersion 20E247 || true
+          xcrun simctl list runtimes || true
+          df -h / | tail -1
+
+      - name: Benchmark in the simulator
+        run: bash tools/sim_bench.sh "$PWD/sim-out" 16.4
+
+      - name: Upload results and pictures (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iwanttranslucent-simulator-${{ matrix.runner }}
+          path: |
+            sim-out
+            !sim-out/*.dylib
+            !sim-out/*.dSYM
+            !sim-out/IWTHarness.app
+          if-no-files-found: ignore

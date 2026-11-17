@@ -1,0 +1,30 @@
+# Functions whose disassembly .github/workflows/probe.yml writes out from the iOS 16.5 (20F66)
+# dyld shared cache. One per line: <image name>|<symbol>. Changing this file and pushing runs the probe.
+#
+# the menu: who is the collection view's delegate, which classes are registered for which kinds
+UIKitCore|-[_UIContextMenuListView initWithFrame:]
+UIKitCore|-[_UIContextMenuListView setDisplayedMenu:]
+UIKitCore|-[_UIContextMenuListView _dataSourceForCollectionView:]
+UIKitCore|-[_UIContextMenuListView layoutSubviews]
+UIKitCore|-[_UIContextMenuListView setBackgroundView:]
+# the separators and the title
+UIKitCore|-[_UIContextMenuReusableSeparatorView initWithFrame:]
+UIKitCore|-[_UIContextMenuHeaderView initWithFrame:]
+UIKitCore|-[_UIContextMenuHeaderView _separatorHeight]
+UIKitCore|-[_UIContextMenuHeaderView updateConstraints]
+# what applying layout attributes does to a reusable view ("hidden", "alpha")
+UIKitCore|-[UICollectionReusableView _setBaseLayoutAttributes:]
+UIKitCore|-[UICollectionReusableView _setLayoutAttributes:]
+UIKitCore|-[UICollectionReusableView _setLayoutAttributes:force:]
+# Control Centre: how the separators are used
+MediaControls|-[MRURoutingTableViewCell initWithStyle:reuseIdentifier:]
+MediaControls|-[MRURoutingTableViewCell layoutSubviews]
+MediaControls|-[MRURoutingTableViewCell updateVisibility]
+MediaControls|-[MRURoutingTableViewCell updateVisualStyling]
+MediaControls|-[MRURoutingHeaderView initWithReuseIdentifier:]
+MediaControls|-[MRURoutingHeaderView layoutSubviews]
+MediaControls|-[MRUNowPlayingContainerView initWithFrame:]
+MediaControls|-[MRUNowPlayingContainerView layoutSubviews]
+MediaControls|-[MRUNowPlayingContainerView updateVisibility]
+ControlCenterUIKit|-[CCUIMenuModuleItemView _separatorHeight]
+ControlCenterUIKit|-[CCUIMenuModuleItemView layoutSubviews]

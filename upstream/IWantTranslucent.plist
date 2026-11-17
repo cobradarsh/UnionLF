@@ -1,0 +1,18 @@
+{
+	Filter = {
+		Classes = (
+			"_UIContextMenuListView",
+			"_UIContextMenuHeaderView",
+			"_UIContextMenuTitleView",
+			"_UIContextMenuReusableSeparatorView",
+			"_UIElasticContextMenuBackgroundView",
+			"_UIContextMenuActionsListTitleView",
+			"_UIContextMenuActionsListSeparatorView",
+			"UICollectionReusableView",
+			"CCUIMenuModuleItemView",
+			"MRUNowPlayingContainerView",
+			"MRURoutingHeaderView",
+			"MRURoutingTableViewCell"
+		);
+	};
+}

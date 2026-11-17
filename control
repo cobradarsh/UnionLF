@@ -1,0 +1,11 @@
+Package: com.adarsh.iwanttranslucent
+Name: IWantTranslucent Lean
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: Translucent context menus without separators on iOS 16, after Luki120's IWantTranslucent 0.9.4, rebuilt so that it does nothing while no menu is open: a native RootHide build that needs no patch loader, links no hooking library and runs no code in the collection view cells of every app.
+Maintainer: Adarsh
+Author: Luki120 (IWantTranslucent), lean rebuild by Adarsh
+Section: Tweaks
+Depends: ellekit
+Conflicts: me.luki.iwanttranslucent
+Replaces: me.luki.iwanttranslucent
