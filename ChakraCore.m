@@ -243,7 +243,8 @@ void ChakraHapticPlay(ChakraHaptic event) {
 - (CGFloat)ballSize      { return MAX(36, MIN(64, [self _d:@"ballSize" def:46])); }
 - (CGFloat)idleAlpha     { return MAX(0.15, MIN(1.0, [self _d:@"idleAlpha" def:0.6])); }
 - (BOOL)tuck             { return [self _b:@"tuck" def:YES]; }
-- (NSInteger)accent      { NSInteger a = (NSInteger)[self _d:@"accent" def:0]; return (a >= 0 && a <= 7) ? a : 0; }
+- (NSInteger)accent      { NSInteger a = (NSInteger)[self _d:@"accent" def:0]; return (a >= 0 && a <= 8) ? a : 0; }
+- (NSInteger)ballIcon    { return ((NSInteger)[self _d:@"ballIcon" def:0] == 1) ? 1 : 0; }
 - (ChakraStyle)style         { return ((NSInteger)[self _d:@"style" def:0] == 1) ? ChakraStyleColumn : ChakraStyleWheel; }
 - (CGFloat)iconSize      { return MAX(44, MIN(66, [self _d:@"iconSize" def:54])); }
 - (BOOL)labels           { return [self _b:@"labels" def:YES]; }
@@ -291,7 +292,8 @@ void ChakraHapticPlay(ChakraHaptic event) {
                     rgb(0xFF9F0A),      // 4 saffron
                     rgb(0xFF375F),      // 5 pink
                     rgb(0xFF453A),      // 6 red
-                    rgb(0x8E8E93) ];    // 7 graphite
+                    rgb(0x8E8E93),      // 7 graphite
+                    rgb(0xE2A72E) ];    // 8 gold, to go with the golden sun
     });
     return colors[(NSUInteger)self.accent];
 }

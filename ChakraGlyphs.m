@@ -1,6 +1,7 @@
 /*  ChakraGlyphs.m — the icons Chakra draws itself.
 
-    • the wheel mark on the ball (a rim, a hub and eight spokes)
+    • the golden sun wheel on the ball: a picture (ChakraArt.m, made by tools/make_art.py)
+    • the plain wheel mark (a rim, a hub and eight spokes): the ball's other face, and a glyph
     • a glyph disc for every action and shortcut: a filled circle with a white symbol, the way
       Control Centre draws its buttons. App entries use the app's own icon instead.
     • the Bluetooth rune, which SF Symbols does not have
@@ -43,6 +44,31 @@
         [[UIBezierPath bezierPathWithArcCenter:CGPointMake(c, c) radius:hub startAngle:0 endAngle:2 * M_PI clockwise:YES] fill];
     }];
     return [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
+// The golden sun wheel. The picture is 256 pixels across; it is scaled once for each size asked for.
++ (UIImage *)sunWithSize:(CGFloat)size {
+    if (size < 4) size = 4;
+    static UIImage *source;
+    static NSCache<NSNumber *, UIImage *> *made;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSData *data = ChakraSunPNG();
+        source = data.length ? [UIImage imageWithData:data scale:1.0] : nil;
+        made = [NSCache new];
+    });
+    if (!source) return nil;
+    NSNumber *key = @(lround(size * 4.0));
+    UIImage *img = [made objectForKey:key];
+    if (!img) {
+        img = [[self _rendererWithSize:CGSizeMake(size, size)] imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+            CGContextSetInterpolationQuality(ctx.CGContext, kCGInterpolationHigh);
+            [source drawInRect:CGRectMake(0, 0, size, size)];
+        }];
+        img = [img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        [made setObject:img forKey:key];
+    }
+    return img;
 }
 
 // The Bluetooth rune: an upright with two arrowheads that cross it.

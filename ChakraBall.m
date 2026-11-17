@@ -63,8 +63,10 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     UIWindow *_window;
     ChakraBallView *_view;          // the whole window: the touch target
     UIView *_disc;                  // the ball you see (it carries the shadow and fades while resting)
-    UIView *_face;                  // its dark, tinted face with the coloured rim
-    UIImageView *_mark;
+    UIView *_face;                  // its dark face with the coloured rim
+    UIImageView *_mark;             // what is on the face: the golden sun wheel, or the plain wheel mark
+    NSInteger _markKind;            // which of the two was asked for when _mark was last filled (-1: not yet)
+    BOOL _markIsSun;
     CGFloat _size;                  // the ball's diameter as built
     ChakraEdge _edge;
     CGFloat _yFrac;
@@ -147,7 +149,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     _mark = [[UIImageView alloc] initWithFrame:_disc.bounds];
     _mark.contentMode = UIViewContentModeCenter;
     _mark.tintColor = UIColor.whiteColor;
-    _mark.image = [ChakraGlyphs chakraWithSize:round(_size * 0.62)];
+    _markKind = -1;                 // _paint fills it
     [_disc addSubview:_mark];
 
     [self _paint];
@@ -157,10 +159,22 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
 - (void)_paint {
     ChakraSettings *s = [ChakraSettings shared];
     UIColor *accent = s.accentColor;
-    CGFloat r = 0, g = 0, b = 0, a = 1;
-    [accent getRed:&r green:&g blue:&b alpha:&a];
-    // night blue-black with a quarter of the accent mixed in
-    _face.backgroundColor = [UIColor colorWithRed:0.105 * 0.74 + r * 0.26 green:0.105 * 0.74 + g * 0.26 blue:0.150 * 0.74 + b * 0.26 alpha:0.95];
+    NSInteger kind = s.ballIcon;
+    if (kind != _markKind) {                                // only when it changes: this runs every couple of seconds
+        UIImage *sun = (kind == 0) ? [ChakraGlyphs sunWithSize:round(_size * 0.92)] : nil;
+        _mark.image = sun ?: [ChakraGlyphs chakraWithSize:round(_size * 0.62)];
+        _markIsSun = (sun != nil);
+        _markKind = kind;
+    }
+    if (_markIsSun) {
+        // gold wants black behind it
+        _face.backgroundColor = [UIColor colorWithRed:0.030 green:0.027 blue:0.035 alpha:0.96];
+    } else {
+        CGFloat r = 0, g = 0, b = 0, a = 1;
+        [accent getRed:&r green:&g blue:&b alpha:&a];
+        // night blue-black with a quarter of the accent mixed in
+        _face.backgroundColor = [UIColor colorWithRed:0.105 * 0.74 + r * 0.26 green:0.105 * 0.74 + g * 0.26 blue:0.150 * 0.74 + b * 0.26 alpha:0.95];
+    }
     _face.layer.borderColor = accent.CGColor;
     _mark.transform = CGAffineTransformMakeRotation([ChakraHost interfaceAngle] + _markTurn);
     [ChakraHost keepOutOfScreenshots:_window];

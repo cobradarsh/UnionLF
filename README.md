@@ -1,5 +1,7 @@
 # Chakra
 
+<img src="art/chakra-sun.png" width="260" align="right" alt="The golden sun wheel on Chakra's ball">
+
 A wheel of your apps, parked on the edge of the screen. A SpringBoard tweak for RootHide (iOS 15+,
 built and checked for iPhone 14 Pro Max on iOS 16.5).
 
@@ -78,7 +80,9 @@ is loaded into the Settings app to bring AltList in; that is all it does.
 | `ChakraCore.m` | log, settings, SpringBoard helpers |
 | `ChakraDebug.m` | test commands |
 | `PrefsHelper.m` | `ChakraPrefs.dylib`: loads AltList in the Settings app, for the app lists |
-| `tools/make_prefs.py` | the plist-only Settings page and its icon |
+| `ChakraArt.m` | the golden sun wheel on the ball, as a picture inside the library (generated) |
+| `tools/make_prefs.py` | the plist-only Settings page |
+| `tools/make_art.py` | draws the golden sun wheel: the 4096 px master, the ball's picture, the Settings icon |
 
 No method is hooked. Every private class and method is looked up at run time and its arguments
 are checked before it is called, so a missing one costs that one action, not SpringBoard.

@@ -171,6 +171,8 @@ step 27-home 4 "action home"
 step 28-notification-centre 5 "action notifications"
 step 29-shortcut-link 9 "action home" "wait 1.5" "set sc1Name Wikipedia" "set sc1URL wikipedia.org" "set sc1Glyph globe" "items $APPS shortcut:1 action:darkmode" "wait 0.5" "open" "wait 1" "tap 5"
 step 30-kept-out-of-screenshots 5 "action home" "wait 1.5" "set hideInShots true" "wait 0.5" "open" "wait 1" "state"
+step 31-plain-wheel-on-the-ball 4 "close" "wait 0.6" "set ballIcon 1" "set ballSize 60" "wait 1" "open"
+step 32-golden-sun-on-the-ball 4 "close" "wait 0.6" "unset ballIcon" "wait 1" "open"
 cmd "close" "wait 0.6" "state"
 sleep 3
 

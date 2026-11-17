@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Chakra's plist-only Settings page (and its icon).
+"""Build Chakra's plist-only Settings page. (Its icon is made by tools/make_art.py.)
 
 Plist-only, like Wingman and Dynamic Stage+: the page itself has no compiled
 code. The one thing a plist cannot do, bring AltList into Settings for the app
@@ -17,12 +17,9 @@ Usage:  python3 tools/make_prefs.py layout/Library/PreferenceLoader/Preferences
         python3 tools/make_prefs.py --glyphs      (prints the icon names, for the on-device glyph check)
 """
 
-import math
 import os
 import plistlib
-import struct
 import sys
-import zlib
 
 D = "com.adarsh.chakra"
 NOTE = "com.adarsh.chakra/prefs"
@@ -172,10 +169,13 @@ items = [
     slider("ballSize", 36, 64, 46),
     group("Resting Strength", "How solid the ball looks while it waits."),
     slider("idleAlpha", 0.2, 1.0, 0.6),
-    group("Ball", "Tucked, the ball slides part-way off the screen while it waits and comes out when you touch it."),
+    group("Ball",
+          "Icon: the golden sun wheel, or the plain white wheel mark.\n\n"
+          "Tucked, the ball slides part-way off the screen while it waits and comes out when you touch it."),
+    choice("ballIcon", "Icon", 0, [(0, "Golden Sun"), (1, "Plain Wheel")]),
     switch("tuck", "Tuck Into the Edge", True),
     choice("accent", "Colour", 0, [(0, "Indigo"), (1, "Blue"), (2, "Teal"), (3, "Green"),
-                                   (4, "Saffron"), (5, "Pink"), (6, "Red"), (7, "Graphite")]),
+                                   (4, "Saffron"), (5, "Pink"), (6, "Red"), (7, "Graphite"), (8, "Gold")]),
 
     group("Wheel",
           "Layout: rings of icons around the ball, which bend away from a corner, or a "
@@ -244,68 +244,6 @@ page = {
 }
 
 
-# ---- icon: indigo rounded square, white wheel (rim, hub, eight spokes), drawn with the standard library only ----
-
-def _seg_dist(px, py, ax, ay, bx, by):
-    vx, vy = bx - ax, by - ay
-    t = max(0.0, min(1.0, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)))
-    return math.hypot(px - (ax + t * vx), py - (ay + t * vy))
-
-
-def _in_round_rect(px, py, x0, y0, x1, y1, r):
-    cx = min(max(px, x0 + r), x1 - r)
-    cy = min(max(py, y0 + r), y1 - r)
-    return math.hypot(px - cx, py - cy) <= r
-
-
-RIM, RIM_HALF, HUB, SPOKE_HALF = 0.300, 0.036, 0.086, 0.026
-SPOKES = [(0.5 + math.cos(a) * HUB, 0.5 + math.sin(a) * HUB, 0.5 + math.cos(a) * RIM, 0.5 + math.sin(a) * RIM)
-          for a in (i * math.pi / 4 + math.pi / 8 for i in range(8))]
-TOP = (0x7A, 0x78, 0xF2)        # the square is a shade lighter at the top
-BOTTOM = (0x4B, 0x49, 0xC8)
-
-
-def _sample(u, v):
-    """(inside the square, on the wheel) for a point in the unit square."""
-    if not _in_round_rect(u, v, 0.0, 0.0, 1.0, 1.0, 0.225):
-        return False, False
-    d = math.hypot(u - 0.5, v - 0.5)
-    wheel = abs(d - RIM) <= RIM_HALF or d <= HUB
-    if not wheel and d < RIM:
-        wheel = any(_seg_dist(u, v, ax, ay, bx, by) <= SPOKE_HALF for ax, ay, bx, by in SPOKES)
-    return True, wheel
-
-
-def _png(size, ss=4):
-    rows = []
-    for y in range(size):
-        row = bytearray([0])                       # filter: none
-        back = [round(TOP[i] + (BOTTOM[i] - TOP[i]) * (y + 0.5) / size) for i in range(3)]
-        for x in range(size):
-            cover = white = 0
-            for sy in range(ss):
-                for sx in range(ss):
-                    inside, wheel = _sample((x + (sx + 0.5) / ss) / size, (y + (sy + 0.5) / ss) / size)
-                    cover += inside
-                    white += wheel
-            n = ss * ss
-            if cover == 0:
-                row += bytes(4)
-                continue
-            mix = white / cover
-            row += bytes([round(c + (255 - c) * mix) for c in back] + [round(255 * cover / n)])
-        rows.append(bytes(row))
-
-    def chunk(kind, data):
-        body = kind + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
-
-    return (b"\x89PNG\r\n\x1a\n"
-            + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(b"".join(rows), 9))
-            + chunk(b"IEND", b""))
-
-
 os.makedirs(OUT, exist_ok=True)
 path = os.path.join(OUT, "Chakra.plist")
 with open(path, "wb") as f:
@@ -313,8 +251,3 @@ with open(path, "wb") as f:
 with open(path, "rb") as f:
     plistlib.load(f)                               # prove it parses
 print(f"  Chakra.plist       {os.path.getsize(path):6d} bytes  OK  ({len(items)} rows, {len(GLYPHS)} shortcut icons)")
-for scale, suffix in ((1, ""), (2, "@2x"), (3, "@3x")):
-    path = os.path.join(OUT, f"Chakra{suffix}.png")
-    with open(path, "wb") as f:
-        f.write(_png(29 * scale))
-    print(f"  {os.path.basename(path):18} {os.path.getsize(path):6d} bytes")

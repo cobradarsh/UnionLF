@@ -8,6 +8,7 @@
       ChakraItems    what an entry is (app / action / shortcut) and how to draw and run it
       ChakraActions  the system actions (Home, Lock, Screenshot, Flashlight…)
       ChakraGlyphs   the drawn icons: the wheel mark, glyph discs, the Bluetooth rune
+      ChakraArt      the golden sun wheel on the ball, a picture made by tools/make_art.py
       ChakraGlass    the pane behind the wheel: glass, or the darker frosted look
       ChakraLayout   where things go: rings that grow with the number of items and bend away from corners
       ChakraCore     log, settings, SpringBoard helpers
@@ -22,7 +23,7 @@
 #import <notify.h>
 #import <TargetConditionals.h>
 
-#define CHAKRA_VERSION    @"1.0.3"                      // keep in step with control
+#define CHAKRA_VERSION    @"1.0.4"                      // keep in step with control
 #define CHAKRA_DOMAIN     @"com.adarsh.chakra"
 #define CHAKRA_N_PREFS    "com.adarsh.chakra/prefs"     // Settings -> SpringBoard (PostNotification)
 #define CHAKRA_MAX_ITEMS  16
@@ -61,6 +62,7 @@ void ChakraHapticPlay(ChakraHaptic event);
 @property (nonatomic, readonly) CGFloat idleAlpha;
 @property (nonatomic, readonly) BOOL tuck;                    // slide part-way off the edge while idle
 @property (nonatomic, readonly) NSInteger accent;
+@property (nonatomic, readonly) NSInteger ballIcon;              // on the ball: 0 the golden sun wheel, 1 the plain wheel mark
 @property (nonatomic, strong, readonly) UIColor *accentColor;
 @property (nonatomic, readonly) ChakraStyle style;
 @property (nonatomic, readonly) CGFloat iconSize;
@@ -119,9 +121,11 @@ void ChakraHapticPlay(ChakraHaptic event);
 @end
 
 // ── drawn icons ──
+NSData *ChakraSunPNG(void);                                 // the golden sun wheel as PNG data (ChakraArt.m)
 @interface ChakraGlyphs : NSObject
 + (UIImage *)glyphNamed:(NSString *)name pointSize:(CGFloat)pointSize;   // an SF Symbol, or ck.chakra / ck.bluetooth
 + (UIImage *)chakraWithSize:(CGFloat)size;                               // the wheel mark (template image)
++ (UIImage *)sunWithSize:(CGFloat)size;                                  // the golden sun wheel; nil if its picture cannot be read
 + (UIImage *)discWithGlyph:(NSString *)glyph size:(CGFloat)size fill:(UIColor *)fill;
 @end
 

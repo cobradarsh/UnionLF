@@ -230,9 +230,37 @@ Lock Position keeps it where it is.</string>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Tucked, the ball slides part-way off the screen while it waits and comes out when you touch it.</string>
+			<string>Icon: the golden sun wheel, or the plain white wheel mark.
+
+Tucked, the ball slides part-way off the screen while it waits and comes out when you touch it.</string>
 			<key>label</key>
 			<string>Ball</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>ballIcon</string>
+			<key>label</key>
+			<string>Icon</string>
+			<key>validTitles</key>
+			<array>
+				<string>Golden Sun</string>
+				<string>Plain Wheel</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -273,6 +301,7 @@ Lock Position keeps it where it is.</string>
 				<string>Pink</string>
 				<string>Red</string>
 				<string>Graphite</string>
+				<string>Gold</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -284,6 +313,7 @@ Lock Position keeps it where it is.</string>
 				<integer>5</integer>
 				<integer>6</integer>
 				<integer>7</integer>
+				<integer>8</integer>
 			</array>
 		</dict>
 		<dict>
