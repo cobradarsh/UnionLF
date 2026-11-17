@@ -10,7 +10,8 @@ settings the moment you change something - no respring.
 
 The shortcuts' names and links are typed here rather than in Chakra's own sheet:
 a text field in a SpringBoard window has to take keyboard focus away from the app
-in front, and Settings has no such trouble.
+in front, and Settings has no such trouble. For the same reason the searchable
+list of apps is here too (AltList's), next to the plain A to Z one in the sheet.
 
 Usage:  python3 tools/make_prefs.py layout/Library/PreferenceLoader/Preferences
         python3 tools/make_prefs.py --glyphs      (prints the icon names, for the on-device glyph check)
@@ -87,14 +88,77 @@ def text(key, label, placeholder):
             "PostNotification": NOTE}
 
 
+def segments(key, default, options):
+    return {"cell": "PSSegmentCell", "defaults": D, "key": key, "default": default, "PostNotification": NOTE,
+            "validValues": [v for v, _ in options], "validTitles": [t for _, t in options]}
+
+
+def app_list(key, label, many):
+    """A list of every app, from AltList (com.opa334.altlist): searchable, A to Z.
+
+    many=True: a switch per app, the bundle ids that are on are saved as an array.
+    many=False: pick one, its bundle id is saved.
+    "bundle" makes Settings load AltList's own preference bundle first, which is what brings its
+    classes in: this page has no compiled code of its own to do that.
+    """
+    return {"cell": "PSLinkListCell", "bundle": "AltList", "isController": True, "overridePrincipalClass": True,
+            "detail": "ATLApplicationListMultiSelectionController" if many else "ATLApplicationListSelectionController",
+            "defaults": D, "key": key, "label": label, "PostNotification": NOTE,
+            "sections": [{"sectionType": "Visible"}],
+            "useSearchBar": True, "hideSearchBarWhileScrolling": False, "alphabeticIndexingEnabled": True,
+            "defaultApplicationSwitchValue": False}
+
+
+# What a double tap, a triple tap or a hold on the ball can do. Values are read by
+# +[ChakraItems itemForGesture:]; the action ids are the ones in ChakraActions.m.
+GESTURES = [
+    ("none", "Nothing"),
+    ("action:edit", "Edit the Wheel"),
+    ("action:lastapp", "Last App"),
+    ("action:home", "Home"),
+    ("action:switcher", "App Switcher"),
+    ("action:lock", "Lock Screen"),
+    ("action:screenshot", "Screenshot"),
+    ("action:controlcentre", "Control Centre"),
+    ("action:notifications", "Notification Centre"),
+    ("action:reachability", "Reachability"),
+    ("action:flashlight", "Torch"),
+    ("action:rotation", "Rotation Lock"),
+    ("action:lowpower", "Low Power Mode"),
+    ("action:darkmode", "Dark Mode"),
+    ("action:wifi", "Wi-Fi"),
+    ("action:bluetooth", "Bluetooth"),
+    ("action:airplane", "Aeroplane Mode"),
+    ("action:respring", "Respring"),
+] + [("shortcut:%d" % n, "Shortcut %d" % n) for n in range(1, SLOTS + 1)] + [
+    ("app", "Open the App Chosen Below"),
+]
+
 items = [
     group(None,
           "A ball on the edge of the screen that opens a wheel of your apps.\n\n"
           "Tap the ball to open the wheel. Or slide from the ball and lift your finger "
           "over an icon: one move.\n\n"
-          "Hold the ball, then drag, to move it. Hold it and let go to add, remove and "
-          "reorder what is on the wheel."),
+          "The last entry on the wheel, Edit, is where you add, remove and reorder "
+          "what is on it."),
     switch("enabled", "Chakra", True),
+
+    group("Apps",
+          "Switch on any app you want on the wheel; there is a search field at the top "
+          "of the list. New ones go to the end of the wheel.\n\n"
+          "To change the order, or to add actions and shortcuts, open the wheel and tap Edit."),
+    app_list("apps", "Apps on the Wheel", True),
+
+    group("Ball Position",
+          "Side and Height put the ball exactly where you want it; it moves as you change them.\n\n"
+          "By hand: hold the ball for half a second, then drag. Or set Dragging the Ball to "
+          "Moves the Ball, and a plain drag moves it (the wheel then opens by tap only).\n\n"
+          "Lock Position keeps it where it is."),
+    segments("ballEdge", 1, [(0, "Left Side"), (1, "Right Side")]),
+    choice("dragMode", "Dragging the Ball", 0, [(0, "Opens the Wheel and Picks"), (1, "Moves the Ball")]),
+    switch("lockPosition", "Lock Position", False),
+    group("Height on the Screen", "Left is the top of the screen, right is the bottom."),
+    slider("ballY", 0.06, 0.94, 0.44),
 
     group("Ball Size"),
     slider("ballSize", 36, 64, 46),
@@ -106,22 +170,41 @@ items = [
                                    (4, "Saffron"), (5, "Pink"), (6, "Red"), (7, "Graphite")]),
 
     group("Wheel",
-          "Wheel: rings of icons around the ball, which bend away from a corner. "
-          "Column: a straight list beside the ball."),
+          "Layout: rings of icons around the ball, which bend away from a corner, or a "
+          "straight column beside it.\n\n"
+          "Background: Glass lets what is behind show through, with a bright rim, like the "
+          "glass of the newest iOS. Frosted is the darker, blurrier pane."),
     choice("style", "Layout", 0, [(0, "Wheel"), (1, "Column")]),
+    choice("plateStyle", "Background", 0, [(0, "Glass"), (1, "Frosted")]),
     switch("labels", "Names Under Icons", True),
     switch("dim", "Dim the Screen Behind", True),
+    switch("editEntry", "Edit Entry on the Wheel", True),
     choice("haptics", "Haptics", 1, [(0, "Off"), (1, "Light"), (2, "Medium"), (3, "Firm")]),
     group("Icon Size"),
     slider("iconSize", 44, 66, 54),
+
+    group("Taps on the Ball",
+          "What a double tap, a triple tap and a hold do. For an app, choose Open the App "
+          "Chosen Below and pick it in the row underneath.\n\n"
+          "While a double or triple tap is set, a single tap waits a quarter of a second "
+          "to see whether another follows."),
+    choice("gestureDouble", "Double Tap", "none", GESTURES),
+    app_list("gestureDoubleApp", "App for Double Tap", False),
+    choice("gestureTriple", "Triple Tap", "none", GESTURES),
+    app_list("gestureTripleApp", "App for Triple Tap", False),
+    choice("gestureHold", "Hold", "action:edit", GESTURES),
+    app_list("gestureHoldApp", "App for Hold", False),
 
     group("Where",
           "On the Lock Screen: the ball stays when the iPhone is locked. Apps still "
           "ask for Face ID or the passcode first.\n\n"
           "Hide in Landscape: the ball steps aside while the app in front is on its "
-          "side (games, videos)."),
+          "side (games, videos).\n\n"
+          "Keep Out of Screenshots: the ball and the wheel are left out of screenshots "
+          "and screen recordings, while you still see them on the screen."),
     switch("lockScreen", "On the Lock Screen", False),
     switch("hideLandscape", "Hide in Landscape", False),
+    switch("hideInShots", "Keep Out of Screenshots", True),
 ]
 
 for n in range(1, SLOTS + 1):
@@ -129,8 +212,8 @@ for n in range(1, SLOTS + 1):
     if n == 1:
         footer = ("Opens can be a web link (https://…), an app's own link (upi://pay, "
                   "whatsapp://send?phone=…) or the exact name of a shortcut in the Shortcuts "
-                  "app.\n\nA filled-in shortcut shows up in the Add list: hold the ball, let "
-                  "go, then Add.")
+                  "app.\n\nA filled-in shortcut can go on the wheel (Edit, then Shortcuts) "
+                  "or on a tap of the ball (above).")
     items += [
         group("Shortcut %d" % n, footer),
         text("sc%dName" % n, "Name", "What the wheel calls it"),
@@ -141,9 +224,8 @@ for n in range(1, SLOTS + 1):
 items += [
     group("Troubleshooting",
           "Records what Chakra does in /var/mobile/Library/Logs/Chakra.log.\n\n"
-          "If something restarts SpringBoard four times in a row right after it "
-          "starts, Chakra stays out of the way. Flip any switch on this page to "
-          "bring the ball back."),
+          "If SpringBoard restarts right after Chakra starts, three times in a row, "
+          "Chakra stays out of the way. Flip any switch on this page to bring the ball back."),
     switch("debugLog", "Debug Log", True),
 ]
 

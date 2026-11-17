@@ -131,6 +131,7 @@ static BOOL ChakraCanRespring(void) {
             [ChakraAction ident:@"bluetooth"     title:@"Bluetooth"           glyph:@"ck.bluetooth"                off:nil                      tint:0x0A84FF toggle:YES],
             [ChakraAction ident:@"airplane"      title:@"Aeroplane Mode"      glyph:@"airplane"                    off:nil                      tint:0xFF9F0A toggle:YES],
             [ChakraAction ident:@"respring"      title:@"Respring"            glyph:@"arrow.triangle.2.circlepath" off:nil                      tint:0x636366 toggle:NO],
+            [ChakraAction ident:@"edit"          title:@"Edit"                glyph:@"slider.horizontal.3"         off:nil                      tint:0x48484A toggle:NO],
         ];
     });
     return list;
@@ -186,6 +187,7 @@ static BOOL ChakraCanRespring(void) {
         return (ChakraTakes(air, @"setInAirplaneMode:", "B") && ChakraShape(air, NSSelectorFromString(@"isInAirplaneMode"), "Bc", 0)) ? nil : @"SBAirplaneModeController";
     }
     if ([ident isEqualToString:@"respring"])      return ChakraCanRespring() ? nil : @"SBSRelaunchAction";
+    if ([ident isEqualToString:@"edit"])          return nil;                    // Chakra's own sheet
     return @"unknown action";
 }
 
@@ -314,6 +316,10 @@ static BOOL ChakraCanRespring(void) {
 
     } else if ([ident isEqualToString:@"airplane"]) {
         ChakraSendBool(ChakraShared(@"SBAirplaneModeController"), @"setInAirplaneMode:", !on);
+
+    } else if ([ident isEqualToString:@"edit"]) {
+        [ChakraEditor present];
+        return;
 
     } else if ([ident isEqualToString:@"respring"]) {
         Class cls = NSClassFromString(@"SBSRelaunchAction");

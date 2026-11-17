@@ -21,7 +21,7 @@
 
 Tap the ball to open the wheel. Or slide from the ball and lift your finger over an icon: one move.
 
-Hold the ball, then drag, to move it. Hold it and let go to add, remove and reorder what is on the wheel.</string>
+The last entry on the wheel, Edit, is where you add, remove and reorder what is on it.</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -36,6 +36,151 @@ Hold the ball, then drag, to move it. Hold it and let go to add, remove and reor
 			<string>enabled</string>
 			<key>label</key>
 			<string>Chakra</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Switch on any app you want on the wheel; there is a search field at the top of the list. New ones go to the end of the wheel.
+
+To change the order, or to add actions and shortcuts, open the wheel and tap Edit.</string>
+			<key>label</key>
+			<string>Apps</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>alphabeticIndexingEnabled</key>
+			<true/>
+			<key>bundle</key>
+			<string>AltList</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>defaultApplicationSwitchValue</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>ATLApplicationListMultiSelectionController</string>
+			<key>hideSearchBarWhileScrolling</key>
+			<false/>
+			<key>isController</key>
+			<true/>
+			<key>key</key>
+			<string>apps</string>
+			<key>label</key>
+			<string>Apps on the Wheel</string>
+			<key>overridePrincipalClass</key>
+			<true/>
+			<key>sections</key>
+			<array>
+				<dict>
+					<key>sectionType</key>
+					<string>Visible</string>
+				</dict>
+			</array>
+			<key>useSearchBar</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Side and Height put the ball exactly where you want it; it moves as you change them.
+
+By hand: hold the ball for half a second, then drag. Or set Dragging the Ball to Moves the Ball, and a plain drag moves it (the wheel then opens by tap only).
+
+Lock Position keeps it where it is.</string>
+			<key>label</key>
+			<string>Ball Position</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSSegmentCell</string>
+			<key>default</key>
+			<integer>1</integer>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>key</key>
+			<string>ballEdge</string>
+			<key>validTitles</key>
+			<array>
+				<string>Left Side</string>
+				<string>Right Side</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>dragMode</string>
+			<key>label</key>
+			<string>Dragging the Ball</string>
+			<key>validTitles</key>
+			<array>
+				<string>Opens the Wheel and Picks</string>
+				<string>Moves the Ball</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>key</key>
+			<string>lockPosition</string>
+			<key>label</key>
+			<string>Lock Position</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Left is the top of the screen, right is the bottom.</string>
+			<key>label</key>
+			<string>Height on the Screen</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.44</real>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>key</key>
+			<string>ballY</string>
+			<key>max</key>
+			<real>0.94</real>
+			<key>min</key>
+			<real>0.06</real>
+			<key>showValue</key>
+			<true/>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -151,7 +296,9 @@ Hold the ball, then drag, to move it. Hold it and let go to add, remove and reor
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Wheel: rings of icons around the ball, which bend away from a corner. Column: a straight list beside the ball.</string>
+			<string>Layout: rings of icons around the ball, which bend away from a corner, or a straight column beside it.
+
+Background: Glass lets what is behind show through, with a bright rim, like the glass of the newest iOS. Frosted is the darker, blurrier pane.</string>
 			<key>label</key>
 			<string>Wheel</string>
 		</dict>
@@ -174,6 +321,32 @@ Hold the ball, then drag, to move it. Hold it and let go to add, remove and reor
 			<array>
 				<string>Wheel</string>
 				<string>Column</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>plateStyle</string>
+			<key>label</key>
+			<string>Background</string>
+			<key>validTitles</key>
+			<array>
+				<string>Glass</string>
+				<string>Frosted</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -208,6 +381,20 @@ Hold the ball, then drag, to move it. Hold it and let go to add, remove and reor
 			<string>dim</string>
 			<key>label</key>
 			<string>Dim the Screen Behind</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>key</key>
+			<string>editEntry</string>
+			<key>label</key>
+			<string>Edit Entry on the Wheel</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -267,9 +454,330 @@ Hold the ball, then drag, to move it. Hold it and let go to add, remove and reor
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>What a double tap, a triple tap and a hold do. For an app, choose Open the App Chosen Below and pick it in the row underneath.
+
+While a double or triple tap is set, a single tap waits a quarter of a second to see whether another follows.</string>
+			<key>label</key>
+			<string>Taps on the Ball</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>none</string>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>gestureDouble</string>
+			<key>label</key>
+			<string>Double Tap</string>
+			<key>validTitles</key>
+			<array>
+				<string>Nothing</string>
+				<string>Edit the Wheel</string>
+				<string>Last App</string>
+				<string>Home</string>
+				<string>App Switcher</string>
+				<string>Lock Screen</string>
+				<string>Screenshot</string>
+				<string>Control Centre</string>
+				<string>Notification Centre</string>
+				<string>Reachability</string>
+				<string>Torch</string>
+				<string>Rotation Lock</string>
+				<string>Low Power Mode</string>
+				<string>Dark Mode</string>
+				<string>Wi-Fi</string>
+				<string>Bluetooth</string>
+				<string>Aeroplane Mode</string>
+				<string>Respring</string>
+				<string>Shortcut 1</string>
+				<string>Shortcut 2</string>
+				<string>Shortcut 3</string>
+				<string>Shortcut 4</string>
+				<string>Open the App Chosen Below</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>none</string>
+				<string>action:edit</string>
+				<string>action:lastapp</string>
+				<string>action:home</string>
+				<string>action:switcher</string>
+				<string>action:lock</string>
+				<string>action:screenshot</string>
+				<string>action:controlcentre</string>
+				<string>action:notifications</string>
+				<string>action:reachability</string>
+				<string>action:flashlight</string>
+				<string>action:rotation</string>
+				<string>action:lowpower</string>
+				<string>action:darkmode</string>
+				<string>action:wifi</string>
+				<string>action:bluetooth</string>
+				<string>action:airplane</string>
+				<string>action:respring</string>
+				<string>shortcut:1</string>
+				<string>shortcut:2</string>
+				<string>shortcut:3</string>
+				<string>shortcut:4</string>
+				<string>app</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>alphabeticIndexingEnabled</key>
+			<true/>
+			<key>bundle</key>
+			<string>AltList</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>defaultApplicationSwitchValue</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>ATLApplicationListSelectionController</string>
+			<key>hideSearchBarWhileScrolling</key>
+			<false/>
+			<key>isController</key>
+			<true/>
+			<key>key</key>
+			<string>gestureDoubleApp</string>
+			<key>label</key>
+			<string>App for Double Tap</string>
+			<key>overridePrincipalClass</key>
+			<true/>
+			<key>sections</key>
+			<array>
+				<dict>
+					<key>sectionType</key>
+					<string>Visible</string>
+				</dict>
+			</array>
+			<key>useSearchBar</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>none</string>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>gestureTriple</string>
+			<key>label</key>
+			<string>Triple Tap</string>
+			<key>validTitles</key>
+			<array>
+				<string>Nothing</string>
+				<string>Edit the Wheel</string>
+				<string>Last App</string>
+				<string>Home</string>
+				<string>App Switcher</string>
+				<string>Lock Screen</string>
+				<string>Screenshot</string>
+				<string>Control Centre</string>
+				<string>Notification Centre</string>
+				<string>Reachability</string>
+				<string>Torch</string>
+				<string>Rotation Lock</string>
+				<string>Low Power Mode</string>
+				<string>Dark Mode</string>
+				<string>Wi-Fi</string>
+				<string>Bluetooth</string>
+				<string>Aeroplane Mode</string>
+				<string>Respring</string>
+				<string>Shortcut 1</string>
+				<string>Shortcut 2</string>
+				<string>Shortcut 3</string>
+				<string>Shortcut 4</string>
+				<string>Open the App Chosen Below</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>none</string>
+				<string>action:edit</string>
+				<string>action:lastapp</string>
+				<string>action:home</string>
+				<string>action:switcher</string>
+				<string>action:lock</string>
+				<string>action:screenshot</string>
+				<string>action:controlcentre</string>
+				<string>action:notifications</string>
+				<string>action:reachability</string>
+				<string>action:flashlight</string>
+				<string>action:rotation</string>
+				<string>action:lowpower</string>
+				<string>action:darkmode</string>
+				<string>action:wifi</string>
+				<string>action:bluetooth</string>
+				<string>action:airplane</string>
+				<string>action:respring</string>
+				<string>shortcut:1</string>
+				<string>shortcut:2</string>
+				<string>shortcut:3</string>
+				<string>shortcut:4</string>
+				<string>app</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>alphabeticIndexingEnabled</key>
+			<true/>
+			<key>bundle</key>
+			<string>AltList</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>defaultApplicationSwitchValue</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>ATLApplicationListSelectionController</string>
+			<key>hideSearchBarWhileScrolling</key>
+			<false/>
+			<key>isController</key>
+			<true/>
+			<key>key</key>
+			<string>gestureTripleApp</string>
+			<key>label</key>
+			<string>App for Triple Tap</string>
+			<key>overridePrincipalClass</key>
+			<true/>
+			<key>sections</key>
+			<array>
+				<dict>
+					<key>sectionType</key>
+					<string>Visible</string>
+				</dict>
+			</array>
+			<key>useSearchBar</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>action:edit</string>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>gestureHold</string>
+			<key>label</key>
+			<string>Hold</string>
+			<key>validTitles</key>
+			<array>
+				<string>Nothing</string>
+				<string>Edit the Wheel</string>
+				<string>Last App</string>
+				<string>Home</string>
+				<string>App Switcher</string>
+				<string>Lock Screen</string>
+				<string>Screenshot</string>
+				<string>Control Centre</string>
+				<string>Notification Centre</string>
+				<string>Reachability</string>
+				<string>Torch</string>
+				<string>Rotation Lock</string>
+				<string>Low Power Mode</string>
+				<string>Dark Mode</string>
+				<string>Wi-Fi</string>
+				<string>Bluetooth</string>
+				<string>Aeroplane Mode</string>
+				<string>Respring</string>
+				<string>Shortcut 1</string>
+				<string>Shortcut 2</string>
+				<string>Shortcut 3</string>
+				<string>Shortcut 4</string>
+				<string>Open the App Chosen Below</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>none</string>
+				<string>action:edit</string>
+				<string>action:lastapp</string>
+				<string>action:home</string>
+				<string>action:switcher</string>
+				<string>action:lock</string>
+				<string>action:screenshot</string>
+				<string>action:controlcentre</string>
+				<string>action:notifications</string>
+				<string>action:reachability</string>
+				<string>action:flashlight</string>
+				<string>action:rotation</string>
+				<string>action:lowpower</string>
+				<string>action:darkmode</string>
+				<string>action:wifi</string>
+				<string>action:bluetooth</string>
+				<string>action:airplane</string>
+				<string>action:respring</string>
+				<string>shortcut:1</string>
+				<string>shortcut:2</string>
+				<string>shortcut:3</string>
+				<string>shortcut:4</string>
+				<string>app</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>alphabeticIndexingEnabled</key>
+			<true/>
+			<key>bundle</key>
+			<string>AltList</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>defaultApplicationSwitchValue</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>detail</key>
+			<string>ATLApplicationListSelectionController</string>
+			<key>hideSearchBarWhileScrolling</key>
+			<false/>
+			<key>isController</key>
+			<true/>
+			<key>key</key>
+			<string>gestureHoldApp</string>
+			<key>label</key>
+			<string>App for Hold</string>
+			<key>overridePrincipalClass</key>
+			<true/>
+			<key>sections</key>
+			<array>
+				<dict>
+					<key>sectionType</key>
+					<string>Visible</string>
+				</dict>
+			</array>
+			<key>useSearchBar</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>On the Lock Screen: the ball stays when the iPhone is locked. Apps still ask for Face ID or the passcode first.
 
-Hide in Landscape: the ball steps aside while the app in front is on its side (games, videos).</string>
+Hide in Landscape: the ball steps aside while the app in front is on its side (games, videos).
+
+Keep Out of Screenshots: the ball and the wheel are left out of screenshots and screen recordings, while you still see them on the screen.</string>
 			<key>label</key>
 			<string>Where</string>
 		</dict>
@@ -302,12 +810,26 @@ Hide in Landscape: the ball steps aside while the app in front is on its side (g
 			<string>Hide in Landscape</string>
 		</dict>
 		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.chakra/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.chakra</string>
+			<key>key</key>
+			<string>hideInShots</string>
+			<key>label</key>
+			<string>Keep Out of Screenshots</string>
+		</dict>
+		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>Opens can be a web link (https://…), an app's own link (upi://pay, whatsapp://send?phone=…) or the exact name of a shortcut in the Shortcuts app.
 
-A filled-in shortcut shows up in the Add list: hold the ball, let go, then Add.</string>
+A filled-in shortcut can go on the wheel (Edit, then Shortcuts) or on a tap of the ball (above).</string>
 			<key>label</key>
 			<string>Shortcut 1</string>
 		</dict>
@@ -1063,7 +1585,7 @@ A filled-in shortcut shows up in the Add list: hold the ball, let go, then Add.<
 			<key>footerText</key>
 			<string>Records what Chakra does in /var/mobile/Library/Logs/Chakra.log.
 
-If something restarts SpringBoard four times in a row right after it starts, Chakra stays out of the way. Flip any switch on this page to bring the ball back.</string>
+If SpringBoard restarts right after Chakra starts, three times in a row, Chakra stays out of the way. Flip any switch on this page to bring the ball back.</string>
 			<key>label</key>
 			<string>Troubleshooting</string>
 		</dict>

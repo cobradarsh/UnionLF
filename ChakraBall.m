@@ -5,11 +5,16 @@
     whatever is underneath.
 
       tap                    open the menu (tap again, or anywhere outside it, to close)
+      double / triple tap    whatever Settings → Chakra says (nothing, until you choose)
       slide                  the menu opens under the finger; lift over an icon to run it
+                             (or, if Settings says dragging moves the ball: it moves)
       hold, then drag        move the ball; it snaps to the nearer edge and remembers the spot
-      hold, then let go      the editor: add, remove, reorder
+      hold, then let go      the editor, or whatever "Hold" is set to
 
-    Left alone for a few seconds it fades and tucks part-way into the edge.
+    While a double or triple tap is set, a single tap waits a quarter of a second to see whether
+    another one follows; with neither set it acts at once.
+
+    Left alone for a few seconds the ball fades and tucks part-way into the edge.
 
     Touch points are worked out as "point in the window + the window's origin". Both are read
     from the model layer, so they agree even while the window is still gliding out of the edge. */
@@ -18,12 +23,14 @@
 
 static const CGFloat kChakraPad = 8;            // invisible touch margin around the ball
 static const CGFloat kChakraGap = 6;            // between the ball and the edge while it is out
+static const double kChakraTapWait = 0.28;      // how long a tap waits for the next one
+static const double kChakraHold = 0.5;          // how long a press is before it counts as a hold
 
 typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     ChakraTouchNone = 0,
     ChakraTouchPending,         // finger down, not yet a slide or a hold
     ChakraTouchSlide,           // picking from the menu
-    ChakraTouchLifted,          // held: dragging the ball
+    ChakraTouchLifted,          // held, or dragged in "dragging moves the ball" mode: the ball follows the finger
 };
 
 @interface ChakraBall ()
@@ -54,7 +61,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
 
 @implementation ChakraBall {
     UIWindow *_window;
-    ChakraBallView *_view;              // the whole window: the touch target
+    ChakraBallView *_view;          // the whole window: the touch target
     UIView *_disc;                  // the ball you see (it carries the shadow and fades while resting)
     UIView *_face;                  // its dark, tinted face with the coloured rim
     UIImageView *_mark;
@@ -64,8 +71,9 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     BOOL _shown, _tucked;
     ChakraTouchMode _mode;
     CGPoint _down, _last, _grab;
-    BOOL _moved;
-    NSUInteger _holdGen, _idleGen;
+    BOOL _moved, _heldStill;        // _heldStill: this lift came from holding, not from a drag
+    NSUInteger _holdGen, _idleGen, _tapGen;
+    NSInteger _tapCount;            // taps so far in the run being counted
     CGFloat _markTurn;              // the wheel mark turns an eighth while the menu is open
 }
 
@@ -109,6 +117,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     _tucked = YES;
     _shown = NO;
     _mode = ChakraTouchNone;
+    _tapCount = 0;
 
     _window = [ChakraHost overlayWindowAtLevel:100010];
     _window.frame = [self _frameTucked:YES];
@@ -154,6 +163,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     _face.backgroundColor = [UIColor colorWithRed:0.105 * 0.74 + r * 0.26 green:0.105 * 0.74 + g * 0.26 blue:0.150 * 0.74 + b * 0.26 alpha:0.95];
     _face.layer.borderColor = accent.CGColor;
     _mark.transform = CGAffineTransformMakeRotation([ChakraHost interfaceAngle] + _markTurn);
+    [ChakraHost keepOutOfScreenshots:_window];
 }
 
 #pragma mark showing and hiding
@@ -176,6 +186,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
             _mode = ChakraTouchNone;
             _holdGen++;
             _idleGen++;
+            [self _forgetTaps];
             if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:NO completion:nil];
             _window.hidden = YES;
         }
@@ -193,11 +204,19 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     if (scene && _window.windowScene != scene) _window.windowScene = scene;
     [self _paint];
 
+    // the spot may have been changed under Settings → Chakra → Ball Position
     BOOL moved = (_edge != s.ballEdge) || fabs(_yFrac - s.ballY) > 0.0005;
     if (_mode == ChakraTouchNone && moved) {
         _edge = s.ballEdge;
         _yFrac = s.ballY;
-        if (_shown) _window.frame = [self _frameTucked:_tucked];
+        if (_shown) {
+            if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:NO completion:nil];
+            // come out where it now lives, so the change can be seen while the slider is still moving
+            _tucked = NO;
+            _window.frame = [self _frameTucked:NO];
+            _disc.alpha = 1;
+            [self _restSoon];
+        }
     }
     if (!_shown) {
         _shown = YES;
@@ -207,7 +226,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
         _disc.alpha = 0;
         [UIView animateWithDuration:0.25 animations:^{ self->_disc.alpha = s.idleAlpha; }];
     } else if (_tucked && _mode == ChakraTouchNone && ![ChakraWheel shared].isOpen) {
-        _disc.alpha = s.idleAlpha;                             // the idle strength may have been changed
+        _disc.alpha = s.idleAlpha;                             // the resting strength may have been changed
         _window.frame = [self _frameTucked:YES];               // … or tucking switched on or off
     }
 }
@@ -258,12 +277,69 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     if ([ChakraWheel shared].isOpen) return;
     ChakraHapticPlay(ChakraHapticOpen);
     [[ChakraWheel shared] openFromHub:[self hub] edge:_edge];
-    if ([ChakraWheel shared].isOpen) [self _turnMark:YES];
+}
+
+// The menu is up, however it was opened: the ball comes out and its wheel mark turns.
+- (void)wheelDidOpen {
+    if (!_shown) return;
+    [self _wake];
+    [self _turnMark:YES];
 }
 
 - (void)wheelDidClose {
     [self _turnMark:NO];
     if (_mode == ChakraTouchNone) [self _restSoon];
+}
+
+#pragma mark taps and holds
+
+- (void)_forgetTaps {
+    _tapCount = 0;
+    _tapGen++;
+}
+
+// Run what a double tap, triple tap or hold is set to.
+- (void)_runGesture:(ChakraItem *)item named:(NSString *)name {
+    ChakraHapticPlay(ChakraHapticCommit);
+    ChakraLog(@"%@ on the ball: %@", name, item.key);
+    BOOL toggle = item.isToggle;
+    dispatch_block_t run = ^{
+        [item perform];
+        if (toggle) ChakraAfter(0.45, ^{ [ChakraHost toast:[NSString stringWithFormat:@"%@  ·  %@", item.title, item.isOn ? @"On" : @"Off"]]; });
+    };
+    if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:YES completion:run];
+    else run();
+}
+
+// The run of taps is over: act on how many there were.
+- (void)_settleTaps {
+    NSInteger taps = _tapCount;
+    [self _forgetTaps];
+    if (taps <= 0) return;
+    ChakraItem *item = nil;
+    NSString *name = nil;
+    if (taps >= 3) { item = [ChakraItems itemForGesture:@"Triple"]; name = @"triple tap"; }
+    if (!item && taps >= 2) { item = [ChakraItems itemForGesture:@"Double"]; name = @"double tap"; }
+    if (item) [self _runGesture:item named:name];
+    else [self _openWheel];                                // one tap, or more taps with nothing set for them
+}
+
+- (void)_tapped {
+    if ([ChakraWheel shared].isOpen) {                     // a tap on the ball while the menu is up closes it, at once
+        [self _forgetTaps];
+        [[ChakraWheel shared] closeAnimated:YES completion:nil];
+        return;
+    }
+    NSInteger most = 1;
+    if ([ChakraItems itemForGesture:@"Triple"]) most = 3;
+    else if ([ChakraItems itemForGesture:@"Double"]) most = 2;
+    _tapCount++;
+    if (_tapCount >= most) { [self _settleTaps]; return; }
+    NSUInteger gen = ++_tapGen;
+    ChakraAfter(kChakraTapWait, ^{
+        // (if a finger is down again, its own lift settles the run)
+        if (gen == self->_tapGen && self->_mode == ChakraTouchNone) [self _settleTaps];
+    });
 }
 
 #pragma mark touches
@@ -273,34 +349,46 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     _down = p;
     _last = p;
     _moved = NO;
+    _heldStill = NO;
     [self _wake];
     [self _scaleDisc:0.92];
     NSUInteger gen = ++_holdGen;
-    ChakraAfter(0.5, ^{
-        if (gen == self->_holdGen && self->_mode == ChakraTouchPending) [self _lift];
+    ChakraAfter(kChakraHold, ^{
+        if (gen == self->_holdGen && self->_mode == ChakraTouchPending) [self _liftFromHold:YES];
     });
 }
 
-// Held without moving: the ball comes off the edge and follows the finger.
-- (void)_lift {
+// The ball comes off the edge and follows the finger: after a hold, or straight away when
+// Settings says dragging moves the ball.
+- (void)_liftFromHold:(BOOL)held {
     _mode = ChakraTouchLifted;
+    _heldStill = held;
     _moved = NO;
     _down = _last;
+    [self _forgetTaps];
     if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:YES completion:nil];
     CGRect f = _window.frame;
     _grab = CGPointMake(_last.x - f.origin.x, _last.y - f.origin.y);
-    ChakraHapticPlay(ChakraHapticLift);
+    ChakraHapticPlay(held ? ChakraHapticLift : ChakraHapticOpen);
     [self _scaleDisc:1.2];
 }
 
 - (void)_touchMoved:(CGPoint)p {
     _last = p;
     CGFloat travel = hypot(p.x - _down.x, p.y - _down.y);
+    ChakraSettings *s = [ChakraSettings shared];
     switch (_mode) {
         case ChakraTouchPending:
-            if (travel > 10) {
+            if (travel <= 10) break;
+            _holdGen++;
+            [self _forgetTaps];
+            if (s.dragMoves && !s.lockPosition && ![ChakraWheel shared].isOpen) {
+                _last = _down;                                 // lift from where the finger went down, so the ball does not jump
+                [self _liftFromHold:NO];
+                _last = p;
+                [self _touchMoved:p];
+            } else {
                 _mode = ChakraTouchSlide;
-                _holdGen++;
                 [self _scaleDisc:1];
                 [self _openWheel];
                 [[ChakraWheel shared] hoverAtScreenPoint:p];
@@ -310,6 +398,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
             [[ChakraWheel shared] hoverAtScreenPoint:p];
             break;
         case ChakraTouchLifted: {
+            if (s.lockPosition) break;                         // held, but the spot is locked: it stays put
             if (travel > 8) _moved = YES;
             CGRect f = _window.frame;
             f.origin = CGPointMake(p.x - _grab.x, p.y - _grab.y);
@@ -328,9 +417,8 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     _last = p;
     [self _scaleDisc:1];
     switch (mode) {
-        case ChakraTouchPending:                                 // a tap
-            if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:YES completion:nil];
-            else [self _openWheel];
+        case ChakraTouchPending:
+            [self _tapped];
             break;
         case ChakraTouchSlide:
             if (![[ChakraWheel shared] commitHover]) [[ChakraWheel shared] closeAnimated:YES completion:nil];
@@ -340,7 +428,10 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
                 [self _drop];
             } else {
                 [self _snapHome];
-                [ChakraEditor present];
+                if (_heldStill) {
+                    ChakraItem *item = [ChakraItems itemForGesture:@"Hold"];
+                    if (item) [self _runGesture:item named:@"hold"];
+                }
             }
             break;
         default:
@@ -353,6 +444,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     ChakraTouchMode mode = _mode;
     _mode = ChakraTouchNone;
     _holdGen++;
+    [self _forgetTaps];
     [self _scaleDisc:1];
     if (mode == ChakraTouchSlide) [[ChakraWheel shared] closeAnimated:YES completion:nil];
     if (mode == ChakraTouchLifted) { if (_moved) [self _drop]; else [self _snapHome]; }
@@ -387,6 +479,16 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     [self refresh];
 }
 
+- (void)debugTouch:(NSInteger)phase at:(CGPoint)point {
+    if (!_shown) { ChakraLog(@"touch: the ball is hidden"); return; }
+    switch (phase) {
+        case 0:  [self _touchBegan:point]; break;
+        case 1:  [self _touchMoved:point]; break;
+        case 2:  [self _touchEnded:point]; break;
+        default: [self _touchCancelled]; break;
+    }
+}
+
 - (void)debugTap {
     if (!_shown) { ChakraLog(@"tap: the ball is hidden"); return; }
     CGPoint hub = [self hub];
@@ -394,11 +496,28 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     [self _touchEnded:hub];
 }
 
+- (void)debugSlideToIndex:(NSUInteger)index {
+    if (!_shown) { ChakraLog(@"slide: the ball is hidden"); return; }
+    CGPoint hub = [self hub];
+    CGFloat inward = (_edge == ChakraEdgeLeft) ? 24 : -24;
+    [self _touchBegan:hub];
+    [self _touchMoved:CGPointMake(hub.x + inward, hub.y)];           // far enough to count as a slide: the menu opens
+    if (_mode != ChakraTouchSlide || ![ChakraWheel shared].isOpen || index >= [ChakraWheel shared].itemCount) {
+        ChakraLog(@"slide %lu: not sliding (mode %ld, menu %@)", (unsigned long)index, (long)_mode, [ChakraWheel shared].isOpen ? @"open" : @"closed");
+        [self _touchEnded:CGPointMake(hub.x + inward, hub.y)];
+        return;
+    }
+    CGPoint target = [[ChakraWheel shared] centerOfIndex:index];
+    [self _touchMoved:CGPointMake((hub.x + target.x) / 2.0, (hub.y + target.y) / 2.0)];
+    [self _touchMoved:target];
+    [self _touchEnded:target];
+}
+
 - (NSString *)debugState {
     if (!_window) return @"ball not built";
-    return [NSString stringWithFormat:@"ball %@, %@ edge, y %.3f, size %.0f, window %@, %@, strength %.2f, mode %ld",
+    return [NSString stringWithFormat:@"ball %@, %@ edge, y %.3f, size %.0f, window %@, %@, strength %.2f, mode %ld, taps %ld",
             _shown ? @"shown" : @"hidden", _edge == ChakraEdgeLeft ? @"left" : @"right", _yFrac, _size,
-            NSStringFromCGRect(_window.frame), _tucked ? @"tucked" : @"out", _disc.alpha, (long)_mode];
+            NSStringFromCGRect(_window.frame), _tucked ? @"tucked" : @"out", _disc.alpha, (long)_mode, (long)_tapCount];
 }
 
 @end

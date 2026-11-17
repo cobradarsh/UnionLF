@@ -238,16 +238,91 @@ static UIColor *ChakraSlotColor(NSInteger slot) {
 + (NSArray<ChakraItem *> *)visible {
     NSMutableArray<ChakraItem *> *out = [NSMutableArray array];
     for (ChakraItem *item in [self all]) if ([item available]) [out addObject:item];
+    // the way into the editor, always last (unless it has been put on the wheel by hand, or switched off)
+    if ([ChakraSettings shared].editEntry) {
+        ChakraItem *edit = [ChakraItem itemWithKind:ChakraKindAction ident:@"edit"];
+        if (edit && ![out containsObject:edit]) [out addObject:edit];
+    }
+    return out;
+}
+
++ (NSArray<NSString *> *)_appsIn:(NSArray<ChakraItem *> *)items {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (ChakraItem *item in items) if (item.kind == ChakraKindApp) [out addObject:item.ident];
     return out;
 }
 
 + (void)save:(NSArray<ChakraItem *> *)items {
     NSMutableArray *raw = [NSMutableArray array];
+    NSMutableArray<ChakraItem *> *kept = [NSMutableArray array];
     for (ChakraItem *item in items) {
         [raw addObject:[item dictionary]];
+        [kept addObject:item];
         if (raw.count >= CHAKRA_MAX_ITEMS) break;
     }
     [[ChakraSettings shared] setSavedItems:raw];
+    // what Settings → Chakra → Apps on the Wheel shows as switched on
+    [[ChakraSettings shared] setObject:[self _appsIn:kept] forKey:@"apps"];
+}
+
+// Settings → Chakra → Apps on the Wheel is a list of every app with a switch each; it writes the
+// bundle ids that are switched on. The wheel itself keeps an ordered list that also holds actions
+// and shortcuts, so the two are brought in line here: apps switched on there are added at the
+// end, apps switched off are taken away, and nothing else moves. Whenever the wheel changes
+// (the editor, or this), the list for Settings is written back, so any difference found here was
+// made in Settings.
++ (void)syncPickedApps {
+    ChakraSettings *s = [ChakraSettings shared];
+    NSArray<NSString *> *picked = [s pickedApps];
+    NSArray<ChakraItem *> *current = [self all];
+    NSArray<NSString *> *have = [self _appsIn:current];
+    if (!picked) {                                           // never written: tell Settings what is on the wheel
+        [s setObject:have forKey:@"apps"];
+        return;
+    }
+    if ([[NSSet setWithArray:picked] isEqualToSet:[NSSet setWithArray:have]]) return;
+
+    NSMutableArray<ChakraItem *> *next = [NSMutableArray array];
+    for (ChakraItem *item in current) {
+        if (item.kind != ChakraKindApp || [picked containsObject:item.ident]) [next addObject:item];
+    }
+    NSUInteger removed = current.count - next.count, added = 0, noRoom = 0;
+    for (NSString *bid in picked) {
+        if ([have containsObject:bid]) continue;
+        ChakraItem *item = [ChakraItem itemWithKind:ChakraKindApp ident:bid];
+        if (!item || [next containsObject:item]) continue;
+        if (next.count >= CHAKRA_MAX_ITEMS) { noRoom++; continue; }
+        [next addObject:item];
+        added++;
+    }
+    [self save:next];
+    ChakraLog(@"apps picked in Settings: %lu added, %lu taken off%@", (unsigned long)added, (unsigned long)removed,
+              noRoom ? [NSString stringWithFormat:@", %lu did not fit", (unsigned long)noRoom] : @"");
+    if (noRoom) [ChakraHost toast:[NSString stringWithFormat:@"The wheel holds %d entries, so %lu of the apps you picked did not fit.",
+                                   CHAKRA_MAX_ITEMS, (unsigned long)noRoom]];
+}
+
+// What a double tap, triple tap or hold on the ball is set to. nil = nothing (or something that can't run now).
++ (ChakraItem *)itemForGesture:(NSString *)which {
+    ChakraSettings *s = [ChakraSettings shared];
+    NSString *value = [s gesture:which];
+    ChakraItem *item = nil;
+    if ([value isEqualToString:@"app"]) item = [ChakraItem itemWithKind:ChakraKindApp ident:[s gestureApp:which]];
+    else if ([value hasPrefix:@"action:"]) item = [ChakraItem itemWithKind:ChakraKindAction ident:[value substringFromIndex:7]];
+    else if ([value hasPrefix:@"shortcut:"]) item = [ChakraItem itemWithKind:ChakraKindShortcut ident:[value substringFromIndex:9]];
+    return [item available] ? item : nil;
+}
+
+// App icons come from the system the first time they are asked for, which can take a moment
+// each. Asking ahead, one at a time, keeps the first open of the wheel from waiting for them.
++ (void)warmIcons {
+    NSArray<ChakraItem *> *items = [self visible];
+    CGFloat size = [ChakraSettings shared].iconSize;
+    [items enumerateObjectsUsingBlock:^(ChakraItem *item, NSUInteger i, BOOL *stop) {
+        ChakraAfter(0.15 * i, ^{
+            @try { [item iconWithSize:size]; } @catch (__unused id e) {}
+        });
+    }];
 }
 
 + (void)flushIcons { [gIcons removeAllObjects]; }

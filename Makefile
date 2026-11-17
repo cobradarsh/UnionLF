@@ -12,7 +12,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Chakra
 
-Chakra_FILES = Tweak.m ChakraCore.m ChakraGlyphs.m ChakraItems.m ChakraActions.m ChakraLayout.m ChakraWheel.m ChakraBall.m ChakraEditor.m ChakraDebug.m
+Chakra_FILES = Tweak.m ChakraCore.m ChakraGlyphs.m ChakraGlass.m ChakraItems.m ChakraActions.m ChakraLayout.m ChakraWheel.m ChakraBall.m ChakraEditor.m ChakraDebug.m
 Chakra_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 Chakra_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
 

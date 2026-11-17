@@ -1,11 +1,16 @@
-/*  ChakraEditor.m — the sheet behind "hold the ball, then let go".
+/*  ChakraEditor.m — the sheet for changing what is on the wheel.
 
-    A bottom sheet in its own SpringBoard window, above the ball:
-      • what is on the wheel, in order: drag ≡ to reorder, the red button to remove
-      • "Add": every action this iOS supports, your shortcuts, and the apps you can open (A–Z)
+    Opened by the "Edit" entry on the wheel, or by holding the ball and letting go. A bottom
+    sheet in its own SpringBoard window, above the ball:
+
+      Add to the wheel   three lists to pick from: every app on the iPhone (A–Z, with the index
+                         strip down the side), every action and switch this iOS supports, and
+                         your four shortcuts. Tap to add, tap again to take off.
+      On the wheel       what is there now, in order: drag ≡ to reorder, the red button to remove.
+
     Changes are saved as they are made. There are no text fields here, so SpringBoard never has
-    to take keyboard focus away from the app in front; the shortcuts' names and links are typed
-    under Settings → Chakra, where a keyboard is no trouble.                                  */
+    to take keyboard focus away from the app in front; searching apps by name, and typing the
+    shortcuts' names and links, is done under Settings → Chakra, where a keyboard is no trouble. */
 
 #import "Chakra.h"
 
@@ -28,15 +33,23 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
     return thumb;
 }
 
+static UIImage *ChakraRowGlyph(NSString *symbol) {
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightMedium];
+    return [UIImage systemImageNamed:symbol withConfiguration:cfg];
+}
+
 #pragma mark - what is on the wheel
 
 @interface ChakraItemsController : UITableViewController
 - (BOOL)hasItem:(ChakraItem *)item;
 - (BOOL)toggleItem:(ChakraItem *)item;          // YES if it is on the wheel afterwards
+- (void)pushAdd:(NSInteger)kind animated:(BOOL)animated;
 @end
 
+// One list to add from. kind: 0 apps, 1 actions and switches, 2 shortcuts.
 @interface ChakraAddController : UITableViewController
 @property (nonatomic, weak) ChakraItemsController *owner;
+@property (nonatomic) NSInteger kind;
 @end
 
 @implementation ChakraItemsController {
@@ -72,7 +85,7 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
         return NO;
     }
     if (_items.count >= CHAKRA_MAX_ITEMS) {
-        [ChakraHost toast:[NSString stringWithFormat:@"The wheel holds %d entries. Remove one first.", CHAKRA_MAX_ITEMS]];
+        [ChakraHost toast:[NSString stringWithFormat:@"The wheel holds %d entries. Take one off first.", CHAKRA_MAX_ITEMS]];
         return NO;
     }
     [_items addObject:item];
@@ -80,32 +93,38 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
     return YES;
 }
 
-// sections: 0 = the entries, 1 = add
+// sections: 0 = add, 1 = the entries
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tv { return 2; }
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)section {
-    return section == 0 ? MAX((NSInteger)_items.count, 1) : 1;
+    return section == 0 ? 3 : MAX((NSInteger)_items.count, 1);
 }
 
 - (NSString *)tableView:(UITableView *)tv titleForHeaderInSection:(NSInteger)section {
-    return section == 0 ? @"On the wheel" : nil;
+    if (section == 0) return @"Add to the wheel";
+    return [NSString stringWithFormat:@"On the wheel (%lu of %d)", (unsigned long)_items.count, CHAKRA_MAX_ITEMS];
 }
 
 - (NSString *)tableView:(UITableView *)tv titleForFooterInSection:(NSInteger)section {
-    if (section == 0) return @"Drag ≡ to change the order. The first entries sit nearest the ball. "
-                              "An entry that can't be shown right now stays here, greyed.";
-    return @"Tap the ball to open the wheel, or slide from it and lift over an icon. "
-            "Hold the ball, then drag, to move it.\n\n"
-            "Look, haptics and your own shortcuts: Settings → Chakra.";
+    if (section == 0) return nil;
+    return @"Drag ≡ to change the order: the first entries sit nearest the ball. An entry that can't be "
+            "shown right now stays here, greyed.\n\n"
+            "Look, gestures, the ball's position and your own shortcuts: Settings → Chakra.";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
     UITableViewCell *c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
-    if (ip.section == 1) {
-        c.textLabel.text = @"Add Apps, Actions and Shortcuts";
-        c.textLabel.textColor = [ChakraSettings shared].accentColor;
-        c.imageView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
-        c.imageView.tintColor = [ChakraSettings shared].accentColor;
+    UIColor *accent = [ChakraSettings shared].accentColor;
+    if (ip.section == 0) {
+        NSArray<NSString *> *titles = @[ @"Apps", @"Actions and Switches", @"Shortcuts" ];
+        NSArray<NSString *> *details = @[ @"Every app on this iPhone, A to Z", @"Home, Last App, Torch, Wi-Fi and the rest",
+                                          @"Your own links and Shortcuts" ];
+        NSArray<NSString *> *symbols = @[ @"square.grid.2x2.fill", @"bolt.circle.fill", @"star.circle.fill" ];
+        c.textLabel.text = titles[(NSUInteger)ip.row];
+        c.detailTextLabel.text = details[(NSUInteger)ip.row];
+        c.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+        c.imageView.image = ChakraRowGlyph(symbols[(NSUInteger)ip.row]);
+        c.imageView.tintColor = accent;
         c.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         return c;
     }
@@ -127,26 +146,26 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
     return c;
 }
 
-- (BOOL)tableView:(UITableView *)tv canEditRowAtIndexPath:(NSIndexPath *)ip { return ip.section == 0 && _items.count > 0; }
+- (BOOL)_isEntry:(NSIndexPath *)ip { return ip.section == 1 && _items.count > 0; }
+
+- (BOOL)tableView:(UITableView *)tv canEditRowAtIndexPath:(NSIndexPath *)ip { return [self _isEntry:ip]; }
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tv editingStyleForRowAtIndexPath:(NSIndexPath *)ip {
-    return (ip.section == 0 && _items.count > 0) ? UITableViewCellEditingStyleDelete : UITableViewCellEditingStyleNone;
+    return [self _isEntry:ip] ? UITableViewCellEditingStyleDelete : UITableViewCellEditingStyleNone;
 }
 
-- (BOOL)tableView:(UITableView *)tv shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)ip {
-    return ip.section == 0 && _items.count > 0;
-}
+- (BOOL)tableView:(UITableView *)tv shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)ip { return [self _isEntry:ip]; }
 
-- (BOOL)tableView:(UITableView *)tv canMoveRowAtIndexPath:(NSIndexPath *)ip { return ip.section == 0 && _items.count > 1; }
+- (BOOL)tableView:(UITableView *)tv canMoveRowAtIndexPath:(NSIndexPath *)ip { return ip.section == 1 && _items.count > 1; }
 
 - (NSIndexPath *)tableView:(UITableView *)tv targetIndexPathForMoveFromRowAtIndexPath:(NSIndexPath *)from
        toProposedIndexPath:(NSIndexPath *)to {
-    if (to.section != 0) return [NSIndexPath indexPathForRow:MAX((NSInteger)_items.count - 1, 0) inSection:0];
+    if (to.section < 1) return [NSIndexPath indexPathForRow:0 inSection:1];
     return to;
 }
 
 - (void)tableView:(UITableView *)tv moveRowAtIndexPath:(NSIndexPath *)from toIndexPath:(NSIndexPath *)to {
-    if (from.section != 0 || (NSUInteger)from.row >= _items.count) return;
+    if (from.section != 1 || (NSUInteger)from.row >= _items.count) return;
     ChakraItem *item = _items[(NSUInteger)from.row];
     [_items removeObjectAtIndex:(NSUInteger)from.row];
     [_items insertObject:item atIndex:MIN((NSUInteger)MAX(to.row, 0), _items.count)];
@@ -154,19 +173,25 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
 }
 
 - (void)tableView:(UITableView *)tv commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath *)ip {
-    if (style != UITableViewCellEditingStyleDelete || ip.section != 0 || (NSUInteger)ip.row >= _items.count) return;
+    if (style != UITableViewCellEditingStyleDelete || ip.section != 1 || (NSUInteger)ip.row >= _items.count) return;
     [_items removeObjectAtIndex:(NSUInteger)ip.row];
     [self _save];
-    if (_items.count == 0) [tv reloadData];                  // the last row turns into the "nothing yet" row
-    else [tv deleteRowsAtIndexPaths:@[ ip ] withRowAnimation:UITableViewRowAnimationAutomatic];
+    [tv reloadData];                                         // the count in the heading, and the "nothing yet" row
 }
 
 - (void)tableView:(UITableView *)tv didSelectRowAtIndexPath:(NSIndexPath *)ip {
     [tv deselectRowAtIndexPath:ip animated:YES];
-    if (ip.section != 1) return;
-    ChakraAddController *add = [[ChakraAddController alloc] initWithStyle:UITableViewStylePlain];
+    if (ip.section != 0) return;
+    [self pushAdd:ip.row animated:YES];
+}
+
+- (void)pushAdd:(NSInteger)kind animated:(BOOL)animated {
+    kind = MAX(0, MIN(2, kind));
+    // the app list is plain so it can have the A–Z strip; the two short lists are grouped, which lets their notes wrap
+    ChakraAddController *add = [[ChakraAddController alloc] initWithStyle:(kind == 0 ? UITableViewStylePlain : UITableViewStyleInsetGrouped)];
     add.owner = self;
-    [self.navigationController pushViewController:add animated:YES];
+    add.kind = kind;
+    [self.navigationController pushViewController:add animated:animated];
 }
 
 @end
@@ -175,47 +200,53 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
 
 @implementation ChakraAddController {
     NSArray<NSString *> *_titles;                  // section titles
-    NSArray<NSString *> *_strip;                   // what the index strip on the right shows
+    NSArray<NSString *> *_strip;                   // the index strip (apps only)
     NSArray<NSArray<ChakraItem *> *> *_rows;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Add to the Wheel";
     self.tableView.rowHeight = 52;
+    NSMutableArray *titles = [NSMutableArray array], *rows = [NSMutableArray array];
 
-    NSMutableArray *titles = [NSMutableArray array], *strip = [NSMutableArray array], *rows = [NSMutableArray array];
-
-    NSMutableArray<ChakraItem *> *actions = [NSMutableArray array];
-    for (ChakraAction *a in [ChakraActions all]) {
-        if (![ChakraActions available:a.ident]) continue;        // nothing that would do nothing on this iOS
-        ChakraItem *item = [ChakraItem itemWithKind:ChakraKindAction ident:a.ident];
-        if (item) [actions addObject:item];
+    if (self.kind == 1) {
+        self.title = @"Actions and Switches";
+        NSMutableArray<ChakraItem *> *plain = [NSMutableArray array], *switches = [NSMutableArray array];
+        for (ChakraAction *a in [ChakraActions all]) {
+            if (![ChakraActions available:a.ident]) continue;        // nothing that would do nothing on this iOS
+            ChakraItem *item = [ChakraItem itemWithKind:ChakraKindAction ident:a.ident];
+            if (item) [(a.toggle ? switches : plain) addObject:item];
+        }
+        if (plain.count) { [titles addObject:@"Actions"]; [rows addObject:plain]; }
+        if (switches.count) { [titles addObject:@"Switches"]; [rows addObject:switches]; }
+    } else if (self.kind == 2) {
+        self.title = @"Shortcuts";
+        NSMutableArray<ChakraItem *> *shortcuts = [NSMutableArray array];
+        for (NSInteger slot = 1; slot <= CHAKRA_SLOTS; slot++) {
+            ChakraItem *item = [ChakraItem itemWithKind:ChakraKindShortcut ident:[NSString stringWithFormat:@"%ld", (long)slot]];
+            if (item) [shortcuts addObject:item];
+        }
+        [titles addObject:@"Your shortcuts"]; [rows addObject:shortcuts];
+    } else {
+        self.title = @"Apps";
+        NSMutableDictionary<NSString *, NSMutableArray<ChakraItem *> *> *byLetter = [NSMutableDictionary dictionary];
+        for (NSDictionary *app in [ChakraHost installedApps]) {
+            NSString *name = app[@"name"];
+            NSString *letter = name.length ? [[name substringToIndex:1] uppercaseString] : @"#";
+            unichar ch = [letter characterAtIndex:0];
+            if (ch < 'A' || ch > 'Z') letter = @"#";
+            ChakraItem *item = [ChakraItem itemWithKind:ChakraKindApp ident:app[@"id"]];
+            if (!item) continue;
+            if (!byLetter[letter]) byLetter[letter] = [NSMutableArray array];
+            [byLetter[letter] addObject:item];
+        }
+        for (NSString *letter in [byLetter.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
+            [titles addObject:letter]; [rows addObject:byLetter[letter]];
+        }
+        _strip = [titles copy];
     }
-    if (actions.count) { [titles addObject:@"Actions"]; [strip addObject:@"●"]; [rows addObject:actions]; }
-
-    NSMutableArray<ChakraItem *> *shortcuts = [NSMutableArray array];
-    for (NSInteger slot = 1; slot <= CHAKRA_SLOTS; slot++) {
-        ChakraItem *item = [ChakraItem itemWithKind:ChakraKindShortcut ident:[NSString stringWithFormat:@"%ld", (long)slot]];
-        if (item) [shortcuts addObject:item];
-    }
-    [titles addObject:@"Shortcuts"]; [strip addObject:@"◆"]; [rows addObject:shortcuts];
-
-    NSMutableDictionary<NSString *, NSMutableArray<ChakraItem *> *> *byLetter = [NSMutableDictionary dictionary];
-    for (NSDictionary *app in [ChakraHost installedApps]) {
-        NSString *name = app[@"name"];
-        NSString *letter = name.length ? [[name substringToIndex:1] uppercaseString] : @"#";
-        unichar ch = [letter characterAtIndex:0];
-        if (ch < 'A' || ch > 'Z') letter = @"#";
-        ChakraItem *item = [ChakraItem itemWithKind:ChakraKindApp ident:app[@"id"]];
-        if (!item) continue;
-        if (!byLetter[letter]) byLetter[letter] = [NSMutableArray array];
-        [byLetter[letter] addObject:item];
-    }
-    for (NSString *letter in [byLetter.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
-        [titles addObject:letter]; [strip addObject:letter]; [rows addObject:byLetter[letter]];
-    }
-    _titles = titles; _strip = strip; _rows = rows;
+    _titles = titles;
+    _rows = rows;
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tv { return (NSInteger)_titles.count; }
@@ -224,9 +255,11 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
 - (NSArray<NSString *> *)sectionIndexTitlesForTableView:(UITableView *)tv { return _strip; }
 
 - (NSString *)tableView:(UITableView *)tv titleForFooterInSection:(NSInteger)section {
-    if (![_titles[(NSUInteger)section] isEqualToString:@"Shortcuts"]) return nil;
-    return @"A shortcut is a link, an app's URL scheme, or the name of a shortcut in the Shortcuts app. "
-            "Type them in under Settings → Chakra; an empty one can't be added.";
+    if (section != (NSInteger)_titles.count - 1) return nil;
+    if (self.kind == 1) return @"A switch on the wheel shows whether it is on, and tapping it leaves the wheel open.";
+    if (self.kind == 2) return @"A shortcut is a web link, an app's own link, or the name of a shortcut in the Shortcuts app. "
+                               "Type them in under Settings → Chakra; an empty one can't be added.";
+    return nil;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
@@ -236,7 +269,7 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
     BOOL ok = [item available];
     c.textLabel.text = item.title;
     c.textLabel.textColor = ok ? UIColor.labelColor : UIColor.secondaryLabelColor;
-    c.detailTextLabel.text = (item.kind == ChakraKindApp) ? nil : item.subtitle;
+    c.detailTextLabel.text = (item.kind == ChakraKindShortcut) ? item.subtitle : nil;
     c.detailTextLabel.textColor = UIColor.secondaryLabelColor;
     c.imageView.image = ChakraThumb(item, 34);
     c.imageView.alpha = ok ? 1.0 : 0.4;
@@ -281,7 +314,7 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
 
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:
                                    [[ChakraItemsController alloc] initWithStyle:UITableViewStyleInsetGrouped]];
-    CGFloat h = MIN(sz.height * 0.78, 700);
+    CGFloat h = MIN(sz.height * 0.8, 720);
     [host addChildViewController:nav];
     nav.view.frame = CGRectMake(0, sz.height - h, sz.width, h);
     nav.view.layer.cornerRadius = 20;
@@ -315,18 +348,18 @@ static UIImage *ChakraThumb(ChakraItem *item, CGFloat side) {
         if (gSheetWindow == w) gSheetWindow = nil;
         [gThumbs removeAllObjects];
         [[ChakraBall shared] refresh];
+        [ChakraItems warmIcons];
         ChakraLog(@"editor closed: %lu entries on the wheel", (unsigned long)[ChakraItems all].count);
     }];
 }
 
-+ (void)debugPushAdd {
++ (void)debugPushAdd:(NSInteger)kind {
     if (!gSheetWindow) [self present];
     UINavigationController *nav = gSheetNav;
     ChakraItemsController *list = (ChakraItemsController *)nav.viewControllers.firstObject;
     if (![list isKindOfClass:ChakraItemsController.class]) return;
-    ChakraAddController *add = [[ChakraAddController alloc] initWithStyle:UITableViewStylePlain];
-    add.owner = list;
-    [nav pushViewController:add animated:NO];
+    [nav popToRootViewControllerAnimated:NO];
+    [list pushAdd:kind animated:NO];
 }
 
 @end

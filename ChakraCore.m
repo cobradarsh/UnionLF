@@ -252,6 +252,28 @@ void ChakraHapticPlay(ChakraHaptic event) {
 - (BOOL)lockScreen       { return [self _b:@"lockScreen" def:NO]; }
 - (BOOL)hideLandscape    { return [self _b:@"hideLandscape" def:NO]; }
 - (BOOL)debugLog         { return [self _b:@"debugLog" def:YES]; }
+- (BOOL)glass            { return (NSInteger)[self _d:@"plateStyle" def:0] != 1; }     // 0 glass, 1 frosted
+- (BOOL)hideInShots      { return [self _b:@"hideInShots" def:YES]; }
+- (BOOL)editEntry        { return [self _b:@"editEntry" def:YES]; }
+- (BOOL)dragMoves        { return (NSInteger)[self _d:@"dragMode" def:0] == 1; }       // 0 picks from the wheel, 1 moves the ball
+- (BOOL)lockPosition     { return [self _b:@"lockPosition" def:NO]; }
+
+// which = Double | Triple | Hold. A hold opens the editor until something else is chosen.
+- (NSString *)gesture:(NSString *)which {
+    NSString *v = [self _s:[@"gesture" stringByAppendingString:which]];
+    if (v.length) return v;
+    return [which isEqualToString:@"Hold"] ? @"action:edit" : @"none";
+}
+
+- (NSString *)gestureApp:(NSString *)which { return [self _s:[NSString stringWithFormat:@"gesture%@App", which]]; }
+
+- (NSArray<NSString *> *)pickedApps {
+    id raw = _p[@"apps"];
+    if (![raw isKindOfClass:NSArray.class]) return nil;
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (id bid in (NSArray *)raw) if ([bid isKindOfClass:NSString.class] && [bid length] && ![out containsObject:bid]) [out addObject:bid];
+    return out;
+}
 - (ChakraEdge)ballEdge       { return ((NSInteger)[self _d:@"ballEdge" def:1] == 0) ? ChakraEdgeLeft : ChakraEdgeRight; }
 - (CGFloat)ballY         { return MAX(0.0, MIN(1.0, [self _d:@"ballY" def:0.44])); }
 
@@ -319,7 +341,45 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
     w.rootViewController = [ChakraPortraitController new];
     w.rootViewController.view.backgroundColor = UIColor.clearColor;
     w.hidden = YES;
+    [self keepOutOfScreenshots:w];
     return w;
+}
+
+// The mark iOS itself puts on the layer of a password field, which keeps that layer out of
+// screenshots, screen recordings and mirroring while it still draws on the screen. It is read from
+// a real password field rather than assumed (it has been 0x12 from iOS 13 to 17).
+static unsigned ChakraSecureMask(void) {
+    static unsigned mask;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        @try {
+            UITextField *field = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 120, 34)];
+            field.secureTextEntry = YES;
+            [field layoutIfNeeded];
+            NSMutableArray<CALayer *> *queue = [NSMutableArray arrayWithObject:field.layer];
+            NSUInteger looked = 0;
+            while (queue.count && !mask && looked++ < 60) {
+                CALayer *layer = queue.firstObject;
+                [queue removeObjectAtIndex:0];
+                long long m = ChakraIntMsg(layer, @"disableUpdateMask", 0);
+                if (m > 0) mask = (unsigned)m;
+                if (layer.sublayers.count) [queue addObjectsFromArray:layer.sublayers];
+            }
+        } @catch (__unused id e) {}
+        if (!mask) mask = 0x12;
+    });
+    return mask;
+}
+
++ (void)keepOutOfScreenshots:(UIWindow *)window {
+    if (!window) return;
+    unsigned mask = [ChakraSettings shared].hideInShots ? ChakraSecureMask() : 0;
+    static BOOL said;
+    BOOL sent = ChakraSendInt(window.layer, @"setDisableUpdateMask:", mask);
+    if (!said) {
+        said = YES;
+        ChakraLog(@"screenshots: %@ (mark %#x)", !sent ? @"this iOS has no way to keep a layer out" : (mask ? @"Chakra stays out of them" : @"Chakra shows in them"), mask);
+    }
 }
 
 // Same ranking Wingman Plus and Dynamic Stage+ settled on: on Dynamic Island phones SpringBoard has a

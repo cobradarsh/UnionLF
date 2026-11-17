@@ -8,6 +8,7 @@
       ChakraItems    what an entry is (app / action / shortcut) and how to draw and run it
       ChakraActions  the system actions (Home, Lock, Screenshot, Flashlight…)
       ChakraGlyphs   the drawn icons: the wheel mark, glyph discs, the Bluetooth rune
+      ChakraGlass    the pane behind the wheel: glass, or the darker frosted look
       ChakraLayout   where things go: rings that grow with the number of items and bend away from corners
       ChakraCore     log, settings, SpringBoard helpers
 
@@ -21,7 +22,7 @@
 #import <notify.h>
 #import <TargetConditionals.h>
 
-#define CHAKRA_VERSION    @"1.0.0"                      // keep in step with control
+#define CHAKRA_VERSION    @"1.0.1"                      // keep in step with control
 #define CHAKRA_DOMAIN     @"com.adarsh.chakra"
 #define CHAKRA_N_PREFS    "com.adarsh.chakra/prefs"     // Settings -> SpringBoard (PostNotification)
 #define CHAKRA_MAX_ITEMS  16
@@ -69,6 +70,14 @@ void ChakraHapticPlay(ChakraHaptic event);
 @property (nonatomic, readonly) BOOL lockScreen;
 @property (nonatomic, readonly) BOOL hideLandscape;
 @property (nonatomic, readonly) BOOL debugLog;
+@property (nonatomic, readonly) BOOL glass;                   // the pane behind the wheel: glass (or frosted)
+@property (nonatomic, readonly) BOOL hideInShots;             // keep Chakra out of screenshots and recordings
+@property (nonatomic, readonly) BOOL editEntry;               // an "Edit" entry at the end of the wheel
+@property (nonatomic, readonly) BOOL dragMoves;               // dragging the ball moves it (instead of picking from the wheel)
+@property (nonatomic, readonly) BOOL lockPosition;            // the ball can't be dragged anywhere
+- (NSString *)gesture:(NSString *)which;                      // which = Double | Triple | Hold -> none | app | action:<id> | shortcut:<n>
+- (NSString *)gestureApp:(NSString *)which;                   // the bundle id picked for "app"
+- (NSArray<NSString *> *)pickedApps;                          // Settings -> Apps on the Wheel; nil until that list has been written
 @property (nonatomic, readonly) ChakraEdge ballEdge;
 @property (nonatomic, readonly) CGFloat ballY;                // centre, as a fraction of the screen height
 - (void)setBallEdge:(ChakraEdge)edge y:(CGFloat)y;
@@ -89,6 +98,7 @@ void ChakraHapticPlay(ChakraHaptic event);
 @interface ChakraHost : NSObject
 + (UIWindowScene *)mainScene;                         // SpringBoard's main scene, never the Dynamic Island's
 + (UIWindow *)overlayWindowAtLevel:(UIWindowLevel)level;   // clear, in the main scene, hidden until asked
++ (void)keepOutOfScreenshots:(UIWindow *)window;      // per the setting: screenshots and recordings leave the window out
 + (CGSize)screenSize;                                 // in points, always portrait
 + (UIEdgeInsets)safeInsets;                           // portrait
 + (BOOL)isLocked;                                     // the lock screen is up
@@ -113,6 +123,13 @@ void ChakraHapticPlay(ChakraHaptic event);
 + (UIImage *)glyphNamed:(NSString *)name pointSize:(CGFloat)pointSize;   // an SF Symbol, or ck.chakra / ck.bluetooth
 + (UIImage *)chakraWithSize:(CGFloat)size;                               // the wheel mark (template image)
 + (UIImage *)discWithGlyph:(NSString *)glyph size:(CGFloat)size fill:(UIColor *)fill;
+@end
+
+// ── the pane behind the wheel ──
+@interface ChakraGlassView : UIView
+@property (nonatomic, strong, readonly) UIView *contentView;     // for what is drawn on the pane
++ (BOOL)canDrawGlass;
+- (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius glass:(BOOL)glass accent:(UIColor *)accent;
 @end
 
 // ── system actions ──
@@ -157,6 +174,9 @@ void ChakraHapticPlay(ChakraHaptic event);
 + (void)save:(NSArray<ChakraItem *> *)items;
 + (NSArray<ChakraItem *> *)starterItems;
 + (void)flushIcons;                                   // settings changed: draw the glyph discs again
++ (void)warmIcons;                                    // load the wheel's icons ahead of the first open
++ (void)syncPickedApps;                               // bring the wheel in line with Settings -> Apps on the Wheel
++ (ChakraItem *)itemForGesture:(NSString *)which;     // what a double tap, triple tap or hold is set to (nil = nothing)
 @end
 
 // ── layout ──
@@ -190,6 +210,7 @@ typedef struct {
 - (void)clearHover;
 - (void)closeIfFrontChanged;                          // every tick: the app underneath is no longer the one it opened over
 - (NSUInteger)itemCount;
+- (CGPoint)centerOfIndex:(NSUInteger)index;           // where entry n sits on screen (tests)
 - (void)debugTapIndex:(NSUInteger)index;
 - (void)debugHoverIndex:(NSUInteger)index;
 - (NSString *)debugState;
@@ -199,11 +220,14 @@ typedef struct {
 @interface ChakraBall : NSObject
 + (instancetype)shared;
 - (void)refresh;                                      // settings, lock state or orientation changed
+- (void)wheelDidOpen;
 - (void)wheelDidClose;
 - (CGPoint)hub;
 @property (nonatomic) BOOL suppressed;                // hidden for a moment (screenshot, editor)
 - (void)debugMoveToEdge:(ChakraEdge)edge y:(CGFloat)y;
 - (void)debugTap;
+- (void)debugTouch:(NSInteger)phase at:(CGPoint)point;    // 0 down, 1 moved, 2 up, 3 cancelled: a finger on the ball (tests)
+- (void)debugSlideToIndex:(NSUInteger)index;              // slide from the ball to entry n and lift (tests)
 - (NSString *)debugState;
 @end
 
@@ -212,7 +236,7 @@ typedef struct {
 + (BOOL)isOpen;
 + (void)present;
 + (void)dismiss;
-+ (void)debugPushAdd;                                 // show the "add" list (tests)
++ (void)debugPushAdd:(NSInteger)kind;                 // show an "add" list: 0 apps, 1 actions, 2 shortcuts (tests)
 @end
 
 void ChakraSettingsChanged(void);                          // re-read the settings and redraw (Tweak.m)

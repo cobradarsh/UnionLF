@@ -6,9 +6,15 @@
         open | close | toggle       the menu
         tap <n>                     tap entry n of the open menu (0 = first)
         hover <n>                   light entry n up, as a sliding finger would
-        balltap                     what a tap on the ball does
+        balltap                     what a tap on the ball does (twice in a row = a double tap)
+        press [<x> <y>]             a finger goes down on the ball (at its centre, or at a screen point) …
+        drag <x> <y>                … moves to a screen point …
+        dragby <dx> <dy>            … or by so many points …
+        release                     … and lifts where it last was
+        slide <n>                   slide from the ball to entry n and lift
         move left|right <0…1>       put the ball on an edge, at that fraction of the screen height
-        edit | editadd | editclose  the editor sheet / its Add list / close it
+        edit | editclose            the editor sheet / close it
+        editadd [apps|actions|shortcuts]   one of its three lists to add from
         items <key> <key> …         replace the wheel: app:<bundle id>  action:<id>  shortcut:<1-4>
         items default               forget the saved wheel (back to the starter set)
         set <key> <value>           write a setting (number, true/false or text) and apply it
@@ -26,6 +32,8 @@
 #import <dlfcn.h>
 #import <fcntl.h>
 #import <unistd.h>
+
+static CGPoint gFinger;              // where the test finger last was
 
 static NSString *ChakraCmdPath(void) { return [ChakraLogDir() stringByAppendingPathComponent:@"chakra_cmd.txt"]; }
 
@@ -105,7 +113,20 @@ static void ChakraRun(NSArray<NSString *> *lines, NSUInteger index) {
         } else if ([cmd isEqualToString:@"edit"]) {
             [ChakraEditor present];
         } else if ([cmd isEqualToString:@"editadd"]) {
-            [ChakraEditor debugPushAdd];
+            [ChakraEditor debugPushAdd:([a1 isEqualToString:@"actions"] ? 1 : ([a1 isEqualToString:@"shortcuts"] ? 2 : 0))];
+        } else if ([cmd isEqualToString:@"press"]) {
+            gFinger = a2 ? CGPointMake(a1.doubleValue, a2.doubleValue) : [ball hub];
+            [ball debugTouch:0 at:gFinger];
+        } else if ([cmd isEqualToString:@"dragby"] && a2) {
+            gFinger = CGPointMake(gFinger.x + a1.doubleValue, gFinger.y + a2.doubleValue);
+            [ball debugTouch:1 at:gFinger];
+        } else if ([cmd isEqualToString:@"drag"] && a2) {
+            gFinger = CGPointMake(a1.doubleValue, a2.doubleValue);
+            [ball debugTouch:1 at:gFinger];
+        } else if ([cmd isEqualToString:@"release"]) {
+            [ball debugTouch:2 at:gFinger];
+        } else if ([cmd isEqualToString:@"slide"] && a1) {
+            [ball debugSlideToIndex:(NSUInteger)MAX(0, a1.integerValue)];
         } else if ([cmd isEqualToString:@"editclose"]) {
             [ChakraEditor dismiss];
         } else if ([cmd isEqualToString:@"items"] && a1) {

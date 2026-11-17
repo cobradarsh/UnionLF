@@ -15,18 +15,30 @@ the system actions actually work.
 | --- | --- |
 | Tap the ball | The wheel opens. Tap an icon, or anywhere else to close. |
 | Slide from the ball | The wheel opens under your finger; lift over an icon to run it. One move. |
+| Double tap, triple tap | Whatever you set under Settings → Chakra (nothing until you choose). |
 | Hold, then drag | Moves the ball. It snaps to the nearer edge and remembers the spot. |
-| Hold, then let go | The editor: add, remove and reorder what is on the wheel. |
+| Hold, then let go | The editor, or whatever "Hold" is set to. |
 
-Left alone for a few seconds the ball fades and tucks part-way into the edge.
+The last entry on the wheel is **Edit**: add, remove and reorder what is on it.
+
+Left alone for a few seconds the ball fades and tucks part-way into the edge. Its side and height
+can also be set exactly under Settings, and a plain drag can be made to move it.
 
 Icons sit on rings around the ball. Near a corner the half wheel bends into a quarter wheel, and
 more icons add rings rather than shrinking anything (up to 16 entries). While the app in front is
 in landscape the icons turn to stay upright.
 
+The pane behind the icons is glass, after the look of the newest iOS: what is behind shows through,
+lightly blurred, with a bright rim and a sheen. The darker frosted pane of 1.0.0 is still there
+as a choice.
+
+Chakra is left out of screenshots and screen recordings (it carries the same mark iOS puts on a
+password field), while you still see it on the screen.
+
 ## What can go on the wheel
 
-- **Apps**: anything with a Home Screen icon, including TrollStore apps.
+- **Apps**: anything with a Home Screen icon, including TrollStore apps. Pick them from a
+  searchable list under Settings → Chakra → Apps on the Wheel, or from the A–Z list behind Edit.
 - **Actions**: Home, App Switcher, Last App, Lock Screen, Screenshot, Control Centre, Notification
   Centre, Reachability, Respring.
 - **Switches**: Torch, Rotation Lock, Low Power Mode, Dark Mode, Wi-Fi, Bluetooth, Aeroplane Mode.
@@ -36,14 +48,17 @@ in landscape the icons turn to stay upright.
   app, with an icon picked from sixty glyphs.
 
 Actions and shortcuts are drawn as glyph discs (a filled circle with a white symbol); apps keep
-their own icons. An action this iOS version can't do is left out of the Add list instead of
-sitting there doing nothing.
+their own icons. An action this iOS version can't do is left out of the lists instead of
+sitting there doing nothing. Any of them can also go on a double tap, a triple tap or a hold.
 
 ## Settings → Chakra
 
-Ball size, resting strength, tucking, colour; wheel or column layout, icon size, names under icons,
-dimming, haptics; whether the ball shows on the Lock Screen or hides in landscape; the four
-shortcuts; the debug log. Everything applies at once, no respring.
+The apps on the wheel; the ball's side, height, dragging and lock; ball size, resting strength,
+tucking, colour; wheel or column, glass or frosted, icon size, names, dimming, the Edit entry,
+haptics; what a double tap, triple tap and hold do; Lock Screen, landscape and screenshots; the
+four shortcuts; the debug log. Everything applies at once, no respring.
+
+The app lists there come from AltList (`com.opa334.altlist`), which the package depends on.
 
 ## How it is put together
 
@@ -57,6 +72,7 @@ shortcuts; the debug log. Everything applies at once, no respring.
 | `ChakraItems.m` | apps, actions and shortcuts as wheel entries |
 | `ChakraActions.m` | the system actions |
 | `ChakraGlyphs.m` | the drawn icons: wheel mark, glyph discs, Bluetooth rune |
+| `ChakraGlass.m` | the pane behind the wheel: glass, or frosted |
 | `ChakraCore.m` | log, settings, SpringBoard helpers |
 | `ChakraDebug.m` | test commands |
 | `tools/make_prefs.py` | the plist-only Settings page and its icon |

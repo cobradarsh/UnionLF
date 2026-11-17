@@ -1,7 +1,7 @@
 /*  ChakraWheel.m — the menu the ball opens.
 
-    A full-screen window that exists only while the menu is up: a dimmed backdrop, a frosted
-    plate (a disc around the ball for the wheel, a panel for the column) and one view per entry.
+    A full-screen window that exists only while the menu is up: a dimmed backdrop, a pane of
+    glass (a disc around the ball for the wheel, a panel for the column) and one view per entry.
     ChakraLayout says where the icons go.
 
     Two ways to pick:
@@ -115,7 +115,7 @@
     UIWindow *_window;
     ChakraWheelRootView *_root;
     UIView *_backdrop;
-    UIVisualEffectView *_plate;
+    ChakraGlassView *_plate;
     NSMutableArray<ChakraItemView *> *_views;
     ChakraLayout *_layout;
     ChakraItemView *_hover;
@@ -139,6 +139,10 @@
 - (BOOL)isOpen { return _open; }
 - (NSUInteger)itemCount { return _views.count; }
 
+- (CGPoint)centerOfIndex:(NSUInteger)index {
+    return index < _layout.centers.count ? _layout.centers[index].CGPointValue : _hub;
+}
+
 - (void)_ensureWindow {
     UIWindowScene *scene = [ChakraHost mainScene];
     if (!_window) {
@@ -151,6 +155,7 @@
     } else if (scene && _window.windowScene != scene) {
         _window.windowScene = scene;
     }
+    [ChakraHost keepOutOfScreenshots:_window];
 }
 
 - (CGAffineTransform)_upright { return CGAffineTransformMakeRotation(_angle); }
@@ -167,18 +172,15 @@
     _backdrop.userInteractionEnabled = NO;
     [_root addSubview:_backdrop];
 
-    _plate = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
-    _plate.userInteractionEnabled = NO;
-    _plate.clipsToBounds = YES;
-    _plate.layer.borderWidth = 1;
-    _plate.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.16].CGColor;
+    BOOL glass = s.glass;
     if (s.style == ChakraStyleColumn) {
-        _plate.frame = _layout.plateRect;
-        _plate.layer.cornerRadius = MIN(28, MIN(_plate.bounds.size.width, _plate.bounds.size.height) / 2.0);
+        CGRect panel = _layout.plateRect;
+        _plate = [[ChakraGlassView alloc] initWithFrame:panel cornerRadius:MIN(30, MIN(panel.size.width, panel.size.height) / 2.0)
+                                                  glass:glass accent:s.accentColor];
     } else {
         CGFloat R = _layout.plateRadius;
-        _plate.frame = CGRectMake(_hub.x - R, _hub.y - R, 2 * R, 2 * R);
-        _plate.layer.cornerRadius = R;
+        _plate = [[ChakraGlassView alloc] initWithFrame:CGRectMake(_hub.x - R, _hub.y - R, 2 * R, 2 * R) cornerRadius:R
+                                                  glass:glass accent:s.accentColor];
         // the rings and spokes of the wheel, faint
         UIBezierPath *path = [UIBezierPath bezierPath];
         for (NSNumber *ring in _layout.ringRadii) {
@@ -195,15 +197,11 @@
         CAShapeLayer *lines = [CAShapeLayer layer];
         lines.frame = _plate.bounds;
         lines.fillColor = UIColor.clearColor.CGColor;
-        lines.strokeColor = [UIColor colorWithWhite:1 alpha:0.09].CGColor;
+        lines.strokeColor = [UIColor colorWithWhite:1 alpha:(glass ? 0.12 : 0.09)].CGColor;
         lines.lineWidth = 1;
         lines.path = path.CGPath;
         [_plate.contentView.layer addSublayer:lines];
     }
-    UIView *tint = [[UIView alloc] initWithFrame:_plate.bounds];
-    tint.backgroundColor = [s.accentColor colorWithAlphaComponent:0.10];
-    tint.userInteractionEnabled = NO;
-    [_plate.contentView insertSubview:tint atIndex:0];
     [_root addSubview:_plate];
 
     // Labels are laid out for portrait; turned on their side they would run into each other.
@@ -257,11 +255,20 @@
         ChakraLog(@"wheel: no room for any icon (hub %.0f,%.0f)", hub.x, hub.y);
         return;
     }
+    // Not everything fits (the biggest icons, in a corner): the Edit entry keeps its place at the end.
+    NSUInteger fit = _layout.centers.count;
+    ChakraItem *last = items.lastObject;
+    if (fit < items.count && last.kind == ChakraKindAction && [last.ident isEqualToString:@"edit"]) {
+        NSMutableArray<ChakraItem *> *shown = [[items subarrayWithRange:NSMakeRange(0, fit - 1)] mutableCopy];
+        [shown addObject:last];
+        items = shown;
+    }
     [self _buildWithItems:items];
     _open = YES;
     _closing = NO;
     _frontAtOpen = [ChakraHost frontmostBundleID];
     _window.hidden = NO;
+    [[ChakraBall shared] wheelDidOpen];
 
     // (A blur view shows nothing but its tint unless it and everything above it is fully opaque,
     //  so the plate grows out of the ball instead of fading in.)

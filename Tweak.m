@@ -71,6 +71,7 @@ static void ChakraStopTick(void) {
 void ChakraSettingsChanged(void) {
     [[ChakraSettings shared] reload];
     [ChakraItems flushIcons];
+    [ChakraItems syncPickedApps];
     if ([ChakraWheel shared].isOpen) [[ChakraWheel shared] closeAnimated:NO completion:nil];
     [[ChakraBall shared] refresh];
     ChakraDebugStart();
@@ -177,7 +178,9 @@ static void ChakraBegin(NSInteger attempt) {
     ChakraDebugStart();
     NSUInteger entries = 0;
     @try {
+        [ChakraItems syncPickedApps];
         entries = [ChakraItems visible].count;
+        ChakraAfter(1.5, ^{ [ChakraItems warmIcons]; });
     } @catch (NSException *e) {
         ChakraLog(@"start: the wheel's entries threw %@", e.reason);
     }

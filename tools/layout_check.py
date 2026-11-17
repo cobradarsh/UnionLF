@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks the arithmetic of Chakra's wheel layout (ChakraLayout.m, -_wheelFor:input:) without a phone.
 
-Same steps as the Objective-C: for 1 to 16 icons, five ball heights and three icon sizes, with
+Same steps as the Objective-C: for 1 to 17 icons (16 entries and Edit), five ball heights and three icon sizes, with
 and without names, it places the icons on a 430 x 932 pt screen (iPhone 14 Pro Max) and reports
 any that overlap, leave the usable screen, or could not be placed. The one known case that does
 not fit everything (16 of the biggest icons with names, ball in the bottom corner) shows 14.
@@ -112,7 +112,7 @@ def main():
         for s in (44.0, 54.0, 66.0):
             for hub_y in (90.0, 200.0, 466.0, 760.0, 880.0):
                 line = []
-                for n in range(1, 17):
+                for n in range(1, 18):
                     rings, placed, worst, off = check(n, hub_y, s, labels)
                     flag = ""
                     if placed < n:
