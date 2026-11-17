@@ -107,8 +107,26 @@ minutes), all while the battery charged at up to 9 W and stood at 37 to 41.5 °C
 exactly into the first stretch with the original installed and looked like its doing; with the original
 installed a second time it did not come back.
 
-So on this phone the rebuild is the same menus for less overhead, measured in the simulator, not a cure
-for a warm phone: nothing was found, in the code or on the device, that makes the original heat one.
+The phone keeps its own record (the battery log, `CurrentPowerlog.PLSQL`), and it covers the 55 minutes on
+17 Nov 2026 in which the original was installed and the phone felt hot. What it shows for that stretch:
+
+- The package manager installing the tweak took 31 % of a core, a respring followed, and within four
+  minutes the phone's skin temperature estimate went from 39 to 44.4 °C and thermal pressure from light to
+  moderate. A second package and a second respring came eight minutes later; pressure stayed at moderate
+  for twenty minutes.
+- Then, with the tweak still installed, the phone cooled back to nominal pressure.
+- Half an hour later one app in heavy use, with the screen on, took 40 to 60 % of a core and the display
+  server another 30 to 46 %, 4 to 5 W from the battery: moderate pressure again, the battery peaking at
+  40.6 °C. That went on for eighteen minutes after the tweak had been removed. Tweaks are not injected
+  into that app at all.
+- SpringBoard's share was 7.4 % in the hour before the tweak and 7.0 % in the hour with it.
+
+The same log shows moderate thermal pressure on 3 %, 12 % and 22 % of the samples of three days running,
+in hours without the tweak as much as with it, mostly while charging or with that kind of app in use.
+
+So the rebuild is the same menus for less overhead, measured in the simulator, not a cure for a warm
+phone: nothing was found, in the code, in 27 readings or in the phone's own log, that makes the original
+heat one.
 
 ## Building
 
