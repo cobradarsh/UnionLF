@@ -70,9 +70,9 @@ static CGFloat ChakraClamp(CGFloat v, CGFloat lo, CGFloat hi) { return MAX(lo, M
     CGFloat cellH = s + (labels ? 18 : 0);
     _yMin = input.safe.top + 8 + s / 2.0;
     _yMax = H - input.safe.bottom - 8 - cellH + s / 2.0;
-    CGFloat rMin = input.ball / 2.0 + 14 + s / 2.0;
+    CGFloat rMin = input.ball / 2.0 + s / 2.0 + (labels ? 24 : 14);   // with names, the name under the icon above the ball must clear the ball
     CGFloat rFar = W - _hubInset - s / 2.0 - 14;
-    CGFloat limits[4] = { MIN(rFar, 0.46 * W), MIN(rFar, 0.62 * W), MIN(rFar, 0.80 * W), rFar };
+    CGFloat limits[4] = { MIN(rFar, 0.50 * W), MIN(rFar, 0.62 * W), MIN(rFar, 0.80 * W), rFar };
 
     // the fewest rings, and for that number the tightest first ring, that hold everything
     NSInteger rings = 0, room[4] = { 0, 0, 0, 0 };

@@ -22,7 +22,7 @@
 #import <notify.h>
 #import <TargetConditionals.h>
 
-#define CHAKRA_VERSION    @"1.0.1"                      // keep in step with control
+#define CHAKRA_VERSION    @"1.0.2"                      // keep in step with control
 #define CHAKRA_DOMAIN     @"com.adarsh.chakra"
 #define CHAKRA_N_PREFS    "com.adarsh.chakra/prefs"     // Settings -> SpringBoard (PostNotification)
 #define CHAKRA_MAX_ITEMS  16

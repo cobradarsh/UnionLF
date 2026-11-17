@@ -26,7 +26,7 @@ def wheel(n, hub_y, hub_inset, s, labels, ball):
     cell_h = s + (18 if labels else 0)
     y_min = TOP + 8 + s / 2
     y_max = H - BOTTOM - 8 - cell_h + s / 2
-    r_min = ball / 2 + 14 + s / 2
+    r_min = ball / 2 + s / 2 + (24 if labels else 14)
     r_far = W - hub_inset - s / 2 - 14
 
     def span(r):
@@ -44,7 +44,7 @@ def wheel(n, hub_y, hub_inset, s, labels, ball):
             return 0
         return int(math.floor((sp[1] - sp[0]) * r / pitch + 1e-6)) + 1
 
-    limits = [min(r_far, 0.46 * W), min(r_far, 0.62 * W), min(r_far, 0.80 * W), r_far]
+    limits = [min(r_far, 0.50 * W), min(r_far, 0.62 * W), min(r_far, 0.80 * W), r_far]
     chosen = None
     for rings in range(1, 5):
         r1 = r_min
