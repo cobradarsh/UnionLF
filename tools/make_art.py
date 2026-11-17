@@ -301,17 +301,19 @@ def main():
         on_black(close).convert("RGB").save(os.path.join(args.look, "fine-close.png"))
         bold = Image.fromarray(render(1024, BOLD))
         on_black(bold).convert("RGB").save(os.path.join(args.look, "bold-1024.png"))
-        # the ball as it will be: 46 points at 3x, black face; shown four times larger beside the real size
-        ball = 138
-        face = Image.new("RGBA", (ball, ball), (0, 0, 0, 0))
-        ImageDraw.Draw(face).ellipse([0, 0, ball - 1, ball - 1], fill=(8, 7, 9, 255))
-        inner = round(ball * 0.92)
-        face.alpha_composite(bold.resize((inner, inner), Image.Resampling.LANCZOS), ((ball - inner) // 2,) * 2)
-        sheet = Image.new("RGB", (ball * 4 + ball + 60, ball * 4 + 40), (54, 58, 66))
-        sheet.paste(face.resize((ball * 4, ball * 4), Image.Resampling.NEAREST), (20, 20), face.resize((ball * 4, ball * 4), Image.Resampling.NEAREST))
-        sheet.paste(face, (ball * 4 + 40, 20), face)
+        # the ball as it will be: 52 points at 3x with nothing behind it, on a pale and a dark ground,
+        # three times larger and at its real size; the Settings icon in the corner
+        ball = 156
+        sun = bold.resize((ball, ball), Image.Resampling.LANCZOS)
+        side = ball * 3 + 40
+        sheet = Image.new("RGB", (2 * side, side + ball + 20), (0, 0, 0))
+        for i, ground in enumerate(((236, 238, 242), (14, 14, 18))):
+            tile = Image.new("RGBA", (side, side + ball + 20), ground + (255,))
+            tile.alpha_composite(sun.resize((ball * 3, ball * 3), Image.Resampling.NEAREST), (20, 20))
+            tile.alpha_composite(sun, (20, side))
+            sheet.paste(tile.convert("RGB"), (i * side, 0))
         icon = settings_icon(bold, 87)
-        sheet.paste(icon, (ball * 4 + 40, ball + 50), icon)
+        sheet.paste(icon, (2 * side - 107, side), icon)
         sheet.save(os.path.join(args.look, "ball.png"))
         print("pictures in", args.look)
         return

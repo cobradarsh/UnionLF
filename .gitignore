@@ -3,3 +3,4 @@ packages/
 *.deb
 build.log
 .DS_Store
+__pycache__/

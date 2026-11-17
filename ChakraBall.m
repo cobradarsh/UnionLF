@@ -63,7 +63,7 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     UIWindow *_window;
     ChakraBallView *_view;          // the whole window: the touch target
     UIView *_disc;                  // the ball you see (it carries the shadow and fades while resting)
-    UIView *_face;                  // its dark face with the coloured rim
+    UIView *_face;                  // the dark disc with the coloured rim behind the plain wheel mark (the golden sun has none)
     UIImageView *_mark;             // what is on the face: the golden sun wheel, or the plain wheel mark
     NSInteger _markKind;            // which of the two was asked for when _mark was last filled (-1: not yet)
     BOOL _markIsSun;
@@ -161,21 +161,30 @@ typedef NS_ENUM(NSInteger, ChakraTouchMode) {
     UIColor *accent = s.accentColor;
     NSInteger kind = s.ballIcon;
     if (kind != _markKind) {                                // only when it changes: this runs every couple of seconds
-        UIImage *sun = (kind == 0) ? [ChakraGlyphs sunWithSize:round(_size * 0.92)] : nil;
+        // the golden sun stands on its own and takes the whole ball; the plain mark sits inside a disc
+        UIImage *sun = (kind == 0) ? [ChakraGlyphs sunWithSize:round(_size)] : nil;
         _mark.image = sun ?: [ChakraGlyphs chakraWithSize:round(_size * 0.62)];
         _markIsSun = (sun != nil);
         _markKind = kind;
     }
+    _face.hidden = _markIsSun;                              // nothing behind the golden sun, nothing round it
+    CALayer *shade = _disc.layer;
     if (_markIsSun) {
-        // gold wants black behind it
-        _face.backgroundColor = [UIColor colorWithRed:0.030 green:0.027 blue:0.035 alpha:0.96];
+        // The shadow is now cast by the gold itself (there is nothing else in the layer). Tighter and
+        // darker than the disc's, so the rays keep their edge on a pale or a yellow wallpaper.
+        shade.shadowOpacity = 0.7;
+        shade.shadowRadius = 2.5;
+        shade.shadowOffset = CGSizeMake(0, 1.5);
     } else {
+        shade.shadowOpacity = 0.35;
+        shade.shadowRadius = 5;
+        shade.shadowOffset = CGSizeMake(0, 2);
         CGFloat r = 0, g = 0, b = 0, a = 1;
         [accent getRed:&r green:&g blue:&b alpha:&a];
         // night blue-black with a quarter of the accent mixed in
         _face.backgroundColor = [UIColor colorWithRed:0.105 * 0.74 + r * 0.26 green:0.105 * 0.74 + g * 0.26 blue:0.150 * 0.74 + b * 0.26 alpha:0.95];
+        _face.layer.borderColor = accent.CGColor;
     }
-    _face.layer.borderColor = accent.CGColor;
     _mark.transform = CGAffineTransformMakeRotation([ChakraHost interfaceAngle] + _markTurn);
     [ChakraHost keepOutOfScreenshots:_window];
 }

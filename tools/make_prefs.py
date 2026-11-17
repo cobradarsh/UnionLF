@@ -170,7 +170,8 @@ items = [
     group("Resting Strength", "How solid the ball looks while it waits."),
     slider("idleAlpha", 0.2, 1.0, 0.6),
     group("Ball",
-          "Icon: the golden sun wheel, or the plain white wheel mark.\n\n"
+          "Icon: the golden sun wheel on its own, or the plain white wheel mark on a dark disc "
+          "ringed in the colour chosen below.\n\n"
           "Tucked, the ball slides part-way off the screen while it waits and comes out when you touch it."),
     choice("ballIcon", "Icon", 0, [(0, "Golden Sun"), (1, "Plain Wheel")]),
     switch("tuck", "Tuck Into the Edge", True),

@@ -230,7 +230,7 @@ Lock Position keeps it where it is.</string>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Icon: the golden sun wheel, or the plain white wheel mark.
+			<string>Icon: the golden sun wheel on its own, or the plain white wheel mark on a dark disc ringed in the colour chosen below.
 
 Tucked, the ball slides part-way off the screen while it waits and comes out when you touch it.</string>
 			<key>label</key>
