@@ -1,30 +1,22 @@
 # Functions whose disassembly .github/workflows/probe.yml writes out from the iOS 16.5 (20F66)
-# dyld shared cache. One per line: <image name>|<symbol>. Changing this file and pushing runs the probe.
+# dyld shared cache. One per line: <image name> <regular expression for the symbol's whole name>.
+# Changing this file and pushing runs the probe.
 #
 # the menu: who is the collection view's delegate, which classes are registered for which kinds
-UIKitCore|-[_UIContextMenuListView initWithFrame:]
-UIKitCore|-[_UIContextMenuListView setDisplayedMenu:]
-UIKitCore|-[_UIContextMenuListView _dataSourceForCollectionView:]
-UIKitCore|-[_UIContextMenuListView layoutSubviews]
-UIKitCore|-[_UIContextMenuListView setBackgroundView:]
+UIKitCore ^-\[_UIContextMenuListView (initWithFrame:|setDisplayedMenu:|layoutSubviews|_dataSourceForCollectionView:|setBackgroundView:|_sizeClippingAndCollectionViews|_updateCollectionViewAlpha)\]$
+UIKitCore ^___55-\[_UIContextMenuListView _dataSourceForCollectionView:\]_block_invoke(_2)?$
+# the layout: which separators are supplementary views and which are decorations
+UIKitCore ^__UIContextMenuSeparator$
+UIKitCore ^__UIContextMenuCollectionViewLayout$
+UIKitCore ^____UIContextMenuCollectionViewLayout_block_invoke$
 # the separators and the title
-UIKitCore|-[_UIContextMenuReusableSeparatorView initWithFrame:]
-UIKitCore|-[_UIContextMenuHeaderView initWithFrame:]
-UIKitCore|-[_UIContextMenuHeaderView _separatorHeight]
-UIKitCore|-[_UIContextMenuHeaderView updateConstraints]
-# what applying layout attributes does to a reusable view ("hidden", "alpha")
-UIKitCore|-[UICollectionReusableView _setBaseLayoutAttributes:]
-UIKitCore|-[UICollectionReusableView _setLayoutAttributes:]
-UIKitCore|-[UICollectionReusableView _setLayoutAttributes:force:]
+UIKitCore ^-\[_UIContextMenu(Reusable)?SeparatorView initWithFrame:\]$
+UIKitCore ^-\[_UIContextMenuHeaderView (initWithFrame:|_separatorHeight|updateConstraints|setSeparatorStyle:)\]$
+# what applying layout attributes and reuse do to a reusable view ("hidden", "alpha")
+UIKitCore ^-\[UICollectionReusableView (_setBaseLayoutAttributes:|_setLayoutAttributes:|_setLayoutAttributes:force:|_setHiddenForReuse:|didMoveToSuperview|prepareForReuse)\]$
+UIKitCore ^___55-\[UICollectionReusableView _setLayoutAttributes:force:\]_block_invoke(_2)?$
 # Control Centre: how the separators are used
-MediaControls|-[MRURoutingTableViewCell initWithStyle:reuseIdentifier:]
-MediaControls|-[MRURoutingTableViewCell layoutSubviews]
-MediaControls|-[MRURoutingTableViewCell updateVisibility]
-MediaControls|-[MRURoutingTableViewCell updateVisualStyling]
-MediaControls|-[MRURoutingHeaderView initWithReuseIdentifier:]
-MediaControls|-[MRURoutingHeaderView layoutSubviews]
-MediaControls|-[MRUNowPlayingContainerView initWithFrame:]
-MediaControls|-[MRUNowPlayingContainerView layoutSubviews]
-MediaControls|-[MRUNowPlayingContainerView updateVisibility]
-ControlCenterUIKit|-[CCUIMenuModuleItemView _separatorHeight]
-ControlCenterUIKit|-[CCUIMenuModuleItemView layoutSubviews]
+MediaControls ^-\[MRURoutingTableViewCell (initWithStyle:reuseIdentifier:|layoutSubviews|updateVisibility|updateVisualStyling|prepareForReuse|separatorView)\]$
+MediaControls ^-\[MRURoutingHeaderView (initWithReuseIdentifier:|layoutSubviews|updateVisualStyling|separatorView)\]$
+MediaControls ^-\[MRUNowPlayingContainerView (initWithFrame:|layoutSubviews|updateVisibility|updateVisualStyling|setShowSeparator:|separatorView)\]$
+ControlCenterUIKit ^-\[CCUIMenuModuleItemView (_separatorHeight|layoutSubviews|setSeparatorVisible:|didMoveToWindow)\]$

@@ -34,8 +34,22 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
           HOMEBREW_NO_ENV_HINTS: "1"
+          GH_TOKEN: ${{ github.token }}
         run: |
-          brew install blacktop/tap/ipsw
+          # Homebrew refuses formulae from a tap it has not been told to trust; if it still will not
+          # install ipsw, the ready-made binary from ipsw's own releases is used instead.
+          brew tap blacktop/tap || true
+          brew trust blacktop/tap || true
+          if ! brew install blacktop/tap/ipsw; then
+            echo "Homebrew could not install ipsw: taking the release binary"
+            mkdir -p "$HOME/bin" "$RUNNER_TEMP/ipsw-dl"
+            gh release download --repo blacktop/ipsw --pattern "ipsw_*_macOS_$(uname -m).tar.gz" --dir "$RUNNER_TEMP/ipsw-dl"
+            tar xzf "$RUNNER_TEMP"/ipsw-dl/*.tar.gz -C "$RUNNER_TEMP/ipsw-dl"
+            cp "$(find "$RUNNER_TEMP/ipsw-dl" -type f -name ipsw | head -1)" "$HOME/bin/ipsw"
+            chmod +x "$HOME/bin/ipsw"
+            echo "$HOME/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/bin:$PATH"
+          fi
           ipsw version
 
       - name: Fetch the dyld shared cache (iPhone15,3 / 20F66)
@@ -70,44 +84,28 @@ jobs:
 
       - name: Disassemble
         run: |
-          mkdir -p probe/disasm probe/help
+          mkdir -p probe/disasm probe/symbols probe/help
           ipsw dyld disass --help > probe/help/disass.txt 2>&1 || true
           ipsw dyld symaddr --help > probe/help/symaddr.txt 2>&1 || true
-          ipsw dyld a2s --help > probe/help/a2s.txt 2>&1 || true
-          ipsw dyld macho --help > probe/help/macho.txt 2>&1 || true
-          ipsw class-dump --help > probe/help/class-dump.txt 2>&1 || true
-          cat probe/help/disass.txt
-          grep -v '^#' tools/probe_symbols.txt | while IFS='|' read -r image symbol; do
-            [ -n "$image" ] && [ -n "$symbol" ] || continue
-            safe=$(printf '%s' "$symbol" | tr -c 'A-Za-z0-9_.' '_' | cut -c1-120)
-            out="probe/disasm/${image}__${safe}.txt"
-            echo "::group::$image $symbol"
-            ipsw dyld disass "$DSC" --image "$image" --symbol "$symbol" --no-color < /dev/null > "$out" 2>&1 || echo "FAILED: $image $symbol"
-            wc -l "$out" || true
-            head -8 "$out" || true
-            echo "::endgroup::"
+          # the symbols of each image once, then every wanted function by its address
+          for image in $(grep -v '^#' tools/probe_symbols.txt | awk 'NF { print $1 }' | sort -u); do
+            echo "symbols of $image"
+            ipsw dyld symaddr "$DSC" --image "$image" --no-color < /dev/null > "$RUNNER_TEMP/sym-$image.txt" 2>> probe/symbols/_errors.txt || true
+            wc -l "$RUNNER_TEMP/sym-$image.txt" || true
+          done
+          grep -E "ContextMenu|UICollectionReusableView " "$RUNNER_TEMP/sym-UIKitCore.txt" > probe/symbols/UIKitCore-menu.txt || true
+          grep -E "MRURouting(TableViewCell|HeaderView)|MRUNowPlayingContainerView" "$RUNNER_TEMP/sym-MediaControls.txt" > probe/symbols/MediaControls.txt || true
+          grep -E "CCUIMenuModuleItemView" "$RUNNER_TEMP/sym-ControlCenterUIKit.txt" > probe/symbols/ControlCenterUIKit.txt || true
+          grep -v '^#' tools/probe_symbols.txt | while read -r image regex; do
+            [ -n "$image" ] && [ -n "$regex" ] || continue
+            RE="$regex" awk -F'\t' '$3 ~ ENVIRON["RE"] { a = $1; sub(":", "", a); print a "\t" $3 }' "$RUNNER_TEMP/sym-$image.txt" | while IFS=$'\t' read -r addr symbol; do
+              safe=$(printf '%s' "$symbol" | tr -c 'A-Za-z0-9_.' '_' | cut -c1-110)
+              out="probe/disasm/${image}__${safe}.txt"
+              ipsw dyld disass "$DSC" --vaddr "$addr" --no-color < /dev/null > "$out" 2>&1 || echo "FAILED: $image $symbol"
+              echo "$(wc -l < "$out" | tr -d ' ') lines  $image  $symbol"
+            done
           done
           du -sh probe/disasm
-
-      - name: Symbols of the menu classes (to find the blocks)
-        continue-on-error: true
-        timeout-minutes: 20
-        run: |
-          mkdir -p probe/symbols
-          ipsw dyld symaddr "$DSC" --image UIKitCore --no-color < /dev/null > "$RUNNER_TEMP/uikit-symbols.txt" 2> probe/symbols/_errors.txt || true
-          wc -l "$RUNNER_TEMP/uikit-symbols.txt" || true
-          grep -E "_UIContextMenu(ListView|ReusableSeparatorView|HeaderView|CollectionViewLayout|Cell )|_UIContextMenuSeparator|kContextMenu|UICollectionReusableView _set(Base)?LayoutAttributes" \
-            "$RUNNER_TEMP/uikit-symbols.txt" > probe/symbols/UIKitCore-menu.txt || true
-          wc -l probe/symbols/UIKitCore-menu.txt || true
-          head -80 probe/symbols/UIKitCore-menu.txt || true
-          # the blocks of the list view's data source: where a supplementary view is made and set up
-          grep -E "_UIContextMenuListView.*block_invoke" probe/symbols/UIKitCore-menu.txt | head -40 | while read -r line; do
-            addr=$(printf '%s' "$line" | grep -o -E '0x[0-9a-fA-F]+' | head -1)
-            [ -n "$addr" ] || continue
-            safe=$(printf '%s' "$line" | tr -c 'A-Za-z0-9_.' '_' | cut -c1-120)
-            ipsw dyld disass "$DSC" --vaddr "$addr" --no-color < /dev/null > "probe/disasm/block__${safe}.txt" 2>&1 || echo "FAILED: $line"
-          done
-          ls -la probe/disasm | head -80
 
       - name: Upload
         if: always()
