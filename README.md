@@ -19,7 +19,7 @@ iOS 16.5 firmware and a simulator:
 1. **A method on every collection view cell.** The tweak is loaded into every process that has UIKit, and
    there it adds `-didMoveToWindow` to `UICollectionReusableView`, the base class of every collection view
    cell. Each time a cell enters or leaves a window it asks `UIDevice` for the iOS version, turns the string
-   into a number, fetches the reuse identifier and compares strings: 1.9 µs a call, against 1.7 ns for the
+   into a number, fetches the reuse identifier and compares strings: 1.7 µs a call, against 1.7 ns for the
    call without it. The only views it is looking for are the thick bars inside context menus. (Cells are
    hidden for reuse, not taken out of the window, so this runs when cells first appear and when a screen
    comes or goes, not on every step of a scroll.)
@@ -45,7 +45,7 @@ same as without any tweak.
 
 | | original 0.9.4 (RootHide-patched) | this rebuild |
 |---|---|---|
-| code running in every collection view cell of every app | 1.9 µs per window change | none |
+| code running in every collection view cell of every app | 1.7 µs per window change | none |
 | iOS version lookups | two at load, one per cell event | none |
 | thick bar between groups in a menu | found by hooking every reusable view | the menu's own list view is told (`willDisplaySupplementaryView`): menus only |
 | hairlines in a menu | taken out of their collection view | hidden and emptied where they are |
@@ -64,17 +64,17 @@ library replaced by three runtime calls) and with the rebuild; each twice, best 
 
 | | no tweak | original | rebuild |
 |---|---|---|---|
-| one `-didMoveToWindow` of a collection view cell | 1.7 ns | 1903 ns | 1.7 ns |
-| `addSubview` + `removeFromSuperview` of a cell | 11.1 µs | 15.2 µs | 9.7 µs |
-| scrolling 5940 cells past (cells change window 0 times) | 213 ms | 189 ms | 204 ms |
-| AirPlay row stand-in, one layout pass | 4.2 µs | 13.5 µs | 4.2 µs |
-| menu open, idle for 3 s: layout passes / main-thread CPU | 0 / 0.2 ms | 0 / 0.1 ms | 0 / 0.1 ms |
+| one `-didMoveToWindow` of a collection view cell | 1.7 ns | 1660 ns | 1.7 ns |
+| `addSubview` + `removeFromSuperview` of a cell | 8.9 µs | 13.6 µs | 8.5 µs |
+| scrolling 5940 cells past (cells change window 0 times) | 156 ms | 166 ms | 157 ms |
+| AirPlay row stand-in, one layout pass | 3.1 µs | 12.0 µs | 3.5 µs |
+| menu open, idle for 3 s: layout passes / main-thread CPU | 0 / 0.1 ms | 0 / 0.1 ms | 0 / 0.1 ms |
 | separators that draw in a menu with 3 groups and a title | 6 | 0 | 0 |
 | menu background opacity | 1.0 | 0.5 | 0.5 |
 | screenshot of the open menu against the original's | 24.4 % of pixels differ | | 0.00 % differ |
 
-The scroll and `addSubview` rows are within the noise of the machine: the original's cost there is the
-1.9 µs per window change of the first row, nothing more.
+The scroll row is within the noise of the machine. The original's whole cost is the 1.7 µs per window
+change of the first row (two of them in an `addSubview` + `removeFromSuperview`).
 
 ### The firmware itself (iOS 16.5, 20F66, `.github/workflows/probe.yml`)
 
@@ -85,10 +85,30 @@ applying layout attributes to a reusable view sets its centre, bounds, alpha and
 `hidden`; `MRURoutingTableViewCell`, `MRURoutingHeaderView` and `MRUNowPlayingContainerView` reach their
 separator through the instance variable.
 
-### On the phone
+### On the phone (iPhone 14 Pro Max, iOS 16.5, RootHide, about 70 other tweaks)
 
-`diag/iwtdiag.c` (run with `tools/phone.sh diag`) reads, for a stretch of time, the CPU used by every
-process, the libraries mapped into it, and the battery's temperature and power.
+`diag/iwtdiag.c` (run with `tools/phone.sh diag`) reads, for 30 seconds at a time, the CPU used by every
+process, the libraries mapped into it, and the battery's temperature and power. 27 readings on
+17 Nov 2026, with no IWantTranslucent, with the original 0.9.4 (twice) and with this rebuild (twice), a
+respring before each state:
+
+| phone left alone after a respring | all processes, share of one core | SpringBoard | system power |
+|---|---|---|---|
+| no IWantTranslucent | 15 to 26 % | 2.1 to 3.1 % | 1.5 to 1.9 W |
+| original 0.9.4 | 8 to 15 % | 1.6 to 2.0 % | 1.1 to 1.4 W |
+| this rebuild | 13 % | 2.7 % | 1.7 W |
+
+**The original does not show up.** It was mapped into 20 to 30 processes; apart from SpringBoard and an
+app in use, none of them used any CPU, and SpringBoard used no more with it than without. Whatever
+was hot in a reading was a system service that does not load the tweak: `ptpd` and `mediaserverd` (78 %
+of a core for a minute or two after the phone is plugged into a PC, which then reads its photos),
+`healthd` (42 to 75 % for over four minutes, once), `mediaanalysisd` (58 to 84 % for two and a half
+minutes), all while the battery charged at up to 9 W and stood at 37 to 41.5 °C. The `healthd` burn fell
+exactly into the first stretch with the original installed and looked like its doing; with the original
+installed a second time it did not come back.
+
+So on this phone the rebuild is the same menus for less overhead, measured in the simulator, not a cure
+for a warm phone: nothing was found, in the code or on the device, that makes the original heat one.
 
 ## Building
 
