@@ -16,6 +16,7 @@ on:
       - README.md
       - tools/probe.txt
       - tools/probe_symbols.txt
+      - tools/probe_callers.txt
       - .github/workflows/probe.yml
   workflow_dispatch:
 
@@ -147,16 +148,6 @@ jobs:
             echo "the package carries files for RootHide's patch loader"; exit 1
           fi
 
-      - name: Build the diagnostic tool (not part of the package)
-        run: |
-          export PATH="$HOME/bin:$PATH"
-          mkdir -p diag-out
-          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -O2 -Wall \
-            -o diag-out/iwtdiag diag/iwtdiag.c -framework CoreFoundation -framework IOKit
-          ldid -Sdiag/entitlements.plist diag-out/iwtdiag
-          file diag-out/iwtdiag
-          ls -la diag-out
-
       - name: Upload build log (always)
         if: always()
         uses: actions/upload-artifact@v4
@@ -170,6 +161,16 @@ jobs:
         with:
           name: iwanttranslucent-roothide-deb-${{ matrix.runner }}
           path: packages/*.deb
+
+      - name: Build the diagnostic tool (not part of the package)
+        run: |
+          export PATH="$HOME/bin:$PATH"
+          mkdir -p diag-out
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -O2 -Wall \
+            -o diag-out/iwtdiag diag/iwtdiag.c -framework CoreFoundation -framework IOKit
+          ldid -Sdiag/entitlements.plist diag-out/iwtdiag
+          file diag-out/iwtdiag
+          ls -la diag-out
 
       - name: Upload diagnostic tool
         uses: actions/upload-artifact@v4

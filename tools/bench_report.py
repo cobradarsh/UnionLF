@@ -205,9 +205,9 @@ def main():
         m = re.search(r"alpha=([0-9.]+)", flag(variant, "menu.list0.background") or "")
         return float(m.group(1)) if m else None
 
-    check(alpha("none") is not None and abs(alpha("none") - 1.0) < 0.01, "none: the menu's blur is at full strength (%s)" % alpha("none"))
+    check(alpha("none") is not None and abs(alpha("none") - 1.0) < 0.01, "none: the menu's background is fully opaque (%s)" % alpha("none"))
     check(alpha("orig") is not None and alpha("opt") is not None and abs(alpha("orig") - alpha("opt")) < 0.01 and abs(alpha("opt") - 0.5) < 0.01,
-          "opt: the menu's blur is at half strength like orig's (orig %s, opt %s)" % (alpha("orig"), alpha("opt")))
+          "opt: the menu's background is at half opacity like orig's (orig %s, opt %s)" % (alpha("orig"), alpha("opt")))
     stock = num("none", "menu.list0.separators_drawing")
     check(stock is not None and stock > 0, "none: the stock menu does draw separators (%s), so the next lines mean something" % value("none", "menu.list0.separators_drawing"))
     for v in ("orig", "opt"):

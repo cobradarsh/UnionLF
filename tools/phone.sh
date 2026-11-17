@@ -3,8 +3,8 @@
 #
 #   status               which IWantTranslucent package is installed, and its files
 #   diag <iwtdiag> [s]   copy the diagnostic tool over, run it for s seconds (default 20), delete it:
-#                        CPU by process, where the tweak and RootHide's patch are loaded, the JIT flag,
-#                        battery temperature and power (see diag/iwtdiag.c)
+#                        CPU by process, where the tweak and RootHide's patch are loaded, battery
+#                        temperature and power (see diag/iwtdiag.c)
 #   reports [days]       crash and resource reports of the last days (default 3): how many per
 #                        process, and which of them mention the tweak
 #   install <deb>        remove Luki's package if it is there, install the lean one, respring

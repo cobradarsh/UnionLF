@@ -10,8 +10,7 @@
  * For every process it reads:
  *   - CPU time and wake-ups used during the stretch            (proc_pid_rusage)
  *   - the code signing flags, CS_DEBUGGED among them           (csops)
- *     RootHide's patch loader asks for that flag (JIT) in every process into which a converted
- *     rootless tweak is loaded; a native RootHide build never does
+ *     reported so that it shows if one configuration marks more processes than the other
  *   - whether the process is traced                            (proc_pidinfo)
  *   - which tweak libraries are mapped into it                 (proc_pidinfo, file-backed regions)
  * and for the phone: thermal pressure level, battery temperature, current, voltage and, where
@@ -33,7 +32,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/param.h>
-#include <sys/proc_info.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <mach/mach.h>
@@ -60,12 +58,106 @@ kern_return_t IOObjectRelease(iwt_io_object_t object);
 #define IWT_CS_PLATFORM_BINARY   0x04000000u
 #define IWT_CS_DEBUGGED          0x10000000u
 
-#ifndef PROC_PIDREGIONPATHINFO2
-#define PROC_PIDREGIONPATHINFO2 22
-#endif
-#ifndef PROC_FLAG_TRACED
-#define PROC_FLAG_TRACED 2
-#endif
+/*
+ * <sys/proc_info.h> is not in the iOS SDK either. These are the kernel's structures for the two
+ * proc_pidinfo() calls used here (xnu, bsd/sys/proc_info.h), under names of their own; the sizes
+ * are checked at compile time against the ones the kernel expects.
+ */
+#define IWT_PROC_PIDTBSDINFO          3
+#define IWT_PROC_PIDREGIONPATHINFO2   22      /* the next file-backed mapping at or after an address */
+#define IWT_PROC_FLAG_TRACED          2
+
+struct iwt_proc_bsdinfo {
+    uint32_t pbi_flags;
+    uint32_t pbi_status;
+    uint32_t pbi_xstatus;
+    uint32_t pbi_pid;
+    uint32_t pbi_ppid;
+    uint32_t pbi_uid;
+    uint32_t pbi_gid;
+    uint32_t pbi_ruid;
+    uint32_t pbi_rgid;
+    uint32_t pbi_svuid;
+    uint32_t pbi_svgid;
+    uint32_t rfu_1;
+    char     pbi_comm[16];
+    char     pbi_name[32];
+    uint32_t pbi_nfiles;
+    uint32_t pbi_pgid;
+    uint32_t pbi_pjobc;
+    uint32_t e_tdev;
+    uint32_t e_tpgid;
+    int32_t  pbi_nice;
+    uint64_t pbi_start_tvsec;
+    uint64_t pbi_start_tvusec;
+};
+
+struct iwt_proc_regioninfo {
+    uint32_t pri_protection;
+    uint32_t pri_max_protection;
+    uint32_t pri_inheritance;
+    uint32_t pri_flags;
+    uint64_t pri_offset;
+    uint32_t pri_behavior;
+    uint32_t pri_user_wired_count;
+    uint32_t pri_user_tag;
+    uint32_t pri_pages_resident;
+    uint32_t pri_pages_shared_now_private;
+    uint32_t pri_pages_swapped_out;
+    uint32_t pri_pages_dirtied;
+    uint32_t pri_ref_count;
+    uint32_t pri_shadow_depth;
+    uint32_t pri_share_mode;
+    uint32_t pri_private_pages_resident;
+    uint32_t pri_shared_pages_resident;
+    uint32_t pri_obj_id;
+    uint32_t pri_depth;
+    uint64_t pri_address;
+    uint64_t pri_size;
+};
+
+struct iwt_vinfo_stat {
+    uint32_t vst_dev;
+    uint16_t vst_mode;
+    uint16_t vst_nlink;
+    uint64_t vst_ino;
+    uint32_t vst_uid;
+    uint32_t vst_gid;
+    int64_t  vst_atime;
+    int64_t  vst_atimensec;
+    int64_t  vst_mtime;
+    int64_t  vst_mtimensec;
+    int64_t  vst_ctime;
+    int64_t  vst_ctimensec;
+    int64_t  vst_birthtime;
+    int64_t  vst_birthtimensec;
+    int64_t  vst_size;
+    int64_t  vst_blocks;
+    int32_t  vst_blksize;
+    uint32_t vst_flags;
+    uint32_t vst_gen;
+    uint32_t vst_rdev;
+    int64_t  vst_qspare[2];
+};
+
+struct iwt_vnode_info_path {
+    struct iwt_vinfo_stat vi_stat;
+    int32_t  vi_type;
+    int32_t  vi_pad;
+    int32_t  vi_fsid[2];
+    char     vip_path[1024];
+};
+
+struct iwt_proc_regionwithpathinfo {
+    struct iwt_proc_regioninfo prp_prinfo;
+    struct iwt_vnode_info_path prp_vip;
+};
+
+_Static_assert(sizeof(struct iwt_proc_bsdinfo) == 136, "proc_bsdinfo");
+_Static_assert(sizeof(struct iwt_proc_regioninfo) == 96, "proc_regioninfo");
+_Static_assert(sizeof(struct iwt_vinfo_stat) == 136, "vinfo_stat");
+_Static_assert(sizeof(struct iwt_vnode_info_path) == 1176, "vnode_info_path");
+_Static_assert(sizeof(struct iwt_proc_regionwithpathinfo) == 1272, "proc_regionwithpathinfo");
 
 #define MAX_PIDS 4096
 
@@ -130,10 +222,10 @@ static void scan_libraries(struct row *r) {
     uint64_t address = 0;
     char seen[24][96];
     int nseen = 0;
-    struct proc_regionwithpathinfo info;
+    struct iwt_proc_regionwithpathinfo info;
     for (int guard = 0; guard < 4000; guard++) {
         memset(&info, 0, sizeof(info));
-        int got = proc_pidinfo(r->pid, PROC_PIDREGIONPATHINFO2, address, &info, (int)sizeof(info));
+        int got = proc_pidinfo(r->pid, IWT_PROC_PIDREGIONPATHINFO2, address, &info, (int)sizeof(info));
         if (got <= 0) break;
         r->scanned = 1;
         uint64_t next = info.prp_prinfo.pri_address + info.prp_prinfo.pri_size;
@@ -264,12 +356,12 @@ int main(int argc, char **argv) {
             const char *base = strrchr(path, '/');
             strlcpy(r->name, base ? base + 1 : path, sizeof(r->name));
         } else {
-            struct proc_bsdinfo bsd;
-            if (proc_pidinfo(r->pid, PROC_PIDTBSDINFO, 0, &bsd, (int)sizeof(bsd)) == (int)sizeof(bsd)) strlcpy(r->name, bsd.pbi_comm, sizeof(r->name));
+            struct iwt_proc_bsdinfo bsd;
+            if (proc_pidinfo(r->pid, IWT_PROC_PIDTBSDINFO, 0, &bsd, (int)sizeof(bsd)) == (int)sizeof(bsd)) strlcpy(r->name, bsd.pbi_comm, sizeof(r->name));
             else strlcpy(r->name, "?", sizeof(r->name));
         }
-        struct proc_bsdinfo bsd;
-        if (proc_pidinfo(r->pid, PROC_PIDTBSDINFO, 0, &bsd, (int)sizeof(bsd)) == (int)sizeof(bsd)) r->traced = (bsd.pbi_flags & PROC_FLAG_TRACED) != 0;
+        struct iwt_proc_bsdinfo bsd;
+        if (proc_pidinfo(r->pid, IWT_PROC_PIDTBSDINFO, 0, &bsd, (int)sizeof(bsd)) == (int)sizeof(bsd)) r->traced = (bsd.pbi_flags & IWT_PROC_FLAG_TRACED) != 0;
         uint32_t flags = 0;
         if (csops(r->pid, IWT_CS_OPS_STATUS, &flags, sizeof(flags)) == 0) {
             r->csflags = flags;
@@ -310,7 +402,7 @@ int main(int argc, char **argv) {
     printf("AutoPatches.dylib (RootHide's patch for converted rootless tweaks) is mapped into %d processes\n", n_autopatch);
     printf("RootHide's patch loader is mapped into %d processes\n", n_patchloader);
     printf("a hooking library (ElleKit / CydiaSubstrate) is mapped into %d processes\n", n_hooklib);
-    printf("CS_DEBUGGED (the JIT / debugger flag) is set on %d processes: %d of them have IWantTranslucent.dylib, %d do not\n",
+    printf("CS_DEBUGGED (the debugger / JIT flag) is set on %d processes: %d of them have IWantTranslucent.dylib, %d do not\n",
            n_debugged, n_tweak_debugged, n_plain_debugged);
     printf("traced processes: %d\n", n_traced);
 

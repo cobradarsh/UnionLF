@@ -1,0 +1,7 @@
+# Which functions of an image send a given message: .github/workflows/probe.yml disassembles the
+# whole image (iOS 16.5, 20F66) and lists the functions that call objc_msgSend with the selector.
+# One per line: <image name> <selector>. Small images only: the whole image is disassembled. Changing this file and pushing runs the probe.
+#
+# The original tweak replaces these getters. Does anything on iOS 16.5 call them?
+MediaControls separatorView
+ControlCenterUIKit _separatorHeight

@@ -19,14 +19,14 @@ Read off the package's binary first (both slices disassembled), then confirmed a
    cell of every list, grid and keyboard in every app runs the tweak's code each time it enters or leaves
    a window: ask `UIDevice` for the iOS version, turn the string into a number, fetch the reuse
    identifier, compare strings. The only views it is looking for are the thick bars inside context menus.
-2. **The RootHide conversion brings a patch loader along.** The package is the rootless build run through
-   RootHide Patcher: it ships a link `IWantTranslucent.dylib.roothidepatch` to `AutoPatches.dylib`.
-   RootHide's [PatchLoader](https://github.com/roothide/PatchLoader/blob/main/PatchLoader.c) reacts to such
-   a link in every process the tweak is loaded into: it calls `PLRequiredJIT()` (the jailbreak's request
-   to let the process change code, which marks it as debugged), loads
-   [AutoPatches](https://github.com/roothide/DynamicPatches/tree/AutoPatches) with the Dobby hooking
-   engine, and scans the tweak for `/var/jb` paths to patch. The tweak contains no such path, so in every
-   app all of this is done for nothing.
+2. **The RootHide conversion brings a patch along.** The package is the rootless build run through
+   RootHide Patcher: it ships a link `IWantTranslucent.dylib.roothidepatch` to `AutoPatches.dylib`
+   (package `rootless-compat`). RootHide's [PatchLoader](https://github.com/roothide/PatchLoader) reacts
+   to such a link in every process the tweak is loaded into: it loads AutoPatches, a 300 KB C++ library
+   with the Dobby hooking engine, which walks through the tweak looking for `/var/jb` paths to patch.
+   The tweak contains no such path, so the library is loaded and the search made for nothing each time
+   an app starts. (Read off the AutoPatches 2.0.1 that is on the phone: for this tweak it does nothing
+   more than that search; it does not sit in the path of later calls.)
 3. It links CydiaSubstrate, so ElleKit's library is loaded into every one of those processes too.
 4. In Control Centre's AirPlay list, the separator getter it replaces makes a new `UIView` on every call.
 5. It takes each menu separator out of its collection view from inside `-didMoveToWindow`, which costs
@@ -41,7 +41,7 @@ Read off the package's binary first (both slices disassembled), then confirmed a
 | thick separator in menus | found by hooking every reusable view | the menu's own list view is told (`willDisplaySupplementaryView`), menus only |
 | thin separators in menus | removed from their collection view | hidden and emptied in place |
 | hooking library loaded into every app | ElleKit (CydiaSubstrate) | none: plain Objective-C runtime calls |
-| RootHide patch loader work, JIT flag, AutoPatches in every app | yes | none: native RootHide build, no `/var/jb` anywhere |
+| RootHide's AutoPatches loaded and run at every app start | yes | no: native RootHide build, no `/var/jb` anywhere |
 | AirPlay list separator | new view per call | one hidden view per row |
 | iOS 14 / 15 code | carried along | left out (iOS 16 only) |
 
@@ -60,8 +60,8 @@ classes and the machine code of the iOS 16.5 firmware itself.
 - `tools/sim_bench.sh` runs a small app three times in a simulator (no hooks, the original, the rebuild),
   times the hooks, opens a context menu, reports what is on screen and compares screenshots.
 - `tools/phone.sh diag <iwtdiag>` runs `diag/iwtdiag.c` on the phone: CPU by process, into how many
-  processes the tweak, RootHide's patch and a hooking library are loaded, which processes carry the JIT
-  flag, battery temperature and power draw. Run it with the original installed and again with the rebuild.
+  processes the tweak, RootHide's patch and a hooking library are loaded, battery temperature and power
+  draw. Run it with the original installed and again with the rebuild.
 - `tools/phone.sh install <deb>` removes Luki's package if it is installed and installs this one;
   `tools/phone.sh original <deb>` is the way back.
 

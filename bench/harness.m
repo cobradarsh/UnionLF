@@ -15,7 +15,7 @@
  *   scroll    a collection view scrolled through 6000 items: time, and how often a cell really
  *             changes window while scrolling
  *   routing   stand-ins for the AirPlay list's classes: what the separator getter costs
- *   menu      a menu with a title and three groups: what is on screen (blur strength, separators,
+ *   menu      a menu with a title and three groups: what is on screen (background opacity, separators,
  *             title background), how often the menu's collection view lays out while the menu
  *             just sits there, and how much CPU the main thread uses meanwhile
  *

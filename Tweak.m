@@ -51,8 +51,9 @@
 
 #pragma mark - Context menus
 
-// The blur behind a menu, at half strength: the translucent look. Runs once for each menu
-// (and once for each submenu), when its list view is given its background.
+// The menu's background at half opacity. A blur view that is not fully opaque stops blurring,
+// which is the whole trick: what is behind the menu shows through, dimmed and sharp. Runs once
+// for each menu (and once for each submenu), when its list view is given its background.
 static void (*IWTOrigSetBackgroundView)(id, SEL, UIView *);
 static void IWTSetBackgroundView(id self, SEL _cmd, UIView *backgroundView) {
 	IWTOrigSetBackgroundView(self, _cmd, backgroundView);
@@ -69,7 +70,12 @@ static void (*IWTOrigWillDisplaySupplementary)(id, SEL, UICollectionView *, UICo
 static void IWTWillDisplaySupplementary(id self, SEL _cmd, UICollectionView *collectionView, UICollectionReusableView *view,
                                         NSString *kind, NSIndexPath *indexPath) {
 	if (IWTOrigWillDisplaySupplementary) IWTOrigWillDisplaySupplementary(self, _cmd, collectionView, view, kind, indexPath);
-	if ([kind isEqualToString:@"kContextMenuSectionSeparator"]) view.hidden = YES;
+	if (![kind isEqualToString:@"kContextMenuSectionSeparator"]) return;
+	view.hidden = YES;
+	// On iOS 16.5 the bar is nothing but a background colour, given to it just before this call
+	// (-[_UIContextMenuListView _dataSourceForCollectionView:], second block). A collection view
+	// un-hides a view it takes back into use; without its colour the bar has nothing to show then.
+	view.backgroundColor = nil;
 }
 
 // The hairline between two actions. The original took each one out of its collection view from

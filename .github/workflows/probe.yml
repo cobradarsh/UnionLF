@@ -15,6 +15,7 @@ on:
     paths:
       - tools/probe.txt
       - tools/probe_symbols.txt
+      - tools/probe_callers.txt
       - .github/workflows/probe.yml
   workflow_dispatch:
 
@@ -106,6 +107,33 @@ jobs:
             done
           done
           du -sh probe/disasm
+
+      - name: Who sends a message (tools/probe_callers.txt)
+        continue-on-error: true
+        timeout-minutes: 25
+        run: |
+          mkdir -p probe/callers
+          grep -v '^#' tools/probe_callers.txt | while read -r image selector; do
+            [ -n "$image" ] && [ -n "$selector" ] || continue
+            if [ ! -s "$RUNNER_TEMP/dis-$image.txt" ]; then
+              echo "disassembling all of $image"
+              ipsw dyld disass "$DSC" --image "$image" --no-color < /dev/null > "$RUNNER_TEMP/dis-$image.txt" 2> "probe/callers/_errors-$image.txt" || true
+              wc -l "$RUNNER_TEMP/dis-$image.txt" || true
+            fi
+            out="probe/callers/${image}__$(printf '%s' "$selector" | tr -c 'A-Za-z0-9_' '_').txt"
+            # a function starts at a line that ends in a colon and is not an address line
+            SEL="$selector" awk '
+              /^[^0-9 ].*:$/ { current = $0 }
+              index($0, "_objc_msgSend$" ENVIRON["SEL"]) && ($0 ~ /(bl|b)[ \t]/) {
+                rest = substr($0, index($0, "_objc_msgSend$") + 14)
+                split(rest, parts, /[ \t;]/)
+                if (parts[1] == ENVIRON["SEL"]) count[current]++
+              }
+              END { for (f in count) print count[f] "\t" f }
+            ' "$RUNNER_TEMP/dis-$image.txt" | sort -rn > "$out" || true
+            echo "$image: $(wc -l < "$out" | tr -d ' ') functions send $selector"
+            head -30 "$out"
+          done
 
       - name: Upload
         if: always()
