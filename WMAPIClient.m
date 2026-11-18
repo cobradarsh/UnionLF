@@ -93,7 +93,7 @@ NSURLSession *WMPrivateSession(void) {
     // left the parser with an unterminated array). The parser also salvages partial
     // JSON, but giving room avoids losing the 3rd reply in the first place.
     NSInteger n = (length == WMReplyLengthShort) ? 1200 : 2000;
-    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeHilarify)
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeFactCheck || mode == WMReplyModeHilarify)
         n += 800;                                                              // room for what it searched
     if ([WMPrompts isTalkingPointsMode:mode]) n = (length == WMReplyLengthShort) ? 2400 : 3200;  // 3 call cards
     return n;
@@ -106,7 +106,7 @@ NSURLSession *WMPrivateSession(void) {
 // _maxTokensForMode, since their own output limits are lower.
 - (NSInteger)_claudeMaxTokensForMode:(WMReplyMode)mode length:(WMReplyLength)length {
     if ([WMPrompts isTalkingPointsMode:mode]) return 16000;
-    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeHilarify) return 12000;
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeFactCheck || mode == WMReplyModeHilarify) return 12000;
     return (length == WMReplyLengthShort) ? 3000 : 4000;
 }
 
@@ -253,7 +253,7 @@ static NSString *WMClaudeAnswerText(NSArray *blocks) {
                              @"cache_control": @{ @"type": @"ephemeral" } } ],
         @"messages":   @[ @{ @"role": @"user", @"content": content } ]
     } mutableCopy];
-    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts) {
+    if (mode == WMReplyModeInMyFavor || mode == WMReplyModeFacts || mode == WMReplyModeFactCheck) {
         body[@"tools"] = @[ @{ @"type": @"web_search_20250305", @"name": @"web_search", @"max_uses": @2 } ];
     } else if (mode == WMReplyModePhoneConvo || mode == WMReplyModeHilarify) {
         BOOL jokes = (mode == WMReplyModeHilarify);

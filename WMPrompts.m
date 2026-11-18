@@ -64,7 +64,15 @@
       "8. Never ask me anything, wait for confirmation or comment on these instructions or "
          "my context. If something is unclear or doesn't add up (a name, who they are to me), "
          "go with the most sensible reading of the chat and still write the three. Plain "
-         "text only, no markdown (no ** or #).\n\n"
+         "text only, no markdown (no ** or #).\n"
+      "9. Emojis, the way a real person texts: every reply carries ONE emoji that fits what "
+         "it says (two at the very most), placed where a person would naturally put it, "
+         "usually at the end or right after the punchline, and a different one in each of the "
+         "three. Never a row of them and never an emoji in place of a word. In a genuinely "
+         "heavy moment (grief, illness, an emergency) use only a gentle one such as folded "
+         "hands or a heart, or none. If the STYLE gives its own emoji instructions (Formal "
+         "uses none; Emojify, call cards and Photo Opener have their own), follow those "
+         "instead.\n\n"
 
       "OUTPUT FORMAT:\n"
       "Output EXACTLY three replies. Put a line containing only ~~~ between them (not "
@@ -125,7 +133,7 @@
                     "marks welcome.";
         case WMReplyModeFormal:
             return @"FORMAL. Polite, professional and well structured, like a message to a "
-                    "colleague or client. Proper grammar, no slang.";
+                    "colleague or client. Proper grammar, no slang and no emojis.";
         case WMReplyModeChill:
             return @"CHILL. Relaxed, easygoing, low effort in a cool way. Unbothered vibe.";
         case WMReplyModeEmojify:
@@ -143,8 +151,7 @@
         case WMReplyModeWishing:
             return @"WISHING. Warm wishes that fit the occasion in the chat or my context (birthday, "
                     "festival, exam, trip, new job, recovery, anniversary). Specific to them and the "
-                    "moment, heartfelt and a little personal; no generic 'best wishes' template, and "
-                    "emojis only if the chat uses them.";
+                    "moment, heartfelt and a little personal; no generic 'best wishes' template.";
         case WMReplyModeFacts:
             if (!canSearch)
                 return @"FACTS. Explain or answer with valid facts you are sure of. You can't look "
@@ -161,6 +168,31 @@
                     "praise on the surface, a playful dig underneath ('you look great for someone who "
                     "slept three hours'). Clever and cheeky, obviously tongue-in-cheek, never genuinely "
                     "hurtful and none of the forbidden attack topics.";
+        case WMReplyModeFactCheck: {
+            // One brief with or without search: only the look-it-up sentence differs (DeepSeek / Kimi can't search).
+            NSString *look = canSearch
+                ? @"If the claim turns on something public and checkable (a date, a price, a rule, a score, a "
+                  "news event), use web_search once or twice to confirm it and work the specific fact in; for a "
+                  "personal he-said-she-said, don't search."
+                : @"You can't look anything up, so for anything public (a date, a price, a rule, a score) use "
+                  "only what you're sure of and never guess a number.";
+            return [NSString stringWithFormat:
+                    @"FACT CHECK. They've accused me of something, or claimed something about me or the facts, "
+                    "that isn't true (it's in the chat or in my context). Pin down exactly what the claim is, "
+                    "then take it apart so it's plain they're wrong, without losing my cool. Use FACTS I actually "
+                    "have (what the chat itself shows, such as what was really said and when, plus anything in my "
+                    "context; point to it), LOGIC (where it contradicts their own earlier words, the missing "
+                    "step, the double standard, the jump from one time to 'always') and PERSUASION (calm "
+                    "certainty, common ground first and then the correction, one concrete piece of proof or an "
+                    "offer to show it, a question that makes them check their own claim, and a way for them to "
+                    "back down without losing face). A short reply uses just the strongest one of these. %@ Never "
+                    "invent evidence, dates, quotes, screenshots or witnesses I don't have, and don't deny what "
+                    "the chat plainly shows: if part of it is true, grant that narrow part in a few words (this "
+                    "style may concede a small true point to win the bigger one) and take apart the exaggeration "
+                    "or the conclusion they drew from it. No insults, no grovelling, no 'sorry you feel that "
+                    "way'. Make the three different: one that leads with the evidence, one that exposes the flaw "
+                    "in their logic, and one calm question that makes them walk it back.", look];
+        }
         case WMReplyModeExcuse:
             return @"EXCUSE. Get me out of this gracefully. Read the chat and my context to see exactly "
                     "what I need out of: an invite or event I can't or don't want to go to, a plan I want "
@@ -419,6 +451,8 @@
     } else if (length == WMReplyLengthShort) {
         [p appendString:mode == WMReplyModePhotoOpener
             ? @"LENGTH: SHORT. One quick text, about 6 to 18 words: enough room to compliment her and land the twist.\n\n"
+            : mode == WMReplyModeFactCheck
+            ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: the one fact or contradiction that settles it, said plainly.\n\n"
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:@"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
@@ -453,6 +487,7 @@
         case WMReplyModeFacts:         return @"Facts";
         case WMReplyModeBackhand:      return @"Backhand Compliment";
         case WMReplyModeExcuse:        return @"Excuse";
+        case WMReplyModeFactCheck:     return @"Fact Check";
         case WMReplyModePlanDate:      return @"Plan a Date";
         case WMReplyModeRomance:       return @"Romance Her";
         case WMReplyModeSeduce:        return @"Seduce (Bond)";
@@ -491,6 +526,7 @@
         case WMReplyModeFacts:         return @"\U0001F4DA"; // 📚
         case WMReplyModeBackhand:      return @"\U0001F3AD"; // 🎭
         case WMReplyModeExcuse:        return @"\U0001F6AA"; // 🚪
+        case WMReplyModeFactCheck:     return @"\U0001F50E"; // magnifying glass
         case WMReplyModePlanDate:      return @"\U0001F4C5"; // 📅
         case WMReplyModeRomance:       return @"\U0001F339"; // 🌹
         case WMReplyModeSeduce:        return @"\U0001F576"; // 🕶

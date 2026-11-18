@@ -36,6 +36,7 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeFacts,        // explain with valid, checkable facts (web search where available)
     WMReplyModeBackhand,     // backhanded compliment
     WMReplyModeExcuse,       // a believable, warm way out of a plan or a tense moment
+    WMReplyModeFactCheck,    // disprove an accusation with facts, logic and persuasion (web search on Claude)
     // dating / flirt styles (consenting adults)
     WMReplyModePlanDate,
     WMReplyModeRomance,
@@ -215,7 +216,7 @@ static NSInteger const kWMQuickReplyCount = 5;
                         context:(NSString *)context
                      transcript:(NSString *)transcript
                       hasImages:(BOOL)hasImages
-                      canSearch:(BOOL)canSearch;    // the model has web_search (Claude): In My Favor / Facts use it
+                      canSearch:(BOOL)canSearch;    // the model has web_search (Claude): In My Favor / Facts / Fact Check use it
 + (NSString *)labelForMode:(WMReplyMode)mode;
 + (NSString *)emojiForMode:(WMReplyMode)mode;
 + (BOOL)isTalkingPointsMode:(WMReplyMode)mode;     // YES: the three are notes to read (Phone Convo), not texts
