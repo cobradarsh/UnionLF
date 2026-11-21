@@ -15,7 +15,19 @@ static UIColor *WPBubbleIdle(void)   { return [UIColor colorWithRed:0x1B/255.0 g
 static CGFloat   const kBubbleSize = 52;
 static NSString *const kPosKey     = @"com.adarsh.wingmanplus.bubblePos";
 static UIWindowLevel const kBubbleLevel = 100000;   // above status bar / app
-static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-capture finishes by itself
+static NSTimeInterval const kScrollIdleSeconds = 90;  // a forgotten scroll-capture finishes this long after its last new screen
+static NSTimeInterval const kScrollMaxSeconds  = 300; // ...and no session runs longer than this
+static NSUInteger     const kScrollMaxFrames   = 12;  // frames kept per capture; past it the most repetitive one makes room
+static NSTimeInterval const kToastSeconds      = 1.8;
+
+// Marks the fingerprint cells (24 x 48) that `r` covers, plus one cell around it, in a probe mask.
+static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
+    if (screen.width < 1 || screen.height < 1 || CGRectIsEmpty(r)) return;
+    int c0 = (int)floor(CGRectGetMinX(r) / screen.width  * 24) - 1, c1 = (int)floor(CGRectGetMaxX(r) / screen.width  * 24) + 1;
+    int r0 = (int)floor(CGRectGetMinY(r) / screen.height * 48) - 1, r1 = (int)floor(CGRectGetMaxY(r) / screen.height * 48) + 1;
+    for (int y = MAX(r0, 0); y <= MIN(r1, 47); y++)
+        for (int x = MAX(c0, 0); x <= MIN(c1, 23); x++) m[y * 24 + x] = 1;
+}
 
 @interface WPBubble ()
 @property (nonatomic, strong) UIView *dot;
@@ -26,8 +38,10 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
 @property (nonatomic) BOOL scrolling;                // scroll-capture session active
 @property (nonatomic) BOOL busy;                     // re-entrancy guard for the tick
 @property (nonatomic, strong) NSMutableArray<UIImage *> *scrollFrames;
-@property (nonatomic, strong) NSData *lastTickSig;   // previous probe (to detect "at rest")
-@property (nonatomic, strong) NSData *lastSavedSig;  // last SAVED screen (to detect "new content")
+@property (nonatomic, strong) WPScrollJudge *judge;  // decides when the screen is worth a frame
+@property (nonatomic) CFAbsoluteTime lastKeep;       // when the last frame was kept
+@property (nonatomic) CFAbsoluteTime toastUntil;     // a hint is on screen until then...
+@property (nonatomic) CGRect toastRect;              // ...here (kept out of the change detector)
 @property (nonatomic, strong) NSTimer *scrollTimer;
 @property (nonatomic) CFAbsoluteTime scrollStart;    // when the scroll-capture session began
 @property (nonatomic, weak) WPSheet *pendingSheet;   // set while adding screens to an open sheet
@@ -147,47 +161,67 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
 
 - (void)_startScrollCapture {
     _scrolling = YES;
-    _scrollStart = CFAbsoluteTimeGetCurrent();
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    _scrollStart = now; _lastKeep = now;
     _scrollFrames = [NSMutableArray array];
-    _lastTickSig = nil; _lastSavedSig = nil;
     [self _setRecordingLook:YES];
     [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeSuccess];
-    [self _toast:@"Capturing — scroll the profile, tap 🪽 to finish."];
-    // grab the starting screen right away
+    // The starting screen first and the hint after it, so the hint can't end up in the screenshot.
     __weak typeof(self) ws = self;
     UIImage *first = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
                                             restore:^{ ws.window.hidden = NO; }];
-    if (first) { [_scrollFrames addObject:first]; _lastSavedSig = [WPCapture signatureOf:first]; }
+    if (first) [_scrollFrames addObject:first];
+    _judge = [[WPScrollJudge alloc] initWithFirst:(first ? [WPCapture signatureOf:first] : nil) now:now];
+    [self _toast:@"Capturing — scroll the profile, tap 🪽 to finish."];
     [self _updateCount];
     _scrollTimer = [NSTimer scheduledTimerWithTimeInterval:0.35 target:self
                                                   selector:@selector(_scrollTick) userInfo:nil repeats:YES];
 }
 
-// Each tick a quick probe (bubble left visible — its few pixels don't move the change
-// detector) tells us when the screen has come to REST on NEW content; only then do we
-// take one clean shot (bubble hidden) and keep it. So you get one frame per resting
-// position as you flick down, with almost no bubble flicker.
+// The cells of a probe that show our own overlays (the bubble with its frame count, a hint while it is up), so
+// they never count as the screen changing.
+- (NSData *)_probeMask {
+    NSMutableData *mask = [NSMutableData dataWithLength:24 * 48];
+    CGSize screen = [UIScreen mainScreen].bounds.size;
+    WPMaskRect(mask.mutableBytes, _window.frame, screen);
+    if (CFAbsoluteTimeGetCurrent() < _toastUntil) WPMaskRect(mask.mutableBytes, _toastRect, screen);
+    return mask;
+}
+
+// Each tick a quick probe (bubble left visible) goes to the judge, which says when the screen has come to REST
+// on NEW content; only then do we take one clean shot (bubble hidden) and keep it. So you get one frame per
+// resting position as you flick down, with almost no bubble flicker, and a video playing on the page neither
+// repeats one screen over and over nor stops the screens after it from being kept.
 - (void)_scrollTick {
     if (!_scrolling || _busy) return;
-    if (_scrollFrames.count >= 10) { [self _finishScrollCapture]; return; }   // safety cap
-    if (CFAbsoluteTimeGetCurrent() - _scrollStart > kScrollMaxSeconds) { [self _finishScrollCapture]; return; }
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    // Only a forgotten session ends by itself. Reaching the frame limit used to end it too: a video filled the
+    // limit with repeats of one screen, and the capture stopped in the middle of the profile.
+    if (now - _lastKeep > kScrollIdleSeconds || now - _scrollStart > kScrollMaxSeconds) { [self _finishScrollCapture]; return; }
     _busy = YES;
     NSData *sig = [WPCapture probeSignature];   // fingerprint only; no frame is kept for a probe
-    if (sig) {
-        BOOL stable = _lastTickSig && [WPCapture signature:sig matches:_lastTickSig];
-        BOOL isNew  = !_lastSavedSig || ![WPCapture signature:sig matches:_lastSavedSig];
-        if (stable && isNew) {
-            __weak typeof(self) ws = self;
-            UIImage *clean = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
-                                                    restore:^{ ws.window.hidden = NO; }];
-            if (clean) {
-                [_scrollFrames addObject:clean];
-                _lastSavedSig = sig;
-                [self _updateCount];
-                [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
-            }
+    if (sig && [_judge wantsFrame:sig mask:[self _probeMask] now:now]) {
+        NSInteger drop = NSNotFound;
+        BOOL keep = YES;
+        if (_scrollFrames.count >= kScrollMaxFrames) {   // full: the most repetitive frame makes room, or this one is it
+            drop = [_judge frameToReplace];
+            keep = (drop != NSNotFound);
         }
-        _lastTickSig = sig;
+        UIImage *clean = nil;
+        if (keep) {
+            __weak typeof(self) ws = self;
+            clean = [WPCapture captureScreenHiding:^{ ws.window.hidden = YES; }
+                                           restore:^{ ws.window.hidden = NO; }];
+        }
+        if (clean && _scrollFrames) {
+            if (drop != NSNotFound && drop >= 0 && (NSUInteger)drop < _scrollFrames.count)
+                [_scrollFrames removeObjectAtIndex:(NSUInteger)drop];
+            [_scrollFrames addObject:clean];
+            _lastKeep = now;
+            [self _updateCount];
+            [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+        }
+        if (clean || !keep) [_judge settleKept:(clean != nil) replacing:drop now:now];   // a failed shot is tried again
     }
     _busy = NO;
 }
@@ -195,6 +229,7 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
 - (void)_finishScrollCapture {
     [_scrollTimer invalidate]; _scrollTimer = nil;
     _scrolling = NO; _busy = NO;
+    _judge = nil;
     [self _setRecordingLook:NO];
     NSArray<UIImage *> *frames = [_scrollFrames copy]; _scrollFrames = nil;
     if (frames.count == 0) { [self _toast:@"Nothing captured. Try again."]; return; }
@@ -227,6 +262,8 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
     t.font = [UIFont systemFontOfSize:14]; t.textAlignment = NSTextAlignmentCenter;
     t.numberOfLines = 0; t.layer.cornerRadius = 10; t.clipsToBounds = YES;
     t.frame = CGRectMake(40, b.size.height - 160, b.size.width - 80, 44);
+    _toastRect = t.frame;                                              // its window fills the screen
+    _toastUntil = CFAbsoluteTimeGetCurrent() + kToastSeconds + 0.5;    // a little past its removal
     UIWindowScene *scene = [WPHost mainScene];
     UIWindow *w = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:b];
     w.frame = b;
@@ -235,7 +272,7 @@ static NSTimeInterval const kScrollMaxSeconds = 90; // a forgotten scroll-captur
     w.rootViewController = [UIViewController new];
     [w.rootViewController.view addSubview:t];
     w.hidden = NO;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.8*NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kToastSeconds*NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{ w.hidden = YES; (void)w; });
 }
 

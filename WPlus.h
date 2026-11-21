@@ -35,6 +35,17 @@
 + (BOOL)signature:(NSData *)a matches:(NSData *)b;  // YES if two frames are effectively the same (reached bottom)
 @end
 
+// ── scroll-capture: when is the screen worth a frame (a playing video must not flood or end a capture) ──
+@interface WPScrollJudge : NSObject
+- (instancetype)initWithFirst:(NSData *)first now:(CFAbsoluteTime)now;   // first: fingerprint of the starting frame, or nil
+// Once per probe. mask: one byte per fingerprint cell, non-zero = ignore (our own bubble / hint). YES = keep a
+// frame of this screen; settleKept:replacing:now: must follow.
+- (BOOL)wantsFrame:(NSData *)probe mask:(NSData *)mask now:(CFAbsoluteTime)now;
+// At the frame limit: index of the kept frame the wanted one should replace, or NSNotFound to leave the new one out.
+- (NSInteger)frameToReplace;
+- (void)settleKept:(BOOL)kept replacing:(NSInteger)idx now:(CFAbsoluteTime)now;
+@end
+
 // ── synthesize touch so the app under SpringBoard scrolls itself ──
 @interface WPScroll : NSObject
 + (void)swipeUp;    // one swipe-up (content scrolls ~one screen down); best-effort, private HID
