@@ -56,7 +56,9 @@ Everything is in SpringBoard; there is no helper app and nothing is loaded into 
 
 **In the iOS 16.4 simulator** (iPhone 14 Pro Max, the tweak loaded into the simulator's own
 SpringBoard by `tools/sim_test.sh`, on GitHub's arm64 and Intel Macs). The pictures and logs of the
-last run are in `deb_out/atelier-1.0.0/sim/`.
+last run (commit `ffa588a`, the code in the 1.0.0 package) are in `deb_out/atelier-1.0.0/sim/`: the
+Intel Mac's run in full, and the arm64 Mac's logs under `arm64-run/`. Touches are real ones: mouse
+clicks on the Simulator's window (`tools/click.c`), which the simulator turns into fingers.
 
 | Checked | Result |
 |---|---|
@@ -64,19 +66,22 @@ last run are in `deb_out/atelier-1.0.0/sim/`.
 | An app that isn't running is started in the background and gets a scene | yes (it takes up to 20 s on the CI Macs; the pane waits that long) |
 | Side, Top and Split layouts, the swap, the split handle's share | yes: `04`–`11` |
 | A real touch on the scaled main reaches the app at the right point | yes: a click at screen 236,360 arrived in the app as 200,300, the expected point at scale 0.80 (`touch.txt` T1, T1b) |
-| The app's keyboard comes up on the bench and typing lands | yes: the probe's text field got its keyboard (346 pt) and a tap on the G key typed "G" (T2, `43-touch-key`) |
+| The app's keyboard comes up on the bench and typing lands | yes: the probe's text field got its keyboard (346 pt) and a tap on the G key typed "G" (T2 in `arm64-run/touch.txt` and in `earlier-run-typing/`; in the last Intel run the keyboard was showing iOS's "slide to type" tip instead of keys, so that click typed nothing) |
 | A tap on a mini swaps; the pill opens the menu; a menu row works | yes (T3, T4, T4b) |
 | The edge strip opens the bench on a real drag | yes (T6) |
+| A swipe up from the bottom of the screen closes the bench | yes (T5), through the backdrop's own swipe recogniser; the screen-edge recogniser never fired for a mouse drag |
 | Freezing sends the minis' apps to the background, a touch brings them back | yes: the probe logged `DidEnterBackground` / `WillEnterForeground` each time; stills in `12-frozen` |
 | Full Screen keeps the app's one scene | yes: Maps had one scene before and after |
 | Picker sheet, Sets sheet, saving a set, icon-menu rows | yes: `17`–`21` (the icon-menu rows were built and run by test command, not by holding an icon) |
-| No SpringBoard crash caused by Atelier | yes in the last run. Two crashes in earlier runs were the test's own doing and are fixed there (see the commit messages) |
+| No SpringBoard crash | none in the last run on either Mac. Two in earlier runs: one was Atelier's (a struct returned through `objc_msgSend`, Intel only, fixed), one the test's own (it asked SpringBoard to "launch" itself) |
+| An app that dies under the bench is started again | yes: in the last arm64 run FrontBoard's scene-update watchdog killed four apps at once when the minis were woken (the Mac was starved: the reports show 10 s without an answer); the bench noticed, started them again and showed them |
 
 **Not checked anywhere yet** (needs the phone):
 
 - anything about ElleKit loading the library, RootHide paths, the real `Atelier.log` location;
-- a swipe up from the bottom closing the bench (the simulator's mouse drag never reached the
-  screen-edge recogniser; 1.0.0 adds a plain swipe-up on the backdrop's lowest strip as well);
+- the real Home gesture with the bench up (SpringBoard acts on it underneath; the bench should
+  then close by itself, either through its own swipe-up or because the app in front changed);
+- holding an icon and choosing the rows (the rows were built and run by test command);
 - the touch listener that keeps minis awake while you use the main app (`IOHIDEventSystemClient`;
   it is compiled out of the simulator build);
 - living next to Dynamic Stage, Dynamic Stage+ and Chakra; third-party apps; apps that block
@@ -95,9 +100,12 @@ last run are in `deb_out/atelier-1.0.0/sim/`.
   problem, and an app that was already running when it was put on the bench never has it.
 - **Split is two scaled pictures**, each smaller than half the screen, not two half-screen apps.
   Making apps lay out at the size of their tile works (key `resizeApps`, from the test file only:
-  `set resizeApps true`; pictures `50`–`53`), but in one simulator run it stalled SpringBoard's
-  main thread for 25 s and 42 s while scenes were being resized. It has no Settings switch until
-  that is understood on the phone.
+  `set resizeApps true`; pictures `50`–`53`), but in one arm64 simulator run SpringBoard's main
+  thread stood still for 25 s and 42 s while scenes were being resized (not seen in the other
+  runs). It has no Settings switch until that is understood on the phone.
+- **Waking minis depends on the apps answering.** FrontBoard kills an app that does not answer a
+  scene update within 10 s. That happened once, on an overloaded CI Mac (see the table above); on
+  the phone it would show as a mini reloading.
 - **Minis freeze 20 s after the last touch**, counted from touches on the bench itself; touches
   inside the main app count only if the touch listener works on the phone (not checked).
 - The edge strip takes taps where it lies (16 pt wide, 110 pt tall, just above the Home bar on the
