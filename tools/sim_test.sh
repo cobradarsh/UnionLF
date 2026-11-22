@@ -282,7 +282,8 @@ touch_test() {
     else osascript -e "tell application \"System Events\" to click at {$(printf '%.0f' "$1"), $(printf '%.0f' "$2")}" > /dev/null 2>&1; fi
   }
   calc() { python3 -c "print($1)"; }
-  last() { grep "$1" "$RUN/Atelier.log" | tail -1 | cut -c21-150; }      # the last log line with these words, without the date
+  SKIP=$(wc -l < "$RUN/Atelier.log" | tr -d ' ')       # only what the log says from here on counts as an answer
+  last() { tail -n +"$((SKIP + 1))" "$RUN/Atelier.log" | grep "$1" | tail -1 | cut -c21-150; }      # the last such line, without the date
 
   # 1. the probe app on its own, full screen: two clicks tell how Mac points map to phone points
   xcrun simctl launch "$UDID" "$PROBE" > /dev/null 2>&1
@@ -304,8 +305,8 @@ touch_test() {
   phone() { mac_click "$(mx "$1")" "$(my "$2")"; }                    # phone <x> <y>: click that point of the phone's screen
   phone_drag() { "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5; }
   drag_shot() {                                       # drag_shot <x1> <y1> <x2> <y2> <picture>: the picture is taken with the finger still down
-    "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5 2.2 &
-    sleep 1.7
+    "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5 4.5 &
+    sleep 1.5
     shot "$5"
     wait
   }

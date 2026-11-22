@@ -278,6 +278,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     double _split;
     BOOL _closing;
     BOOL _swipeFromBottom;
+    UIPanGestureRecognizer *_bottomPan;
     AtelierGeometry _geometry;
     AtelierBand *_band;                      // clock, flags, shortcut apps
     NSMutableArray<UIView *> *_outlines;     // the free mini places
@@ -353,6 +354,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     up.maximumNumberOfTouches = 1;
     up.delegate = self;
     [_dim addGestureRecognizer:up];
+    _bottomPan = up;
 
     _stage = [[AtelierPassView alloc] initWithFrame:_root.bounds];
     _stage.autoresizingMask = _blur.autoresizingMask;
@@ -425,6 +427,13 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other { return YES; }
+
+// Where the finger came down is noted here: by the time a pan begins it has already travelled,
+// and how far it says it has is not to be relied on.
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
+    if (g == _bottomPan) _swipeFromBottom = [touch locationInView:_root].y >= [AtelierHost screenSize].height - 56;
+    return YES;
+}
 
 #pragma mark open and close
 
@@ -1118,12 +1127,19 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if (g.state == UIGestureRecognizerStateBegan) {
         [self hideMenu];
         _swipeTile = t;
-        _swipeAxis = fabs(d.x) >= fabs(d.y) ? 1 : 2;
+        _swipeAxis = 0;
         _swipeArmed = NO;
         _lastTouch = CFAbsoluteTimeGetCurrent();
         [_stage bringSubviewToFront:t];
     }
     if (t != _swipeTile) return;
+    // Which way it is going is settled once the finger has moved six points: at the very start
+    // the recogniser may report no movement at all, and a guess then would stick.
+    if (_swipeAxis == 0 && MAX(fabs(d.x), fabs(d.y)) >= 6) _swipeAxis = fabs(d.x) > fabs(d.y) ? 1 : 2;
+    if (_swipeAxis == 0) {
+        if (g.state != UIGestureRecognizerStateBegan && g.state != UIGestureRecognizerStateChanged) { _swipeTile = nil; [self _hideSwipePill]; }
+        return;
+    }
     CGFloat v = _swipeAxis == 1 ? d.x : d.y;
     AtelierSwipe swipe = _swipeAxis == 1 ? (v < 0 ? AtelierSwipeLeft : AtelierSwipeRight) : (v < 0 ? AtelierSwipeUp : AtelierSwipeDownward);
     BOOL allowed = NO;
@@ -1174,10 +1190,6 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
 - (void)_bottomSwipe:(UIPanGestureRecognizer *)g {
     CGPoint moved = [g translationInView:_root];
-    if (g.state == UIGestureRecognizerStateBegan) {
-        CGFloat startY = [g locationInView:_root].y - moved.y;
-        _swipeFromBottom = startY >= [AtelierHost screenSize].height - 48;
-    }
     if (!_swipeFromBottom || (g.state != UIGestureRecognizerStateBegan && g.state != UIGestureRecognizerStateChanged)) return;
     if (moved.y <= -56 && fabs(moved.x) < fabs(moved.y)) {
         _swipeFromBottom = NO;
