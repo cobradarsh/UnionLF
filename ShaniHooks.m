@@ -184,7 +184,7 @@ id ShaniMakeAction(id request, NSString *title, BOOL dismisses) {
     runner.request = request;
     if (!ShaniSendObj(action, @"setActionRunner:", runner)) return nil;
     objc_setAssociatedObject(action, &kShaniRunnerKey, runner, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    ShaniSendInt(action, @"setActivationMode:", 1);                    // in the background: no app is opened, no unlock
+    ShaniSendInt(action, @"setActivationMode:", 2);                    // 2 is what an app's own background actions carry on 16.4: no app is opened
     ShaniSendBool(action, @"setRequiresAuthentication:", NO);          // works on the Lock Screen
     ShaniSendBool(action, @"setShouldDismissNotification:", dismisses);
     ShaniSendBool(action, @"setDestructiveAction:", NO);

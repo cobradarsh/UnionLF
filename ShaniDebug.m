@@ -263,7 +263,7 @@ static void ShaniPostTest(NSString *bid, NSString *title, NSString *message) {
     NSSet *dest = [NSSet setWithObjects:@"BulletinDestinationBanner", @"BulletinDestinationCoverSheet", @"BulletinDestinationNotificationCenter",
                    @"BulletinDestinationLockScreen", nil];
     NSDate *stamp = [NSDate dateWithTimeIntervalSince1970:ShaniNow()];
-    id request = ((id (*)(id, SEL, id, id, id, id, id, id, id))objc_msgSend)(cls, make, bid, nid, nil, title, message, stamp, dest);
+    id request = ((id (*)(id, SEL, id, id, id, id, id, id, id))objc_msgSend)(cls, make, bid, nid, @"shani-test", title, message, stamp, dest);     // never a nil thread: the list's own code throws on one
     if (!request) { ShaniLog(@"notify: no request was made"); return; }
     ShaniLog(@"notify: %@ %@ -> %@", bid, nid, NSStringFromClass([request class]));
     ShaniSendObj(dispatcher, @"postNotificationWithRequest:", request);
