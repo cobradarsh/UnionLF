@@ -1,0 +1,9 @@
+Package: com.adarsh.shani
+Name: Shani
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: Makes an app's notifications wait. Every notification gets a Shani button, behind a swipe to the left (next to Clear) and among its actions when you hold it down, on the Lock Screen too. Tap it and that app goes on Shani's list: from then on its notifications are held back, with no banner, sound or screen wake, for the time you choose, and come up together when the time is over. Two ways of silencing (every new notification starts a hold, or one hold per tap), four ways of showing what was held, and a notification log per app for the apps on the list, under Settings > Shani > Apps & Log. Lives in SpringBoard: no helper app, no daemon.
+Maintainer: Adarsh
+Author: Adarsh
+Section: Tweaks
+Depends: ellekit, preferenceloader

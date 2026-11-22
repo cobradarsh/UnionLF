@@ -1,0 +1,5 @@
+#!/bin/sh
+# A Settings app that is open has no ShaniPrefs library in it (or the previous one), and then
+# Settings > Shani > Apps & Log cannot open. Closing Settings makes its next start load the new one.
+killall -9 Preferences 2>/dev/null
+exit 0
