@@ -271,7 +271,7 @@ static BOOL AtelierIdleReset(BOOL really) {
                 if (gAwakeOn) [self benchTick];
                 break;
             case AtelierToggleData:
-            case AtelierToggleDND:
+            case AtelierToggleDND: {
                 dispatch_async(AtelierSlowQueue(), ^{
                     @try {
                         if (kind == AtelierToggleData) { AtelierDataSet set = AtelierDataSetter(); if (set) set(on); else problem = @"no such call"; }
@@ -280,6 +280,7 @@ static BOOL AtelierIdleReset(BOOL really) {
                     dispatch_async(dispatch_get_main_queue(), after);
                 });
                 return;
+            }
             default: break;
         }
     } @catch (NSException *e) {

@@ -174,7 +174,7 @@ NSString *AtelierIndianNumber(double value) {
 #pragma mark - one index line
 
 @interface AtelierIndexLine : UIView
-@property (nonatomic, strong) UILabel *name, *price, *change, *tag;
+@property (nonatomic, strong) UILabel *name, *price, *change, *note;
 @property (nonatomic, copy) NSString *said;             // what it shows, for the tests
 @end
 
@@ -186,11 +186,11 @@ NSString *AtelierIndianNumber(double value) {
     _name = [UILabel new];
     _price = [UILabel new];
     _change = [UILabel new];
-    _tag = [UILabel new];
-    _tag.textAlignment = NSTextAlignmentCenter;
-    _tag.layer.cornerRadius = 4;
-    _tag.clipsToBounds = YES;
-    for (UILabel *l in @[ _name, _price, _change, _tag ]) [self addSubview:l];
+    _note = [UILabel new];
+    _note.textAlignment = NSTextAlignmentCenter;
+    _note.layer.cornerRadius = 4;
+    _note.clipsToBounds = YES;
+    for (UILabel *l in @[ _name, _price, _change, _note ]) [self addSubview:l];
     return self;
 }
 
@@ -202,13 +202,13 @@ NSString *AtelierIndianNumber(double value) {
     _price.font = [UIFont monospacedDigitSystemFontOfSize:big weight:UIFontWeightSemibold];
     _price.textColor = UIColor.whiteColor;
     _change.font = [UIFont monospacedDigitSystemFontOfSize:small weight:UIFontWeightMedium];
-    _tag.font = [UIFont systemFontOfSize:8.5 weight:UIFontWeightSemibold];
+    _note.font = [UIFont systemFontOfSize:8.5 weight:UIFontWeightSemibold];
     if (!quote) {
         _price.text = @"—";
         _change.text = nil;
-        _tag.text = failing ? @"No data" : nil;
-        _tag.textColor = [UIColor colorWithWhite:1 alpha:0.5];
-        _tag.backgroundColor = UIColor.clearColor;
+        _note.text = failing ? @"No data" : nil;
+        _note.textColor = [UIColor colorWithWhite:1 alpha:0.5];
+        _note.backgroundColor = UIColor.clearColor;
         self.alpha = 0.6;
         self.said = [NSString stringWithFormat:@"%@ —%@", label, failing ? @" (no data)" : @""];
         [self setNeedsLayout];
@@ -230,9 +230,9 @@ NSString *AtelierIndianNumber(double value) {
     BOOL boxed = NO;
     if (!open) { tag = @"Closed"; boxed = YES; }
     else if (age > 60) tag = age >= 3600 ? [NSString stringWithFormat:@"%ldh ago", (long)(age / 3600)] : [NSString stringWithFormat:@"%ldm ago", (long)(age / 60)];
-    _tag.text = tag;
-    _tag.textColor = [UIColor colorWithWhite:1 alpha:boxed ? 0.7 : 0.5];
-    _tag.backgroundColor = boxed ? [UIColor colorWithWhite:1 alpha:0.12] : UIColor.clearColor;
+    _note.text = tag;
+    _note.textColor = [UIColor colorWithWhite:1 alpha:boxed ? 0.7 : 0.5];
+    _note.backgroundColor = boxed ? [UIColor colorWithWhite:1 alpha:0.12] : UIColor.clearColor;
     self.alpha = failing ? 0.45 : 1.0;                   // the feed is failing: these are old numbers
     self.said = [NSString stringWithFormat:@"%@ %@ %@%@%@", label, _price.text, _change.text ?: @"", tag ? [NSString stringWithFormat:@" [%@]", tag] : @"",
                  failing ? @" (dimmed)" : @""];
@@ -252,9 +252,9 @@ NSString *AtelierIndianNumber(double value) {
     CGFloat cw = _change.text.length ? ceil([_change sizeThatFits:CGSizeMake(200, H)].width) : 0;
     _change.frame = CGRectMake(x, 0.5, cw, H);
     x += cw + (cw ? 7 : 0);
-    CGFloat tw = _tag.text.length ? ceil([_tag sizeThatFits:CGSizeMake(80, H)].width) + 8 : 0;
-    _tag.frame = CGRectMake(x, (H - 12) / 2.0 + 0.5, tw, 12);
-    _tag.hidden = tw == 0 || x + tw > W + 0.5;           // no room: the tag goes (the dimming still says "old")
+    CGFloat tw = _note.text.length ? ceil([_note sizeThatFits:CGSizeMake(80, H)].width) + 8 : 0;
+    _note.frame = CGRectMake(x, (H - 12) / 2.0 + 0.5, tw, 12);
+    _note.hidden = tw == 0 || x + tw > W + 0.5;           // no room: the tag goes (the dimming still says "old")
 }
 
 @end
