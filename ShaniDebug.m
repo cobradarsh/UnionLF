@@ -27,7 +27,7 @@
         dests <bundle id>               where that app's newest notification was headed, its sound, its options
         classes <part of a name>        the Objective-C classes whose name contains it
         methods <Class>                 that class's own methods
-        impl <selector>                 the classes that implement it
+        impl <selector> [part of name]  the classes with that in their name (default NCNotification) that implement it
         shot [name]                     screenshot → <log dir>/shani_<name>.jpg
         wait <seconds>                  pause before the next line
         mark <word>                     log "mark: <word>" (a test waits for it)
@@ -90,22 +90,32 @@ static void ShaniDumpMethods(NSString *className) {
     }
 }
 
-static void ShaniDumpImplementers(NSString *selName) {
+// Only classes whose name contains `part` are looked into: a class that nothing has used yet
+// must be looked up by name first (that sets it up), and doing so for every class in
+// SpringBoard is not something to do to a running one.
+static void ShaniDumpImplementers(NSString *selName, NSString *part) {
     SEL sel = NSSelectorFromString(selName);
     unsigned int n = 0;
     Class *all = objc_copyClassList(&n);
-    NSMutableArray<NSString *> *hits = [NSMutableArray array];
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
     for (unsigned int i = 0; i < n; i++) {
+        NSString *name = @(class_getName(all[i]));
+        if ([name rangeOfString:part options:NSCaseInsensitiveSearch].location != NSNotFound) [names addObject:name];
+    }
+    free(all);
+    NSMutableArray<NSString *> *hits = [NSMutableArray array];
+    for (NSString *name in names) {
+        Class cls = NSClassFromString(name);
+        if (!cls) continue;
         unsigned int m = 0;
-        Method *list = class_copyMethodList(all[i], &m);
+        Method *list = class_copyMethodList(cls, &m);
         for (unsigned int j = 0; j < m; j++) {
-            if (method_getName(list[j]) == sel) { [hits addObject:@(class_getName(all[i]))]; break; }
+            if (method_getName(list[j]) == sel) { [hits addObject:name]; break; }
         }
         free(list);
     }
-    free(all);
     [hits sortUsingSelector:@selector(compare:)];
-    ShaniLogLong([NSString stringWithFormat:@"classes implementing %@", selName], hits);
+    ShaniLogLong([NSString stringWithFormat:@"classes named *%@* implementing %@ (of %lu looked at)", part, selName, (unsigned long)names.count], hits);
 }
 
 static void ShaniShot(NSString *name) {
@@ -444,7 +454,7 @@ static double ShaniRunLine(NSString *raw) {
         } else if ([cmd isEqualToString:@"methods"] && a1) {
             for (NSString *name in rest) ShaniDumpMethods(name);
         } else if ([cmd isEqualToString:@"impl"] && a1) {
-            ShaniDumpImplementers(a1);
+            ShaniDumpImplementers(a1, words.count > 2 ? words[2] : @"NCNotification");
         } else if ([cmd isEqualToString:@"shot"]) {
             ShaniShot(a1);
         } else {

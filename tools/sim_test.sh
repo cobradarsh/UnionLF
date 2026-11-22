@@ -161,20 +161,28 @@ if [ -z "$started" ]; then
   xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
   exit 1
 fi
+SBPID=$(sb_pid)
 echo "Shani is running in SpringBoard" | tee -a "$OUT/simulator.txt"
 sleep 15                                              # let SpringBoard finish starting
 
 # ---- helpers ----
 MARKS=0
+DEAD=""
 cmd() {                                               # one or more command lines, run in order by SpringBoard; returns when they are done
   local waited=0 mark
-  while [ -e "$RUN/shani_cmd.txt" ] && [ "$waited" -lt 120 ]; do sleep 1; waited=$((waited + 1)); done
+  [ -n "$DEAD" ] && return 0                          # SpringBoard stopped answering: nothing more is asked of it
+  while [ -e "$RUN/shani_cmd.txt" ] && [ "$waited" -lt 60 ]; do sleep 1; waited=$((waited + 1)); done
   MARKS=$((MARKS + 1)); mark="done$MARKS-$$"
   printf '%s\n' "$@" "mark $mark" > "$RUN/cmd.tmp"
   mv "$RUN/cmd.tmp" "$RUN/shani_cmd.txt"
   waited=0
-  while ! grep -q -F "mark: $mark" "$RUN/Shani.log" 2>/dev/null && [ "$waited" -lt 300 ]; do sleep 1; waited=$((waited + 1)); done
-  [ "$waited" -ge 300 ] && echo "  (SpringBoard did not finish these in 5 minutes: $1 …)"
+  while ! grep -q -F "mark: $mark" "$RUN/Shani.log" 2>/dev/null && [ "$waited" -lt 120 ]; do sleep 1; waited=$((waited + 1)); done
+  if [ "$waited" -ge 120 ]; then
+    DEAD=yes
+    echo "  SpringBoard did not finish these in 2 minutes: $*"
+    echo "  SpringBoard pid now: $(sb_pid) (it was $SBPID)"
+  fi
+  cp "$RUN/Shani.log" "$OUT/Shani.log" 2>/dev/null || true
   return 0
 }
 shot() {                                              # shot <name>: a screenshot, kept as a small JPEG
@@ -200,7 +208,7 @@ FAILED=0
 
 echo "== what this SpringBoard has"
 cmd "state" "impl supplementaryActionsForNotificationListCell:" "impl currentActions" "impl _iconImageForNotificationAction:" "impl postNotificationWithRequest:"
-grep -E "hooks:|classes implementing|    [A-Z]" "$RUN/Shani.log" | cut -c21- | tail -12
+grep -E "hooks:|implementing|    [A-Z]" "$RUN/Shani.log" | cut -c21- | tail -12
 
 echo "== the probe app gets permission to notify"
 xcrun simctl launch "$UDID" "$PROBE" > /dev/null 2>&1 || echo "the probe app did not launch"
@@ -323,6 +331,7 @@ collect_crashes
 ls -la "$OUT" | head -80
 xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
 if ls "$OUT"/SpringBoard*.ips > /dev/null 2>&1; then echo "SpringBoard crashed during the test: see the crash reports"; exit 1; fi
+if [ -n "$DEAD" ]; then echo "SpringBoard stopped answering test commands part of the way through"; exit 1; fi
 starts=$(grep -c "in SpringBoard (pid" "$OUT/Shani.log" 2>/dev/null || echo 0)
 echo "Shani started $starts time(s) during the test"
 if [ "$starts" != "1" ]; then echo "SpringBoard restarted during the test: see the crash reports"; exit 1; fi
