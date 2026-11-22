@@ -770,8 +770,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _motion = motion;
     _lastTouch = CFAbsoluteTimeGetCurrent();
     [self _setApps:[self _usable:bids] animated:NO];
+    _window.hidden = NO;                                 // on the screen first: the blur's scrub needs its layers there
     [self _show:0];
-    _window.hidden = NO;
     __weak typeof(self) weak = self;
     _watch = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *t) {
         @try { [weak _tick]; } @catch (NSException *e) { AtelierLog(@"bench clock threw %@", e.reason); }
