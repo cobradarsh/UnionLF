@@ -38,7 +38,11 @@
         classes <part of a name>        log the Objective-C classes whose name contains it
         methods <Class>                 log that class's own methods
         shot [name]                     screenshot → <log dir>/atelier_<name>.jpg
-        wait <seconds>                  pause before the next line                              */
+        wait <seconds>                  pause before the next line
+        mark <word>                     log "mark: <word>" (a test waits for it to know the lines before it are done)
+
+    Lines run strictly one after another: a file that arrives while an earlier one is still
+    running is queued behind it. A line that takes more than a second says so in the log.       */
 
 #import "Atelier.h"
 #import <dlfcn.h>
@@ -136,9 +140,10 @@ static void AtelierDumpWindows(void) {
     AtelierLog(@"windows:\n    %@", [lines componentsJoinedByString:@"\n    "]);
 }
 
-static void AtelierRun(NSArray<NSString *> *lines, NSUInteger index) {
-    if (index >= lines.count) return;
-    NSString *line = [lines[index] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+// Runs one line; returns how long to wait before the next.
+static double AtelierRunLine(NSString *raw) {
+    CFAbsoluteTime began = CFAbsoluteTimeGetCurrent();
+    NSString *line = [raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     NSArray<NSString *> *parts = [[line componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]
                                   filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
     NSString *cmd = parts.firstObject ?: @"";
@@ -152,6 +157,8 @@ static void AtelierRun(NSArray<NSString *> *lines, NSUInteger index) {
         if (cmd.length == 0 || [cmd hasPrefix:@"#"]) {
         } else if ([cmd isEqualToString:@"wait"]) {
             delay = MAX(0, MIN(60, a1.doubleValue));
+        } else if ([cmd isEqualToString:@"mark"]) {
+            AtelierLog(@"mark: %@", a1 ?: @"");
         } else if ([cmd isEqualToString:@"open"]) {
             [bench open];
         } else if ([cmd isEqualToString:@"close"]) {
@@ -293,8 +300,22 @@ static void AtelierRun(NSArray<NSString *> *lines, NSUInteger index) {
     } @catch (NSException *e) {
         AtelierLog(@"cmd '%@' threw %@", line, e.reason);
     }
+    CFAbsoluteTime took = CFAbsoluteTimeGetCurrent() - began;
+    if (took > 1.0) AtelierLog(@"    (%@ took %.1f s)", cmd, took);
     AtelierLogFlush();
-    AtelierAfter(delay, ^{ AtelierRun(lines, index + 1); });
+    return delay;
+}
+
+static NSMutableArray<NSString *> *gQueue;       // lines still to run (main thread)
+static BOOL gRunning;
+
+static void AtelierRunNext(void) {
+    if (gQueue.count == 0) { gRunning = NO; return; }
+    gRunning = YES;
+    NSString *line = gQueue.firstObject;
+    [gQueue removeObjectAtIndex:0];
+    double delay = AtelierRunLine(line);
+    AtelierAfter(delay, ^{ AtelierRunNext(); });
 }
 
 static void AtelierCheckCommands(void) {
@@ -304,7 +325,10 @@ static void AtelierCheckCommands(void) {
     if (![fm fileExistsAtPath:path]) return;
     NSString *text = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
     [fm removeItemAtPath:path error:nil];
-    if (text.length) AtelierRun([text componentsSeparatedByString:@"\n"], 0);
+    if (text.length == 0) return;
+    if (!gQueue) gQueue = [NSMutableArray array];
+    [gQueue addObjectsFromArray:[text componentsSeparatedByString:@"\n"]];
+    if (!gRunning) AtelierRunNext();
 }
 
 // Called at the start and whenever a setting changes: the folder is watched only while the debug log is on.

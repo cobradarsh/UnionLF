@@ -119,8 +119,9 @@
     CGFloat side = MAX(18, MIN(26, rect.size.width * 0.34));
     _badge.frame = CGRectMake(-4, -4, side, side);
     _badge.hidden = !mini;
-    // the padlock hangs on the top right corner (a mini's icon badge is on the top left)
-    _lockBadge.frame = CGRectMake(rect.size.width - 13, -5, 18, 18);
+    // the padlock hangs on the top right corner (a mini's icon badge is on the top left), far
+    // enough in that it stays clear of the next tile's icon badge in a row
+    _lockBadge.frame = CGRectMake(rect.size.width - 17, -5, 18, 18);
     _lockBadge.hidden = !_locked;
 }
 

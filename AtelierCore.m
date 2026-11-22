@@ -298,6 +298,11 @@ static NSInteger AtelierClampInt(double v, NSInteger lo, NSInteger hi, NSInteger
     return out;
 }
 
+- (NSString *)extraHolidays {
+    id v = _p[@"extraHolidays"];
+    return [v isKindOfClass:NSString.class] ? v : @"";
+}
+
 // AltList's list saves the bundle ids that are switched on, as an array.
 - (NSArray<NSString *> *)shortcutApps {
     NSMutableArray<NSString *> *out = [NSMutableArray array];

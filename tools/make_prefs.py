@@ -50,6 +50,12 @@ def choice(key, label, default, options):
             "validValues": [v for v, _ in options], "validTitles": [t for _, t in options]}
 
 
+def text(key, label, placeholder):
+    return {"cell": "PSEditTextCell", "defaults": D, "key": key, "label": label,
+            "placeholder": placeholder, "default": "", "noAutoCorrect": True, "autoCaps": "none",
+            "PostNotification": NOTE}
+
+
 def segments(key, default, options):
     return {"cell": "PSSegmentCell", "defaults": D, "key": key, "default": default, "PostNotification": NOTE,
             "validValues": [v for v, _ in options], "validTitles": [t for _, t in options]}
@@ -118,13 +124,20 @@ items = [
           "Above the apps: a clock with seconds, and three market flags. A flag is in colour "
           "with a ring, and shows the time left, while that market's regular session is on; "
           "otherwise it is dimmed. Hours are worked out in each market's own time zone, "
-          "Monday to Friday.\n\n"
-          "There is no holiday calendar: on a market holiday the flag lights up all the same."),
+          "Monday to Friday."),
     switch("showClock", "Clock", True),
     switch("showMarkets", "Market Flags", True),
     choice("market1", "First Flag", "IN", MARKETS),
     choice("market2", "Second Flag", "GB", MARKETS),
     choice("market3", "Third Flag", "US", MARKETS),
+    group("Market Holidays",
+          "India's flag stays dimmed and says Holiday on NSE trading holidays. The built-in "
+          "list covers 2026. For later years, or a holiday announced since, type the dates "
+          "here as YYYY-MM-DD, separated by commas or spaces, for example 2027-01-26, "
+          "2027-03-22. In a year without any list the flag follows weekdays only.\n\n"
+          "The other markets have no holiday list: on their holidays the flag lights up all "
+          "the same."),
+    text("extraHolidays", "Extra India Holidays", "2027-01-26, 2027-03-22"),
 
     group("Shortcut Apps",
           "The apps you switch on here (the first six) sit as icons above the big app, each "

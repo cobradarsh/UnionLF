@@ -7,8 +7,12 @@
     Markets    three flags (India, the UK and the USA unless Settings says otherwise). A market
                in its regular session is in full colour inside a thin accent ring, with the time
                it has left; a closed one is dimmed. Each market's hours are worked out in its
-               own time zone (so daylight saving is right), Monday to Friday. There is no
-               holiday calendar: on a market holiday the flag lights up all the same.
+               own time zone (so daylight saving is right), Monday to Friday. India also
+               has its trading holidays: on one of those its flag stays dimmed and says
+               "Holiday" (and which, where there is room). The list is AtelierIndiaHolidays()
+               below, one table per year, plus the dates typed under Settings → Atelier →
+               Extra India Holidays. A year without a table is weekdays only. The other markets
+               have no holiday list: on their holidays the flag lights up all the same.
 
     Shortcuts  icons of the apps chosen under Settings → Atelier → Shortcut Apps, each with the
                app's badge if it has one (SpringBoard's own badge value). A tap puts that app on
@@ -41,6 +45,50 @@ static const AtelierMarket kMarkets[] = {
     { "SG", "Asia/Singapore",    9 * 60,      17 * 60,      "SGX" },
 };
 
+#pragma mark - India's trading holidays
+
+// NSE / BSE trading holidays, as dates in India (Asia/Kolkata). One table per year; a holiday
+// that falls on a weekend needs no line. To add a year: one more table here and one more line in
+// AtelierIndiaHolidays(). Special sessions (the Diwali Muhurat hour) are not modelled.
+//
+// 2026: the exchanges' list as carried on Zerodha's holiday calendar, read on 22 Nov 2026.
+static NSDictionary<NSString *, NSString *> *AtelierIndiaHolidays2026(void) {
+    return @{
+        @"2026-01-15": @"Municipal Elections",          // Municipal Corporation Elections in Maharashtra
+        @"2026-01-26": @"Republic Day",
+        @"2026-03-03": @"Holi",
+        @"2026-03-26": @"Ram Navami",
+        @"2026-03-31": @"Mahavir Jayanti",
+        @"2026-04-03": @"Good Friday",
+        @"2026-04-14": @"Ambedkar Jayanti",
+        @"2026-05-01": @"Maharashtra Day",
+        @"2026-05-28": @"Bakri Eid",
+        @"2026-06-26": @"Moharram",
+        @"2026-09-14": @"Ganesh Chaturthi",
+        @"2026-10-02": @"Gandhi Jayanti",
+        @"2026-10-20": @"Dussehra",
+        @"2026-11-10": @"Diwali Balipratipada",
+        @"2026-11-24": @"Guru Nanak Jayanti",           // Prakash Gurpurb Sri Guru Nanak Dev
+        @"2026-12-25": @"Christmas",
+    };
+}
+
+// Every known holiday: the built-in tables, and the dates from Settings (YYYY-MM-DD, separated by
+// commas or spaces; anything else in the text is skipped).
+static NSDictionary<NSString *, NSString *> *AtelierIndiaHolidays(NSString *extra) {
+    NSMutableDictionary<NSString *, NSString *> *all = [NSMutableDictionary dictionary];
+    [all addEntriesFromDictionary:AtelierIndiaHolidays2026()];
+    NSCharacterSet *breaks = [NSCharacterSet characterSetWithCharactersInString:@", ;\n\t"];
+    for (NSString *word in [extra ?: @"" componentsSeparatedByCharactersInSet:breaks]) {
+        if (word.length != 10 || [word characterAtIndex:4] != '-' || [word characterAtIndex:7] != '-') continue;
+        NSInteger y = [word substringToIndex:4].integerValue, m = [word substringWithRange:NSMakeRange(5, 2)].integerValue,
+                  d = [word substringFromIndex:8].integerValue;
+        if (y < 2000 || m < 1 || m > 12 || d < 1 || d > 31) continue;
+        if (!all[word]) all[word] = @"";
+    }
+    return all;
+}
+
 static NSTimeInterval gNowOffset;            // tests: the clock runs on from another moment
 
 static NSDate *AtelierBandNow(void) {
@@ -60,14 +108,23 @@ static NSString *AtelierFlag(const char *code) {
     return [[NSString alloc] initWithBytes:pair length:sizeof(pair) encoding:NSUTF32LittleEndianStringEncoding] ?: @"";
 }
 
-// Minutes left in the session at `date`, or -1 when the market is closed.
-static NSInteger AtelierMarketMinutesLeft(const AtelierMarket *m, NSDate *date) {
+// Minutes left in the session at `date`, or -1 when the market is closed. `holidays` (India's,
+// nil for the others) maps a date in the market's own zone to the holiday's name; on such a day
+// the market is closed and *holiday gets the name ("" when it has none).
+static NSInteger AtelierMarketMinutesLeft(const AtelierMarket *m, NSDate *date, NSDictionary<NSString *, NSString *> *holidays,
+                                          NSString *__autoreleasing *holiday) {
+    if (holiday) *holiday = nil;
     NSTimeZone *zone = [NSTimeZone timeZoneWithName:@(m->zone)];
     if (!zone) return -1;
     NSCalendar *cal = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
     cal.timeZone = zone;
-    NSDateComponents *c = [cal components:NSCalendarUnitWeekday | NSCalendarUnitHour | NSCalendarUnitMinute fromDate:date];
+    NSDateComponents *c = [cal components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitWeekday |
+                                          NSCalendarUnitHour | NSCalendarUnitMinute fromDate:date];
     if (c.weekday == 1 || c.weekday == 7) return -1;                 // Sunday, Saturday
+    if (holidays.count) {
+        NSString *name = holidays[[NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)c.year, (long)c.month, (long)c.day]];
+        if (name) { if (holiday) *holiday = name; return -1; }
+    }
     NSInteger minute = c.hour * 60 + c.minute;
     if (minute < m->open || minute >= m->close) return -1;
     return m->close - minute;
@@ -84,6 +141,7 @@ static UIColor *AtelierAccent(void) {
 @property (nonatomic, strong) UILabel *flag;
 @property (nonatomic, strong) UILabel *caption;
 @property (nonatomic) BOOL open;
+@property (nonatomic, copy) NSString *shortCaption;     // what the caption says when the long one has no room
 @end
 
 @implementation AtelierFlagChip
@@ -109,6 +167,7 @@ static UIColor *AtelierAccent(void) {
 - (void)setOpen:(BOOL)open {
     _open = open;
     _flag.alpha = open ? 1.0 : 0.34;
+    _caption.textColor = [UIColor colorWithWhite:1 alpha:open ? 0.82 : 0.5];
     _ring.layer.borderWidth = open ? 1.2 : 0;
     _ring.layer.borderColor = AtelierAccent().CGColor;
     _ring.backgroundColor = open ? [AtelierAccent() colorWithAlphaComponent:0.16] : [UIColor colorWithWhite:1 alpha:0.05];
@@ -189,6 +248,8 @@ static UIColor *AtelierAccent(void) {
     NSMutableArray<AtelierFlagChip *> *_chips;
     NSMutableArray<AtelierShortcutIcon *> *_icons;
     NSArray<NSString *> *_marketCodes;
+    NSArray<NSString *> *_longCaptions;      // each flag's caption in full
+    NSDictionary<NSString *, NSString *> *_indiaHolidays;
     NSTimer *_timer;
     NSDateFormatter *_hmFormat, *_ampmFormat, *_dateFormat;
     NSCalendar *_calendar;
@@ -257,6 +318,7 @@ static UIColor *AtelierAccent(void) {
     for (AtelierFlagChip *chip in _chips) [chip removeFromSuperview];
     [_chips removeAllObjects];
     _marketCodes = _showMarkets ? [s markets] : @[];
+    _indiaHolidays = AtelierIndiaHolidays([s extraHolidays]);
     for (NSString *code in _marketCodes) {
         AtelierFlagChip *chip = [AtelierFlagChip new];
         chip.flag.text = AtelierFlag(AtelierMarketFor(code)->code);
@@ -330,13 +392,25 @@ static UIColor *AtelierAccent(void) {
         _ampm.text = _ampmFormat ? [[_ampmFormat stringFromDate:now] uppercaseString] : nil;
         _date.text = [_dateFormat stringFromDate:now];
     }
+    NSMutableArray<NSString *> *captions = [NSMutableArray array];
     for (NSUInteger i = 0; i < _chips.count && i < _marketCodes.count; i++) {
-        NSInteger left = AtelierMarketMinutesLeft(AtelierMarketFor(_marketCodes[i]), now);
+        const AtelierMarket *market = AtelierMarketFor(_marketCodes[i]);
+        NSString *holiday = nil;
+        NSInteger left = AtelierMarketMinutesLeft(market, now, strcmp(market->code, "IN") == 0 ? _indiaHolidays : nil, &holiday);
         AtelierFlagChip *chip = _chips[i];
         chip.open = left >= 0;
-        chip.caption.text = left < 0 ? nil : (left >= 60 ? [NSString stringWithFormat:@"%ldh %02ldm", (long)(left / 60), (long)(left % 60)]
-                                                         : [NSString stringWithFormat:@"%ldm", (long)left]);
+        NSString *caption = @"";
+        chip.shortCaption = nil;
+        if (left >= 0) {
+            caption = left >= 60 ? [NSString stringWithFormat:@"%ldh %02ldm", (long)(left / 60), (long)(left % 60)]
+                                 : [NSString stringWithFormat:@"%ldm", (long)left];
+        } else if (holiday) {                             // closed for a trading holiday: say so, and which if there is room
+            caption = holiday.length ? [NSString stringWithFormat:@"Holiday · %@", holiday] : @"Holiday";
+            chip.shortCaption = @"Holiday";
+        }
+        [captions addObject:caption];
     }
+    _longCaptions = captions;
     for (AtelierShortcutIcon *icon in _icons) [icon refreshBadge];
     [self setNeedsLayout];
 }
@@ -401,14 +475,22 @@ static UIColor *AtelierAccent(void) {
     // flags: after the clock on the compact line, or on the second row left of the pill
     CGFloat fx = _compact ? x : 0, fy = _compact ? 4 : 38;
     CGFloat room = _compact ? iconsLeft - fx : (_flagsWidth > 0 ? _flagsWidth : W);
-    CGFloat withCaptions = 0;
-    for (AtelierFlagChip *chip in _chips) {
-        CGFloat cw = chip.caption.text.length ? ceil([chip.caption sizeThatFits:CGSizeMake(80, 20)].width) + 5 : 0;
-        withCaptions += 28 + cw + 8;
+    // captions in full if the row has room for them, else the short ones ("Holiday" without
+    // the holiday's name), else none; the compact line has none
+    BOOL captions = NO;
+    for (int attempt = 0; attempt < 2 && !_compact && !captions; attempt++) {
+        CGFloat total = 0;
+        for (NSUInteger i = 0; i < _chips.count; i++) {
+            AtelierFlagChip *chip = _chips[i];
+            NSString *full = i < _longCaptions.count ? _longCaptions[i] : @"";
+            chip.caption.text = (attempt == 1 && chip.shortCaption) ? chip.shortCaption : full;
+            CGFloat cw = chip.caption.text.length ? ceil([chip.caption sizeThatFits:CGSizeMake(240, 20)].width) + 5 : 0;
+            total += 28 + cw + 8;
+        }
+        captions = total - 8 <= room;
     }
-    BOOL captions = !_compact && withCaptions - 8 <= room;
     for (AtelierFlagChip *chip in _chips) {
-        CGFloat cw = (captions && chip.caption.text.length) ? ceil([chip.caption sizeThatFits:CGSizeMake(80, 20)].width) : 0;
+        CGFloat cw = (captions && chip.caption.text.length) ? ceil([chip.caption sizeThatFits:CGSizeMake(240, 20)].width) : 0;
         chip.caption.hidden = cw == 0;
         chip.caption.frame = CGRectMake(28 + 5, 0, cw, 22);
         chip.frame = CGRectMake(fx, fy, 28 + (cw ? cw + 5 : 0), 22);
@@ -436,8 +518,10 @@ static UIColor *AtelierAccent(void) {
                                       _ampm.text.length ? @" " : @"", _ampm.text ?: @"", _date.hidden ? @"(no date)" : (_date.text ?: @"")]];
     for (NSUInteger i = 0; i < _chips.count && i < _marketCodes.count; i++) {
         AtelierFlagChip *chip = _chips[i];
-        [parts addObject:[NSString stringWithFormat:@"%@ %@%@", _marketCodes[i], chip.open ? @"open " : @"closed",
-                          chip.open ? (chip.caption.text ?: @"") : @""]];
+        NSString *full = i < _longCaptions.count ? _longCaptions[i] : @"";
+        [parts addObject:[NSString stringWithFormat:@"%@ %@%@%@", _marketCodes[i], chip.open ? @"open " : @"closed",
+                          chip.open ? full : (full.length ? [NSString stringWithFormat:@" (%@)", full] : @""),
+                          chip.caption.hidden ? @"" : [NSString stringWithFormat:@" shows \"%@\"", chip.caption.text ?: @""]]];
     }
     NSMutableArray<NSString *> *icons = [NSMutableArray array];
     for (AtelierShortcutIcon *icon in _icons)

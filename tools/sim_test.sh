@@ -160,22 +160,29 @@ echo "Atelier is running in SpringBoard" | tee -a "$OUT/simulator.txt"
 sleep 8
 
 # ---- helpers ----
-cmd() {                                               # one or more command lines, run in order by SpringBoard
-  local waited=0                                      # the last file must have been taken first, or its lines are lost
-  while [ -e "$RUN/atelier_cmd.txt" ] && [ "$waited" -lt 90 ]; do sleep 1; waited=$((waited + 1)); done
-  [ "$waited" -gt 3 ] && echo "  (SpringBoard took $waited s to take the last commands)"
-  printf '%s\n' "$@" > "$RUN/cmd.tmp"
+MARKS=0
+cmd() {                                               # one or more command lines, run in order by SpringBoard; returns when they are done
+  local waited=0 mark
+  while [ -e "$RUN/atelier_cmd.txt" ] && [ "$waited" -lt 120 ]; do sleep 1; waited=$((waited + 1)); done
+  MARKS=$((MARKS + 1)); mark="done$MARKS-$$"
+  printf '%s\n' "$@" "mark $mark" > "$RUN/cmd.tmp"
   mv "$RUN/cmd.tmp" "$RUN/atelier_cmd.txt"
+  # SpringBoard logs the mark after the last line (and its waits): a simulator on a busy Mac can
+  # take a minute over one command, and a picture taken on a guess would show the wrong moment
+  waited=0
+  while ! grep -q -F "mark: $mark" "$RUN/Atelier.log" 2>/dev/null && [ "$waited" -lt 300 ]; do sleep 1; waited=$((waited + 1)); done
+  [ "$waited" -ge 300 ] && echo "  (SpringBoard did not finish these in 5 minutes: $1 …)"
+  return 0
 }
 shot() {                                              # shot <name>: a screenshot, kept as a small JPEG
   xcrun simctl io "$UDID" screenshot "$OUT/$1.png" > /dev/null 2>&1 || { echo "screenshot $1 failed"; return; }
   sips -s format jpeg -s formatOptions 75 -Z 1500 "$OUT/$1.png" --out "$OUT/$1.jpg" > /dev/null 2>&1 && rm -f "$OUT/$1.png"
   echo "  shot $1"
 }
-step() {                                              # step <name> <seconds to wait> <command lines…>
-  local name="$1" pause="$2"; shift 2
+step() {                                              # step <name> <ignored> <command lines…>: run them, then take the picture
+  local name="$1"; shift 2
   cmd "$@"
-  sleep "$pause"
+  sleep 1.5
   shot "$name"
 }
 
@@ -184,13 +191,14 @@ MAPS=com.apple.Maps
 SAFARI=com.apple.mobilesafari
 CAL=com.apple.mobilecal
 FILES=com.apple.DocumentsApp
-REM=com.apple.reminders
+REM=com.apple.MobileAddressBook        # Contacts: the second shortcut app (no permission alert of its own)
 HEALTH=com.apple.Health
 
 # three moments for the market flags (the band's clock is told the time; it runs on from there)
 INDIA_OPEN=2026-11-23T10:00:00+05:30        # Monday 10:00 in India: NSE open, London and New York closed
 WEST_OPEN=2026-11-23T21:00:00+05:30         # 15:30 in London and 10:30 in New York: both open, India closed
 ALL_CLOSED=2026-11-22T12:00:00+05:30        # a Sunday
+INDIA_HOLIDAY=2026-11-24T10:00:00+05:30     # Tuesday, Guru Nanak Jayanti: NSE is shut
 
 echo "== what this SpringBoard has"
 cmd "windows" "scenes" "iconmenu $MAPS" "state"
@@ -202,7 +210,9 @@ step 02-side-three 26 "clock $INDIA_OPEN" "shortcuts $CAL $REM $HEALTH $MAPS" "b
 step 03-side-six 32 "apps $SET $MAPS $SAFARI $FILES $PROBE $CAL" "wait 26" "state" "where"
 step 04-markets-west-open 4 "clock $WEST_OPEN" "wait 1.5" "state"
 step 05-markets-all-closed 4 "clock $ALL_CLOSED" "wait 1.5" "state"
-step 06-markets-india-open 4 "clock $INDIA_OPEN" "wait 1.5" "state"
+step 06-markets-india-holiday 4 "clock $INDIA_HOLIDAY" "wait 1.5" "state"
+step 06b-markets-extra-holiday 5 "set extraHolidays 2027-01-26, 2026-11-23" "clock $INDIA_OPEN" "wait 1.5" "state"     # a typed date: Monday becomes a holiday too
+step 06c-markets-india-open 5 "unset extraHolidays" "clock $INDIA_OPEN" "wait 1.5" "state"
 step 07-side-swap 5 "main 2" "wait 2" "state"
 step 08-top 6 "layout top" "wait 3" "state" "where"
 step 09-top-probe-main 7 "main 4" "wait 4" "state"
@@ -213,9 +223,9 @@ step 13-side-again 6 "layout side" "wait 3" "state"
 
 echo "== shortcut apps"
 step 14-shortcut-already-on-the-bench 5 "shortcut 0" "wait 2" "state"       # Calendar is there: it becomes the main
-step 15-shortcut-bench-full 4 "shortcut 1" "wait 1" "state"                 # Reminders is not, and there is no room
+step 15-shortcut-bench-full 4 "shortcut 1" "wait 1" "state"                 # Contacts is not, and there is no room
 step 16-closed-one 5 "closeapp 5" "wait 2" "state" "where"
-step 17-shortcut-opened 14 "shortcut 1" "wait 10" "state"                   # now Reminders opens as the main
+step 17-shortcut-opened 14 "shortcut 1" "wait 10" "state"                   # now Contacts opens as the main
 
 echo "== locks, swipes and freezing, by command"
 step 18-locked 4 "lock 2" "wait 1.5" "state"
@@ -314,7 +324,7 @@ touch_test() {
 
   # 2. the probe as the main of a full bench (Side), minis kept live so nothing freezes mid-test
   cmd "unlockall" "set miniMode 1" "set swipeDown 0" "clock $INDIA_OPEN" "apps $PROBE $SET $MAPS $SAFARI $FILES $CAL" "layout side" "wait 8" "state"
-  sleep 22
+  sleep 8
   where
   cat "$WHERE"
   shot 41-touch-bench
@@ -366,7 +376,7 @@ touch_test() {
   shot 55-tap-layout
   cmd "layout side" "wait 3"; sleep 5
   where
-  phone "$(cx shortcut1)" "$(cy shortcut1)"; sleep 4                       # Reminders: not on the bench, and there is room
+  phone "$(cx shortcut1)" "$(cy shortcut1)"; sleep 4                       # Contacts: not on the bench, and there is room
   echo "T10 tap on a shortcut: $(last 'shortcut com')"
   shot 56-tap-shortcut
 

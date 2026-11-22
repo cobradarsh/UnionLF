@@ -100,6 +100,7 @@ void AtelierHapticPlay(AtelierHaptic kind);
 @property (nonatomic, readonly) BOOL showMarkets;
 @property (nonatomic, readonly) AtelierSwipeDown swipeDown;
 - (NSArray<NSString *> *)markets;                            // three market codes, e.g. IN, GB, US
+- (NSString *)extraHolidays;                                 // India: more trading holidays, as typed in Settings
 - (NSArray<NSString *> *)shortcutApps;                       // bundle ids chosen in Settings, at most ATELIER_SHORTCUTS
 - (NSArray<NSString *> *)lockedApps;                         // apps locked onto the bench
 - (void)setLockedApps:(NSArray<NSString *> *)apps;
