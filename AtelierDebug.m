@@ -24,6 +24,7 @@
         kbfocus <n>                     ask SpringBoard to point the hardware keyboard at slot n
         set <key> <value> | unset <key> write a setting (number, true/false or text) and apply it
         launch <bundle id> | spawn <bundle id>     open an app / start it in the background
+        activate <bundle id>            open the app's existing scene full screen (what Full Screen does)
         home                            go to the Home Screen
         state | scenes | windows        log the bench, every FrontBoard scene, SpringBoard's windows
         classes <part of a name>        log the Objective-C classes whose name contains it
@@ -219,6 +220,8 @@ static void AtelierRun(NSArray<NSString *> *lines, NSUInteger index) {
             AtelierLog(@"launch -> %d", (int)[AtelierHost launchApp:a1 suspended:NO]);
         } else if ([cmd isEqualToString:@"spawn"] && a1) {
             AtelierLog(@"spawn -> %d", (int)[AtelierHost launchApp:a1 suspended:YES]);
+        } else if ([cmd isEqualToString:@"activate"] && a1) {
+            AtelierLog(@"activate %@ -> %d", a1, (int)[AtelierScenes activateScene:[AtelierScenes sceneForBundleID:a1]]);
         } else if ([cmd isEqualToString:@"home"]) {
             UIApplication *app = UIApplication.sharedApplication;
             SEL s = NSSelectorFromString(@"_simulateHomeButtonPressWithCompletion:");

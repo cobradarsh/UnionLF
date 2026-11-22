@@ -147,6 +147,7 @@ typedef NS_ENUM(NSInteger, AtelierPaneState) {
 - (void)detachKeepingForeground:(BOOL)keep;                  // give the scene back to SpringBoard
 - (BOOL)check;                                               // NO if the app has gone; puts a strayed scene back in front
 - (int)pid;
+- (id)scene;                                                 // the FBScene on show, nil unless hosted
 - (NSString *)debugState;
 @end
 
@@ -155,6 +156,7 @@ typedef NS_ENUM(NSInteger, AtelierPaneState) {
 + (NSString *)describeAll;                                   // every scene FrontBoard has, one per line (tests)
 + (NSString *)describeScene:(id)scene;
 + (BOOL)requestKeyboardFocusForScene:(id)scene pid:(int)pid; // best effort; NO when this iOS has no way in
++ (BOOL)activateScene:(id)scene;                             // bring exactly this scene to the front, full screen
 @end
 
 #pragma mark - the bench (AtelierBench.m)

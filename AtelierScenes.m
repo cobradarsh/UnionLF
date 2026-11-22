@@ -27,6 +27,11 @@
 
 static NSInteger gPresenterSerial;
 
+// Declared so ARC knows it's an init (consumes the alloc, returns +1).
+@interface NSObject (AtelierSceneEntity)
+- (instancetype)initWithApplicationSceneHandle:(id)handle;
+@end
+
 #pragma mark - scenes
 
 static id AtelierSceneManager(void) {
@@ -190,6 +195,40 @@ static NSArray<NSString *> *AtelierSwitcherSceneIDs(NSString *bid) {
     return [NSString stringWithFormat:@"%lu scenes\n    %@", (unsigned long)lines.count, [lines componentsJoinedByString:@"\n    "]];
 }
 
+// Opens this very scene full screen, the way SpringBoard opens an app from the App Switcher:
+// its scene handle, wrapped in an application scene entity, in an activation request to the
+// main workspace. Opening the app by its bundle id instead would give an app that can have
+// several windows (Safari, Maps, Files…) a second window when the bench had started it: the App
+// Switcher doesn't know the bench's one. (Seen in the 16.4 simulator: Maps and Files ended up
+// with two scenes.)
++ (BOOL)activateScene:(id)scene {
+    if (!scene) return NO;
+    @try {
+        Class coordinator = NSClassFromString(@"SBSceneManagerCoordinator");
+        id manager = AtelierMsg(coordinator, @"mainDisplaySceneManager");
+        if (!manager) manager = AtelierMsg(AtelierMsg(coordinator, @"sharedInstance"), @"mainDisplaySceneManager");
+        id handle = AtelierMsgObj(manager, @"existingSceneHandleForScene:", scene);
+        Class entityClass = NSClassFromString(@"SBDeviceApplicationSceneEntity");
+        id workspace = AtelierSingleton(@"SBMainWorkspace");
+        SEL create = NSSelectorFromString(@"createRequestForApplicationActivation:options:");
+        SEL execute = NSSelectorFromString(@"executeTransitionRequest:");
+        if (!handle || !entityClass || ![entityClass instancesRespondToSelector:NSSelectorFromString(@"initWithApplicationSceneHandle:")] ||
+            !AtelierShape(workspace, create, "@", 2) || !AtelierArgIs(workspace, create, 3, "qQiIlL") || !AtelierShape(workspace, execute, "Bcv", 1)) {
+            AtelierLog(@"activate scene: no way in on this iOS (handle %@, workspace %@)", NSStringFromClass([handle class]), NSStringFromClass([workspace class]));
+            return NO;
+        }
+        id entity = [[entityClass alloc] initWithApplicationSceneHandle:handle];
+        if (!entity) return NO;
+        id request = ((id (*)(id, SEL, id, unsigned long long))objc_msgSend)(workspace, create, entity, 0);
+        if (!request) return NO;
+        ((void (*)(id, SEL, id))objc_msgSend)(workspace, execute, request);
+        return YES;
+    } @catch (NSException *e) {
+        AtelierLog(@"activate scene threw %@", e.reason);
+    }
+    return NO;
+}
+
 // On the phone's iOS 16.5 an app that is in the foreground shows its own keyboard without help;
 // what SpringBoard decides is where a hardware keyboard's keys go. This asks SpringBoard's
 // keyboard focus controller to point them at the bench's main app, where this iOS has a way in.
@@ -283,6 +322,10 @@ static NSArray<NSString *> *AtelierSwitcherSceneIDs(NSString *bid) {
 
 - (int)pid {
     return [AtelierHost pidOfApplication:[AtelierHost applicationForBundleID:_bundleID]];
+}
+
+- (id)scene {
+    return _state == AtelierPaneHosted ? _scene : nil;
 }
 
 #pragma mark attach
@@ -455,7 +498,10 @@ static NSArray<NSString *> *AtelierSwitcherSceneIDs(NSString *bid) {
     _wantLive = NO;
     if (scene && AtelierBoolMsg(scene, @"isValid", YES)) {
         if (resized) AtelierSceneSetSize(scene, [AtelierHost screenSize]);
-        if (!keep && AtelierSceneForeground(scene)) AtelierSceneSetForeground(scene, NO);
+        BOOL foreground = AtelierSceneForeground(scene);
+        if (!keep && foreground) AtelierSceneSetForeground(scene, NO);
+        // the app SpringBoard has in front may have been frozen as a mini: it must be running again
+        if (keep && !foreground) AtelierSceneSetForeground(scene, YES);
     }
     _resized = NO;
     _sceneSize = [AtelierHost screenSize];

@@ -659,15 +659,13 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if (slot >= _tiles.count) return;
     NSString *bid = _tiles[slot].pane.bundleID;
     if (slot != 0) [_tiles exchangeObjectAtIndex:0 withObjectAtIndex:slot];
-    // The app leaves the bench like the others (to the background), and is then opened the
-    // normal way. Opened while still in the foreground on the bench, SpringBoard takes its scene
-    // for one that is on show elsewhere and, for an app that can have several windows, makes a
-    // second one.
-    [self _closeAnimated:YES reason:@"full screen" keeping:nil then:^{
-        AtelierAfter(0.3, ^{
-            BOOL ok = [AtelierHost launchApp:bid suspended:NO];
-            AtelierLog(@"full screen %@ -> %d", bid, (int)ok);
-        });
+    // The very scene that was on the bench is opened full screen (see +activateScene:); only if
+    // this iOS has no way to do that is the app opened by its bundle id.
+    id scene = [_tiles[0].pane scene];
+    [self _closeAnimated:YES reason:@"full screen" keeping:bid then:^{
+        BOOL same = [AtelierScenes activateScene:scene];
+        BOOL ok = same || [AtelierHost launchApp:bid suspended:NO];
+        AtelierLog(@"full screen %@ -> %d (%@)", bid, (int)ok, same ? @"its own scene" : @"by bundle id");
     }];
 }
 

@@ -110,6 +110,8 @@ xcrun simctl ui "$UDID" appearance dark > /dev/null 2>&1 || true
 xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 > /dev/null 2>&1 || true
 xcrun simctl install "$UDID" "$OUT/AtelierProbe.app" || echo "the probe app did not install"
 
+defaults write com.apple.CrashReporter DialogType none > /dev/null 2>&1 || true     # no "quit unexpectedly" windows over the simulator
+
 echo "== load Atelier into SpringBoard"
 # The library goes in through launchd's environment: set DYLD_INSERT_LIBRARIES, restart SpringBoard,
 # and take the variable away again so that nothing else started later carries the library.
@@ -227,8 +229,8 @@ step 27-open-over-app 10 "open" "wait 7" "state"
 step 28-closed 6 "close" "wait 3" "state" "scenes"
 # an app that can have several windows, started by the bench and then opened the normal way: one scene or two?
 step 28b-files-opened-normally 9 "launch $FILES" "wait 6" "state" "scenes"
-xcrun simctl launch "$UDID" com.apple.springboard > /dev/null 2>&1      # back to the Home Screen
-sleep 3
+step 28c-files-on-the-bench-again 12 "apps $FILES $SET" "wait 8" "state" "scenes"
+step 28d-files-full-screen 9 "full 0" "wait 6" "state" "scenes"
 step 29-home-edge-strip 5 "set triggerTint 1" "wait 1" "state"
 step 30-reopened-from-home 12 "set triggerTint 0" "trigger" "wait 8" "state"
 step 31-icon-menu-open 10 "close" "wait 2" "iconrun com.adarsh.atelier.open $CAL" "wait 6" "state"
@@ -284,8 +286,6 @@ touch_test() {
   echo "T0 full screen: clicked phone 300,250 · the probe got $(last_touch)"
 
   # 2. the probe as the main of the bench (Side: the tile is at 76,120, scale 0.80)
-  xcrun simctl launch "$UDID" com.apple.springboard > /dev/null 2>&1
-  sleep 3
   cmd "set miniMode 1" "apps $PROBE $SET $MAPS" "layout side" "wait 6" "state"
   sleep 12
   shot 41-touch-bench
@@ -311,8 +311,6 @@ touch_test() {
   phone_drag 215 929 215 560; sleep 4                 # up from the bottom edge: the Home gesture
   echo "T5 home gesture: $(grep 'bench close' "$RUN/Atelier.log" | tail -1)"
   shot 47-touch-home-gesture
-  xcrun simctl launch "$UDID" com.apple.springboard > /dev/null 2>&1
-  sleep 3
   cmd "close" "wait 1"; sleep 3
   phone_drag 426 840 300 815; sleep 5                 # in from the right edge, on the strip
   echo "T6 edge strip: $(grep 'trigger:' "$RUN/Atelier.log" | tail -1) · $(grep 'bench open' "$RUN/Atelier.log" | tail -1 | cut -c1-80)"
@@ -343,6 +341,7 @@ cat "$OUT/Atelier.log" 2>/dev/null
 collect_crashes
 ls -la "$OUT" | head -80
 xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
+if ls "$OUT"/SpringBoard*.ips > /dev/null 2>&1; then echo "SpringBoard crashed during the test: see the crash reports"; exit 1; fi
 starts=$(grep -c "start: Atelier" "$OUT/Atelier.log" 2>/dev/null || echo 0)
 echo "Atelier started $starts time(s) during the test"
 if [ "$starts" != "1" ]; then echo "SpringBoard restarted during the test: see the crash reports"; exit 1; fi
