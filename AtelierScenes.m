@@ -72,12 +72,12 @@ static BOOL AtelierSceneForeground(id scene) {
 
 static CGRect AtelierSceneFrame(id scene) {
     id settings = AtelierMsg(scene, @"settings");
-    SEL s = NSSelectorFromString(@"frame");
-    if (!settings || ![settings respondsToSelector:s]) return CGRectZero;
+    if (!settings || ![settings respondsToSelector:NSSelectorFromString(@"frame")]) return CGRectZero;
     @try {
-        NSMethodSignature *sig = [settings methodSignatureForSelector:s];
-        if (!sig || strncmp(sig.methodReturnType, "{CGRect", 7) != 0) return CGRectZero;
-        return ((CGRect (*)(id, SEL))objc_msgSend)(settings, s);
+        // through key-value coding: a struct this size comes back differently on Intel (the
+        // simulator there), and KVC knows how on both
+        id value = [settings valueForKey:@"frame"];
+        if ([value isKindOfClass:NSValue.class] && strncmp([value objCType], "{CGRect", 7) == 0) return [value CGRectValue];
     } @catch (__unused id e) {}
     return CGRectZero;
 }
@@ -127,6 +127,25 @@ static BOOL AtelierSceneSetSize(id scene, CGSize size) {
     });
 }
 
+// The scene identifiers the App Switcher holds for an app.
+static NSArray<NSString *> *AtelierSwitcherSceneIDs(NSString *bid) {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    @try {
+        NSArray *layouts = AtelierMsg(AtelierSingleton(@"SBMainSwitcherControllerCoordinator"), @"recentAppLayouts");
+        if (![layouts isKindOfClass:NSArray.class]) return out;
+        for (id layout in layouts) {
+            NSArray *items = AtelierMsg(layout, @"allItems");
+            if (![items isKindOfClass:NSArray.class]) continue;
+            for (id item in items) {
+                if (![AtelierMsg(item, @"bundleIdentifier") isEqual:bid]) continue;
+                NSString *unique = AtelierMsg(item, @"uniqueIdentifier");
+                if ([unique isKindOfClass:NSString.class] && unique.length) [out addObject:unique];
+            }
+        }
+    } @catch (__unused id e) {}
+    return out;
+}
+
 @implementation AtelierScenes
 
 + (id)sceneForBundleID:(NSString *)bid {
@@ -135,16 +154,20 @@ static BOOL AtelierSceneSetSize(id scene, CGSize size) {
     NSString *usual = [NSString stringWithFormat:@"sceneID:%@-default", bid];
     id scene = AtelierMsgObj(mgr, @"sceneWithIdentifier:", usual);
     if (scene) return scene;
-    // not under the usual name: the app's own scene among everything FrontBoard has
+    // Not under the usual name. Apps that can have several windows (Safari, Maps, Files…) get a
+    // scene named "sceneID:<bundle id>-<UUID>", and can have more than one. The one to show is the
+    // one the user would get by opening the app: the one in the foreground, else the one the App
+    // Switcher knows, else whichever there is.
     NSString *prefix = [NSString stringWithFormat:@"sceneID:%@-", bid];
+    NSArray<NSString *> *known = AtelierSwitcherSceneIDs(bid);
     id best = nil;
+    NSInteger bestRank = NSIntegerMax;
     for (id s in AtelierAllScenes()) {
-        if (!AtelierSceneIsApp(s)) continue;
+        if (!AtelierSceneIsApp(s) || !AtelierBoolMsg(s, @"isValid", YES)) continue;
         NSString *ident = AtelierSceneIdentifier(s);
-        BOOL named = [ident hasPrefix:prefix];
-        if (!named && ![AtelierSceneBundle(s) isEqualToString:bid]) continue;
-        if (named && !best) best = s;
-        else if (!best) best = s;
+        if (![ident hasPrefix:prefix] && ![AtelierSceneBundle(s) isEqualToString:bid]) continue;
+        NSInteger rank = AtelierSceneForeground(s) ? 0 : ([known containsObject:ident] ? 1 : 2);
+        if (rank < bestRank) { bestRank = rank; best = s; }
     }
     return best;
 }
@@ -295,8 +318,8 @@ static BOOL AtelierSceneSetSize(id scene, CGSize size) {
         BOOL asked = [AtelierHost launchApp:_bundleID suspended:YES];
         AtelierLog(@"pane %@: still no scene, asked again (%d), pid %d", _bundleID, (int)asked, [self pid]);
     }
-    if (tries >= 40) {
-        AtelierLog(@"pane %@: no scene after 8 s (pid %d)", _bundleID, [self pid]);
+    if (tries >= 100) {
+        AtelierLog(@"pane %@: no scene after 20 s (pid %d)", _bundleID, [self pid]);
         [self _setState:AtelierPaneFailed note:nil];
         return;
     }
@@ -323,11 +346,13 @@ static BOOL AtelierSceneSetSize(id scene, CGSize size) {
         SEL modify = NSSelectorFromString(@"modifyPresentationContext:");
         long long style = (long long)[[AtelierSettings shared] tune:@"presenterStyle" fallback:2];
         long long layers = (long long)[[AtelierSettings shared] tune:@"presenterLayers" fallback:-1];
+        long long stops = (long long)[[AtelierSettings shared] tune:@"presenterStopsHit" fallback:-1];
         if (AtelierShape(presenter, modify, "v", 1)) {
             void (^block)(id) = ^(id context) {
                 @try {
                     AtelierSendInt(context, @"setAppearanceStyle:", style);
                     if (layers >= 0) AtelierSendInt(context, @"setPresentedLayerTypes:", layers);
+                    if (stops >= 0) AtelierSendBool(context, @"setStopsHitTestTransformAccumulation:", stops > 0);
                 } @catch (NSException *e) { AtelierLog(@"presentation context threw %@", e.reason); }
             };
             ((void (*)(id, SEL, id))objc_msgSend)(presenter, modify, block);
@@ -389,6 +414,11 @@ static BOOL AtelierSceneSetSize(id scene, CGSize size) {
 }
 
 - (BOOL)check {
+    if (_state == AtelierPaneFailed && [AtelierHost applicationForBundleID:_bundleID]) {
+        // it gave up waiting, but the app may have come up since (a slow start)
+        id late = [AtelierScenes sceneForBundleID:_bundleID];
+        if (late) { AtelierLog(@"pane %@: its scene turned up late", _bundleID); [self _hostScene:late]; }
+    }
     if (_state != AtelierPaneHosted) return _state != AtelierPaneFailed;
     BOOL gone = !AtelierBoolMsg(_scene, @"isValid", YES);
     if (!gone) {
