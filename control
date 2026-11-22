@@ -1,9 +1,9 @@
 Package: com.adarsh.atelier
 Name: Atelier
-Version: 1.0.0
+Version: 1.1.0
 Architecture: iphoneos-arm64e
-Description: A workbench of live apps. One big app and up to four mini tiles of other apps on one screen: tap a mini and it changes places with the big one. Three layouts (minis at the side, minis on top, or two apps side by side), saved sets of two to five apps that open together, and minis that freeze to stills when you stop touching the bench so they cost no battery. Opens with a swipe from the screen edge near the bottom corner or from an app icon's menu. Lives in SpringBoard: no helper app.
+Description: A workbench of live apps. One big app and up to five mini tiles of other apps on one screen: tap a mini and it changes places with the big one, swipe it to close, lock or pair it. A band on top has a clock with seconds, three stock-market flags that light up while their market is open, and shortcut apps with their badges. Three layouts (minis at the side, minis on top, or two apps side by side), saved sets of two to six apps that open together, and minis that freeze to stills when you stop touching the bench so they cost no battery. Opens with a swipe from the screen edge near the bottom corner or from an app icon's menu. Lives in SpringBoard: no helper app.
 Maintainer: Adarsh
 Author: Adarsh
 Section: Tweaks
-Depends: ellekit, preferenceloader
+Depends: ellekit, preferenceloader, com.opa334.altlist

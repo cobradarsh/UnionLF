@@ -284,6 +284,40 @@ static NSInteger AtelierClampInt(double v, NSInteger lo, NSInteger hi, NSInteger
 - (BOOL)iconMenu                       { return [self _b:@"iconMenu" def:YES]; }
 - (NSInteger)haptics                   { return AtelierClampInt([self _d:@"haptics" def:1], 0, 3, 1); }
 - (BOOL)debugLog                       { return [self _b:@"debugLog" def:YES]; }
+- (BOOL)showClock                      { return [self _b:@"showClock" def:YES]; }
+- (BOOL)showMarkets                    { return [self _b:@"showMarkets" def:YES]; }
+- (AtelierSwipeDown)swipeDown          { return (AtelierSwipeDown)AtelierClampInt([self _d:@"swipeDown" def:0], 0, 3, 0); }
+
+- (NSArray<NSString *> *)markets {
+    NSArray<NSString *> *fallback = @[ @"IN", @"GB", @"US" ];
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (NSUInteger i = 0; i < 3; i++) {
+        id v = _p[[NSString stringWithFormat:@"market%lu", (unsigned long)(i + 1)]];
+        [out addObject:([v isKindOfClass:NSString.class] && [v length] == 2) ? [v uppercaseString] : fallback[i]];
+    }
+    return out;
+}
+
+// AltList's list saves the bundle ids that are switched on, as an array.
+- (NSArray<NSString *> *)shortcutApps {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    id raw = _p[@"shortcutApps"];
+    if (![raw isKindOfClass:NSArray.class]) return out;
+    for (id bid in (NSArray *)raw) {
+        if (![bid isKindOfClass:NSString.class] || [bid length] == 0 || [out containsObject:bid]) continue;
+        [out addObject:bid];
+    }
+    return out;
+}
+
+- (NSArray<NSString *> *)lockedApps {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    id raw = _p[@"locked"];
+    if (![raw isKindOfClass:NSArray.class]) return out;
+    for (id bid in (NSArray *)raw) if ([bid isKindOfClass:NSString.class] && [bid length] && ![out containsObject:bid]) [out addObject:bid];
+    return out;
+}
+- (void)setLockedApps:(NSArray<NSString *> *)apps { [self setObject:(apps ?: @[]) forKey:@"locked"]; }
 - (double)tune:(NSString *)key fallback:(double)fallback { return [self _d:key def:fallback]; }
 
 static NSArray<NSString *> *AtelierCleanApps(id raw) {

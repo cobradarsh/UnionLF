@@ -184,61 +184,74 @@ MAPS=com.apple.Maps
 SAFARI=com.apple.mobilesafari
 CAL=com.apple.mobilecal
 FILES=com.apple.DocumentsApp
+REM=com.apple.reminders
+HEALTH=com.apple.Health
+
+# three moments for the market flags (the band's clock is told the time; it runs on from there)
+INDIA_OPEN=2026-11-23T10:00:00+05:30        # Monday 10:00 in India: NSE open, London and New York closed
+WEST_OPEN=2026-11-23T21:00:00+05:30         # 15:30 in London and 10:30 in New York: both open, India closed
+ALL_CLOSED=2026-11-22T12:00:00+05:30        # a Sunday
 
 echo "== what this SpringBoard has"
-cmd "windows" "scenes" "classes KeyboardFocus" "classes SystemGesture" "classes ScenePresent" \
-    "methods FBScene FBSceneManager UIScenePresentationManager SBWorkspaceKeyboardFocusController SBSceneManager SBMainDisplaySceneManager SBApplicationSceneHandle SBDeviceApplicationSceneHandle SBDeviceApplicationSceneEntity UIMutableScenePresentationContext _UISystemGestureManager SBMainWorkspace" \
-    "iconmenu $MAPS" "state"
-sleep 6
+cmd "windows" "scenes" "iconmenu $MAPS" "state"
+sleep 5
 shot 01-home
 
-echo "== the bench"
-step 02-side-three 26 "apps $SET $MAPS $SAFARI" "wait 21" "scenes" "state" "windows"
-step 03-side-five 26 "apps $SET $MAPS $SAFARI $FILES $PROBE" "wait 21" "state"
-step 04-side-swap 5 "main 2" "wait 2" "state"
-step 05-top 5 "layout top" "wait 2" "state"
-step 06-top-probe-main 7 "main 4" "wait 4" "state"
-step 07-menu 3 "menu 0" "wait 1" "state"
-step 08-mini-menu 3 "hidemenu" "wait 0.4" "menu 2"
-step 09-split 6 "hidemenu" "layout split" "wait 3" "state"
-step 10-split-wide 4 "split 0.68" "wait 1" "state"
-step 11-side-again 6 "layout side" "wait 3" "state"
+echo "== the bench: the band and six apps"
+step 02-side-three 26 "clock $INDIA_OPEN" "shortcuts $CAL $REM $HEALTH $MAPS" "badge $REM 3" "apps $SET $MAPS $SAFARI" "wait 21" "scenes" "state" "where"
+step 03-side-six 32 "apps $SET $MAPS $SAFARI $FILES $PROBE $CAL" "wait 26" "state" "where"
+step 04-markets-west-open 4 "clock $WEST_OPEN" "wait 1.5" "state"
+step 05-markets-all-closed 4 "clock $ALL_CLOSED" "wait 1.5" "state"
+step 06-markets-india-open 4 "clock $INDIA_OPEN" "wait 1.5" "state"
+step 07-side-swap 5 "main 2" "wait 2" "state"
+step 08-top 6 "layout top" "wait 3" "state" "where"
+step 09-top-probe-main 7 "main 4" "wait 4" "state"
+step 10-menu 3 "menu 0" "wait 1" "state"
+step 11-mini-menu 3 "hidemenu" "wait 0.4" "menu 2"
+step 12-split 6 "hidemenu" "layout split" "wait 3" "state" "where"
+step 13-side-again 6 "layout side" "wait 3" "state"
 
-echo "== freezing"
-step 12-frozen 7 "freeze" "wait 3" "state" "scenes"
-step 13-thawed 5 "touch" "wait 2" "state"
-step 14-stills-only 9 "set miniMode 2" "wait 6" "state"
-step 15-stills-swap 8 "main 1" "wait 5" "state"
+echo "== shortcut apps"
+step 14-shortcut-already-on-the-bench 5 "shortcut 0" "wait 2" "state"       # Calendar is there: it becomes the main
+step 15-shortcut-bench-full 4 "shortcut 1" "wait 1" "state"                 # Reminders is not, and there is no room
+step 16-closed-one 5 "closeapp 5" "wait 2" "state" "where"
+step 17-shortcut-opened 14 "shortcut 1" "wait 10" "state"                   # now Reminders opens as the main
+
+echo "== locks, swipes and freezing, by command"
+step 18-locked 4 "lock 2" "wait 1.5" "state"
+step 19-swipe-left-refused 4 "swipe 2 left" "wait 1.5" "state"
+step 20-frozen-locked-stays-live 8 "freeze" "wait 4" "state" "scenes"
+step 21-thawed 5 "touch" "wait 2" "state"
+step 22-stills-only 9 "set miniMode 2" "wait 6" "state"
 cmd "set miniMode 0" "touch"
 sleep 3
+step 23-swipe-down-pairs 6 "swipe 3 down" "wait 3" "state"
+step 24-side-again 6 "layout side" "wait 3" "state"
 
 echo "== sheets and sets"
-step 16-closed-one 4 "closeapp 4" "wait 2" "state"
-step 17-picker 4 "plus"
-step 18-picked 8 "pick 4" "wait 5" "state"
-step 19-sets-empty 4 "sets"
-step 20-set-saved 5 "sheetclose" "wait 0.6" "saveset" "wait 3" "sets"
-step 21-icon-menu 3 "sheetclose" "iconmenu $MAPS" "iconmenu $CAL" "state"
+step 25-closed-two 5 "closeapp 5" "wait 1.5" "closeapp 4" "wait 2" "state"
+step 26-picker 4 "plus"
+step 27-picked 9 "pick 4" "wait 6" "state"
+step 28-set-saved 6 "saveset" "wait 3" "sets"
+step 29-set-opened-lock-kept 9 "pick 0" "wait 6" "state"
+step 30-icon-menu 3 "sheetclose" "iconmenu $MAPS" "state"
 
 echo "== leaving and coming back"
-step 26-full-screen 8 "full 0" "wait 5" "state" "scenes"
-step 27-open-over-app 10 "open" "wait 7" "state"
-step 28-closed 6 "close" "wait 3" "state" "scenes"
-# an app that can have several windows, started by the bench and then opened the normal way: one scene or two?
-step 28b-files-opened-normally 9 "launch $FILES" "wait 6" "state" "scenes"
-step 28c-files-on-the-bench-again 12 "apps $FILES $SET" "wait 8" "state" "scenes"
-step 28d-files-full-screen 9 "full 0" "wait 6" "state" "scenes"
-step 29-home-edge-strip 5 "set triggerTint 1" "wait 1" "state"
-step 30-reopened-from-home 12 "set triggerTint 0" "trigger" "wait 8" "state"
-step 31-icon-menu-open 10 "close" "wait 2" "iconrun com.adarsh.atelier.open $CAL" "wait 6" "state"
-step 32-top-final 6 "layout top" "wait 3" "state" "windows"
-cmd "close" "wait 2" "state" "scenes"
-sleep 5
+step 31-full-screen 8 "full 0" "wait 5" "state" "scenes"
+step 32-open-over-app 10 "open" "wait 7" "state"
+step 33-closed 6 "close" "wait 3" "state" "scenes"
+step 34-edge-strip 5 "set triggerTint 1" "wait 1" "state"
+step 35-reopened 12 "set triggerTint 0" "trigger" "wait 8" "state"
+step 36-no-band 6 "set showClock false" "set showMarkets false" "shortcuts none" "wait 3" "state" "where"
+step 37-top-no-band 6 "layout top" "wait 3" "state"
+cmd "set showClock true" "set showMarkets true" "shortcuts $CAL $REM $HEALTH $MAPS" "layout side" "wait 2" "close" "wait 2" "state" "scenes"
+sleep 8
 
-# ---- fingers: clicks on the Simulator's window become touches on the simulated screen ----
+# ---- fingers: clicks and drags on the Simulator's window become touches on the simulated screen ----
 # Nothing here can fail the test: a runner where the Mac's screen can't be clicked just reports that.
 touch_test() {
-  local DATA PLOG GEO WX WY WW WH METHOD before X1 Y1 X2 Y2 M1X M1Y M2X M2Y
+  local DATA PLOG GEO WX WY WW WH METHOD before X1 Y1 X2 Y2 M1X M1Y M2X M2Y WHERE
+  WHERE="$RUN/atelier_where.txt"
   DATA=$(xcrun simctl get_app_container "$UDID" "$PROBE" data 2>/dev/null) || { echo "no probe app"; return 0; }
   PLOG="$DATA/Documents/probe.log"
   xcrun clang -O1 -o "$OUT/click" tools/click.c -framework ApplicationServices > "$OUT/click-build.log" 2>&1 || { cat "$OUT/click-build.log"; echo "the clicker did not build"; return 0; }
@@ -259,6 +272,7 @@ touch_test() {
     else osascript -e "tell application \"System Events\" to click at {$(printf '%.0f' "$1"), $(printf '%.0f' "$2")}" > /dev/null 2>&1; fi
   }
   calc() { python3 -c "print($1)"; }
+  last() { grep "$1" "$RUN/Atelier.log" | tail -1 | cut -c21-150; }      # the last log line with these words, without the date
 
   # 1. the probe app on its own, full screen: two clicks tell how Mac points map to phone points
   xcrun simctl launch "$UDID" "$PROBE" > /dev/null 2>&1
@@ -279,59 +293,96 @@ touch_test() {
   my() { calc "$M1Y + ($1 - $Y1) * ($M2Y - $M1Y) / ($Y2 - $Y1)"; }
   phone() { mac_click "$(mx "$1")" "$(my "$2")"; }                    # phone <x> <y>: click that point of the phone's screen
   phone_drag() { "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5; }
+  drag_shot() {                                       # drag_shot <x1> <y1> <x2> <y2> <picture>: the picture is taken with the finger still down
+    "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5 2.2 &
+    sleep 1.7
+    shot "$5"
+    wait
+  }
+  # where things are on the phone's screen, from the bench itself (the "where" command)
+  where() {
+    rm -f "$WHERE"
+    cmd "where"
+    for i in 1 2 3 4 5 6 7 8; do [ -s "$WHERE" ] && break; sleep 1; done
+  }
+  cx() { awk -v n="$1" '$1 == n { printf "%.1f", $2 + $4 / 2 }' "$WHERE"; }
+  cy() { awk -v n="$1" '$1 == n { printf "%.1f", $3 + $5 / 2 }' "$WHERE"; }
+  ax() { awk -v a="$1" '$1 == "main" { printf "%.1f", $2 + a * $6 }' "$WHERE"; }      # a point of the main app -> the screen
+  ay() { awk -v a="$1" '$1 == "main" { printf "%.1f", $3 + a * $6 }' "$WHERE"; }
   phone 300 250; sleep 2
   echo "T0 full screen: clicked phone 300,250 · the probe got $(last_touch)"
 
-  # 2. the probe as the main of the bench (Side: the tile is at 76,120, scale 0.80)
-  cmd "set miniMode 1" "apps $PROBE $SET $MAPS" "layout side" "wait 6" "state"
-  sleep 12
+  # 2. the probe as the main of a full bench (Side), minis kept live so nothing freezes mid-test
+  cmd "unlockall" "set miniMode 1" "set swipeDown 0" "clock $INDIA_OPEN" "apps $PROBE $SET $MAPS $SAFARI $FILES $CAL" "layout side" "wait 8" "state"
+  sleep 22
+  where
+  cat "$WHERE"
   shot 41-touch-bench
-  phone 236 360; sleep 2                              # = 200,300 inside the app if the scale is honoured
-  echo "T1 scaled main: clicked phone 236,360 · the probe got $(last_touch) · wanted 200 300"
-  phone 108 144; sleep 2                              # = 40,30
-  echo "T1b scaled main: clicked phone 108,144 · the probe got $(last_touch) · wanted 40 30"
-  shot 42-touch-main
-  phone 248 694; sleep 2                              # the G key of the app's keyboard (215,718 in the app)
+  phone "$(ax 200)" "$(ay 300)"; sleep 2
+  echo "T1 scaled main: clicked the app's 200,300 at phone $(ax 200),$(ay 300) · the probe got $(last_touch)"
+  phone "$(ax 40)" "$(ay 30)"; sleep 2
+  echo "T1b scaled main: clicked the app's 40,30 · the probe got $(last_touch)"
+  phone "$(ax 215)" "$(ay 718)"; sleep 2                # the G key of the app's keyboard
   echo "T2 keyboard: $(grep 'text ' "$PLOG" | tail -1)"
-  shot 43-touch-key
-  phone 39 183; sleep 3                               # the first mini
-  cmd "state"; sleep 2
-  echo "T3 mini tap: $(grep 'swap:' "$RUN/Atelier.log" | tail -1)"
-  shot 44-touch-swap
-  phone 248 107; sleep 2                              # the "..." pill
-  cmd "state"; sleep 2
-  echo "T4 pill: $(grep 'state:' "$RUN/Atelier.log" | tail -1 | sed -E 's/.*(menu \[[^]]*\]).*/\1/')"
-  shot 45-touch-menu
-  phone 248 193; sleep 3                              # its second row: Switch Layout
-  echo "T4b menu row: $(grep -E '  layout [0-9]' "$RUN/Atelier.log" | tail -1)"
-  shot 46-touch-layout
+  shot 42-touch-key
+
+  # 3. the four swipes on a mini (mini0 Settings, mini1 Maps, mini2 Safari, mini3 Files, mini4 Calendar)
+  drag_shot "$(cx mini1)" "$(cy mini1)" "$(calc "$(cx mini1) + 80")" "$(cy mini1)" 43-swipe-right-held
+  sleep 3
+  echo "T3 swipe right on Maps: $(last 'swipe right') · $(last 'swap:')"
+  shot 44-swipe-right-done
+  where                                                 # now: main Maps · mini0 Settings, mini1 the probe, mini2 Safari, mini3 Files, mini4 Calendar
+  drag_shot "$(cx mini0)" "$(cy mini0)" "$(cx mini0)" "$(calc "$(cy mini0) - 75")" 45-swipe-up-held
+  sleep 2
+  echo "T4 swipe up on Settings: $(last 'swipe up') · $(last 'lock com')"
+  shot 46-swipe-up-locked
+  drag_shot "$(calc "$(cx mini0) + 16")" "$(cy mini0)" "$(calc "$(cx mini0) - 46")" "$(cy mini0)" 47-swipe-left-locked-held
+  sleep 2
+  echo "T5 swipe left on locked Settings: $(last 'swipe left')"
+  shot 48-swipe-left-locked-after
+  drag_shot "$(calc "$(cx mini3) + 16")" "$(cy mini3)" "$(calc "$(cx mini3) - 46")" "$(cy mini3)" 49-swipe-left-held
+  sleep 3
+  echo "T6 swipe left on Files: $(last 'swipe left') · $(last 'close app')"
+  shot 50-swipe-left-closed
+  where                                                 # main Maps · mini0 Settings (locked), mini1 the probe, mini2 Safari, mini3 Calendar
+  drag_shot "$(cx mini2)" "$(cy mini2)" "$(cx mini2)" "$(calc "$(cy mini2) + 80")" 51-swipe-down-held
+  sleep 4
+  echo "T7 swipe down on Safari: $(last 'swipe down') · $(last 'pair:') · $(last '  layout [0-9]')"
+  shot 52-swipe-down-split
+
+  # 4. taps: a mini, the pill, a menu row, a shortcut
+  cmd "layout side" "wait 3" "state"; sleep 6
+  where
+  phone "$(cx mini1)" "$(cy mini1)"; sleep 3
+  echo "T8 tap on a mini: $(last 'swap:')"
+  shot 53-tap-swap
+  where
+  phone "$(cx pill)" "$(cy pill)"; sleep 2
+  where
+  echo "T9 pill: $(grep 'menu ' "$WHERE" || echo 'no menu')"
+  shot 54-tap-menu
+  phone "$(cx menu)" "$(calc "$(awk '$1 == "menu" { print $3 }' "$WHERE") + 46 + 23")"; sleep 3      # its second row: Switch Layout
+  echo "T9b menu row: $(last '  layout [0-9]')"
+  shot 55-tap-layout
+  cmd "layout side" "wait 3"; sleep 5
+  where
+  phone "$(cx shortcut1)" "$(cy shortcut1)"; sleep 4                       # Reminders: not on the bench, and there is room
+  echo "T10 tap on a shortcut: $(last 'shortcut com')"
+  shot 56-tap-shortcut
+
+  # 5. out and in again
   phone_drag 215 921 215 560; sleep 4                 # up from the bottom of the screen
-  echo "T5 swipe up from the bottom: $(grep 'bench close' "$RUN/Atelier.log" | tail -1)"
-  shot 47-touch-home-gesture
+  echo "T11 swipe up from the bottom: $(last 'bench close')"
+  shot 57-swipe-up-closed
   cmd "close" "wait 1"; sleep 3
   phone_drag 426 840 300 815; sleep 5                 # in from the right edge, on the strip
-  echo "T6 edge strip: $(grep 'trigger:' "$RUN/Atelier.log" | tail -1) · $(grep 'bench open' "$RUN/Atelier.log" | tail -1 | cut -c1-80)"
-  shot 48-touch-edge-swipe
-
-  cmd "set miniMode 0" "close" "wait 2" "state"
-  sleep 5
+  echo "T12 edge strip: $(last 'trigger:') · $(last 'bench open' | cut -c1-60)"
+  shot 58-edge-swipe-opened
+  cmd "state" "set miniMode 0" "clock off" "close" "wait 2" "state"
+  sleep 6
 }
-echo "== touches (clicks on the Simulator window)"
+echo "== touches (clicks and drags on the Simulator window)"
 touch_test 2>&1 | tee "$OUT/touch.txt"
-
-# ---- "Resize apps" (not offered in Settings; see the README) ----
-# Last, because it has stalled SpringBoard for half a minute before: nothing else depends on it.
-echo "== resize (set resizeApps true)"
-cmd "apps $SET $MAPS $SAFARI $FILES $PROBE" "layout side" "wait 6" "state"
-sleep 9
-step 50-resize-side 10 "set resizeApps true" "wait 6" "state" "scenes"
-step 51-resize-top 9 "layout top" "wait 5" "state"
-step 52-resize-split 9 "layout split" "wait 5" "state"
-step 53-resize-off 9 "set resizeApps false" "layout side" "wait 5" "state" "scenes"
-cmd "close" "wait 2" "state"
-sleep 5
-cmd "state"
-sleep 3
 
 cp "$RUN/Atelier.log" "$OUT/Atelier.log" 2>/dev/null || true
 DATA=$(xcrun simctl get_app_container "$UDID" "$PROBE" data 2>/dev/null)

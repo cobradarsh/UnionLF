@@ -191,7 +191,7 @@ static UINavigationController *gSheetNav;
     return [self _sets].count
         ? @"Tap a set to open its apps on the bench. Swipe left to rename it, move it up or delete it. "
            "Hold the icon of any app in a set to open the set from the Home Screen."
-        : @"Put two to five apps on the bench, then choose Save as Set from the ··· menu above the main app.";
+        : @"Put two to six apps on the bench, then choose Save as Set from the ··· menu above the main app.";
 }
 
 // The first three icons, overlapping.

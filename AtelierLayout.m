@@ -1,24 +1,33 @@
 /*  AtelierLayout.m — where the tiles go. Arithmetic only; tools/layout_check.py repeats it in
     Python for the phone's screen and a few others and checks nothing overlaps or leaves the screen.
 
-    Without "Resize apps" every app keeps the size of the whole screen and its tile is a scaled
-    picture of it, so the main tile always has the screen's proportions:
+    Every app keeps the size of the whole screen and its tile is a scaled picture of it, so the
+    main tile always has the screen's proportions:
 
-      Side    main at `sideScale` (0.80) against the right edge; minis in a column on the left,
-              as wide as the room that leaves, each showing the whole app
-      Top     four tiles across the top showing the upper part of each app; the main below, as
-              large as fits
-      Split   two tiles next to each other, their widths set by `split`
+      Side    The main against the right edge; five mini places in a column on the left. The
+              column is exactly as tall as the main (first mini's top = the main's top, last
+              mini's bottom = the main's bottom), and the main's scale is the one at which a
+              mini that wide shows the whole app: about 0.785 on the phone.
+      Top     Five mini places across the top, the row exactly as wide as the main, each showing
+              the upper part of its app; the main below, as large as fits.
+      Split   Two tiles next to each other, their widths set by `split`.
 
-    With "Resize apps" (beta) the apps are laid out at the size of the main tile instead, the
-    main tile fills the room it has, and Split puts one app above the other at full width.     */
+    The band (clock, market flags, shortcut apps) is above the tiles: two rows high in Side, with
+    the "..." pill in its lower row above the main; one compact line in Top and Split. Nothing is
+    placed above the safe area, so nothing sits under the Dynamic Island.
+
+    All five mini places are always worked out; the bench draws apps in the first `miniCount`,
+    a "+" in the next and faint outlines in the rest, so the column keeps its length.
+
+    `resize` (apps laid out at the size of their tile) has no Settings switch; see the README.  */
 
 #import "Atelier.h"
 
 static const CGFloat kMargin = 10, kGap = 8, kGrab = 26;
+static const CGFloat kBandTall = 62, kBandLine = 30;
 
 AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEdgeInsets safe, NSInteger apps,
-                                     double split, BOOL resize, double sideScale) {
+                                     double split, BOOL resize, double sideScale, BOOL band) {
     AtelierGeometry g;
     memset(&g, 0, sizeof(g));
     CGFloat W = screen.width, H = screen.height;
@@ -29,7 +38,8 @@ AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEd
     g.sceneSize = screen;
 
     if (kind == AtelierLayoutSplit) {
-        CGFloat t = top + kGrab, availH = bottom - t;
+        if (band) { g.band = CGRectMake(kMargin, top, W - 2 * kMargin, kBandLine); g.bandCompact = YES; }
+        CGFloat t = top + (band ? kBandLine + 2 : 0) + kGrab, availH = bottom - t;
         double p = MAX(0.3, MIN(0.7, split));
         if (resize) {
             CGFloat gapH = 30, w = W - 2 * kMargin;
@@ -62,48 +72,59 @@ AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEd
         return g;
     }
 
-    CGFloat tileW, tileH;
     if (kind == AtelierLayoutTop) {
-        tileW = floor((W - 5 * kMargin) / 4.0);
-        tileH = round(tileW * 1.22);
-        CGFloat mainTop = top + tileH + kGrab + 2, availH = bottom - mainTop;
+        if (band) { g.band = CGRectMake(kMargin, top, W - 2 * kMargin, kBandLine); g.bandCompact = YES; }
+        CGFloat rowTop = top + (band ? kBandLine + 6 : 0);
+        CGFloat tileW = 58, tileH = 70, mainTop = 0, availH = 0;
         if (resize) {
+            tileW = (W - 2 * kMargin - 4 * kGap) / 5.0;
+            tileH = round(tileW * 1.22);
+            mainTop = rowTop + tileH + kGrab + 2;
+            availH = bottom - mainTop;
             g.main = CGRectMake(kMargin, mainTop, W - 2 * kMargin, availH);
             g.sceneSize = g.main.size;
+            tileH = MIN(tileH, round(tileW * g.sceneSize.height / g.sceneSize.width));
         } else {
-            CGFloat s = MIN(availH / H, (W - 2 * kMargin) / W);
-            CGFloat w = round(W * s), h = round(H * s);
-            g.main = CGRectMake(floor((W - w) / 2.0), mainTop, w, h);
+            // the row is as wide as the main, and the main is as tall as the row leaves room for:
+            // two passes settle it
+            CGFloat s = 0.7, w = 0;
+            for (int pass = 0; pass < 3; pass++) {
+                mainTop = rowTop + tileH + kGrab + 2;
+                availH = bottom - mainTop;
+                s = MIN(availH / H, (W - 2 * kMargin) / W);
+                w = round(W * s);
+                tileW = (w - 4 * kGap) / 5.0;
+                if (pass < 2) tileH = round(tileW * 1.22);
+            }
+            g.main = CGRectMake(floor((W - w) / 2.0), mainTop, w, MIN(round(H * s), availH));
         }
-        tileH = MIN(tileH, round(tileW * g.sceneSize.height / g.sceneSize.width));
-        for (NSInteger i = 0; i < 4; i++) {
-            CGRect r = CGRectMake(kMargin + i * (tileW + kMargin), top, tileW, tileH);
-            if (i < minis) g.minis[i] = r;
-            else if (i == minis && apps >= 1 && apps < ATELIER_MAX_SLOTS) g.plus = r;
-        }
+        for (NSInteger i = 0; i < 5; i++) g.minis[i] = CGRectMake(g.main.origin.x + i * (tileW + kGap), rowTop, tileW, tileH);
     } else {
-        CGFloat mainTop = top + kGrab, availH = bottom - mainTop;
+        if (band) g.band = CGRectMake(kMargin, top, W - 2 * kMargin, kBandTall);
+        CGFloat paneTop = top + (band ? kBandTall + 4 : kGrab), availH = bottom - paneTop;
+        CGFloat tileW, tileH, columnX;
         if (resize) {
             tileW = round(W * 0.135);
             CGFloat x = kMargin + tileW + kGap;
-            g.main = CGRectMake(x, mainTop, W - x - kMargin, availH);
+            g.main = CGRectMake(x, paneTop, W - x - kMargin, availH);
             g.sceneSize = g.main.size;
+            columnX = kMargin;
         } else {
-            CGFloat s = MIN(MIN(sideScale, availH / H), (W - 2 * kMargin - kGap - 48) / W);
+            // the scale at which five minis as wide as the room beside the main, each showing the
+            // whole app, are together exactly as tall as the main
+            CGFloat s = (W - 2 * kMargin - kGap + 0.8 * kGap * W / H) / (1.2 * W);
+            s = MIN(MIN(s, sideScale), availH / H);
             CGFloat w = round(W * s), h = round(H * s);
-            g.main = CGRectMake(W - kMargin - w, mainTop + floor((availH - h) / 2.0), w, h);
-            tileW = g.main.origin.x - kGap - kMargin;
+            CGFloat y = band ? paneTop : paneTop + floor((availH - h) / 2.0);
+            g.main = CGRectMake(W - kMargin - w, y, w, h);
+            tileW = MIN(g.main.origin.x - kGap - kMargin, round((h - 4 * kGap) / 5.0 * W / H));
+            columnX = g.main.origin.x - kGap - tileW;
         }
-        tileH = round(tileW * g.sceneSize.height / g.sceneSize.width);
-        tileH = MIN(tileH, floor((g.main.size.height - 3 * kGap) / 4.0));
-        CGFloat y = g.main.origin.y;
-        for (NSInteger i = 0; i < 4; i++) {
-            CGRect r = CGRectMake(kMargin, y, tileW, tileH);
-            if (i < minis) { g.minis[i] = r; y += tileH + kGap; }
-            else if (i == minis && apps >= 1 && apps < ATELIER_MAX_SLOTS) g.plus = CGRectMake(kMargin, y, tileW, tileW);
-        }
+        tileH = (g.main.size.height - 4 * kGap) / 5.0;
+        for (NSInteger i = 0; i < 5; i++) g.minis[i] = CGRectMake(columnX, g.main.origin.y + i * (tileH + kGap), tileW, tileH);
     }
     g.miniCount = minis;
+    if (apps >= 1 && apps < ATELIER_MAX_SLOTS) g.plus = g.minis[minis];
     g.grabber = CGRectMake(CGRectGetMidX(g.main) - 32, g.main.origin.y - 24, 64, 22);
     if (apps == 0) {                                      // an empty bench: one big "+"
         g.plus = g.main;

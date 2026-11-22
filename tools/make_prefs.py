@@ -5,6 +5,9 @@ Plist-only, like Wingman, Dynamic Stage+ and Chakra: the page has no compiled co
 Every control posts com.adarsh.atelier/prefs, and SpringBoard re-reads the settings
 the moment you change something - no respring.
 
+The one thing a plist cannot do, bring AltList into Settings for the Shortcut Apps
+list, is done by AtelierPrefs.dylib (PrefsHelper.m).
+
 Usage:  python3 tools/make_prefs.py layout/Library/PreferenceLoader/Preferences
         python3 tools/make_prefs.py --icons layout/Library/PreferenceLoader/Preferences
         (the second form also draws Atelier.png / @2x / @3x; it needs Pillow, so it is run
@@ -52,9 +55,29 @@ def segments(key, default, options):
             "validValues": [v for v, _ in options], "validTitles": [t for _, t in options]}
 
 
+def app_list(key, label):
+    """Every app with a switch, from AltList (com.opa334.altlist): searchable, A to Z. The bundle
+    ids that are switched on are saved as an array.
+
+    The row only names AltList's class, the way a compiled settings bundle's plist does, so
+    AltList has to be in Settings before the page is read: AtelierPrefs.dylib (PrefsHelper.m)
+    loads it when Settings starts. ("bundle = AltList" on a row does not work; Chakra tried.)
+    """
+    return {"cell": "PSLinkCell", "detail": "ATLApplicationListMultiSelectionController",
+            "defaults": D, "key": key, "label": label, "PostNotification": NOTE,
+            "sections": [{"sectionType": "Visible"}], "defaultApplicationSwitchValue": False,
+            "useSearchBar": True, "hideSearchBarWhileScrolling": False, "alphabeticIndexingEnabled": True}
+
+
+# The markets a flag can stand for. The hours are in AtelierBand.m (kMarkets); keep the codes in step.
+MARKETS = [("IN", "India (NSE, 9:15 to 15:30)"), ("GB", "UK (LSE, 8:00 to 16:30)"),
+           ("US", "USA (NYSE, 9:30 to 16:00)"), ("JP", "Japan (TSE, 9:00 to 15:30)"),
+           ("HK", "Hong Kong (9:30 to 16:00)"), ("DE", "Germany (Xetra, 9:00 to 17:30)"),
+           ("CN", "China (Shanghai, 9:30 to 15:00)"), ("SG", "Singapore (9:00 to 17:00)")]
+
 items = [
     group(None,
-          "A workbench of live apps: one big app and up to four mini tiles. Tap a mini and it "
+          "A workbench of live apps: one big app and up to five mini tiles. Tap a mini and it "
           "changes places with the big one.\n\n"
           "To open it, slide a finger in from the edge of the screen just above the bottom "
           "corner (or up along that edge). Or hold an app's icon on the Home Screen and choose "
@@ -81,6 +104,34 @@ items = [
     choice("miniMode", "Minis", 0, [(0, "Smart"), (1, "Always Live"), (2, "Stills Only")]),
     group("Seconds Before Minis Freeze (Smart)"),
     slider("freezeAfter", 5, 60, 20),
+
+    group("Swipes on a Mini",
+          "A mini follows your finger and a small label says what letting go will do.\n\n"
+          "Left closes the app. Right makes it the big app. Up locks it, or unlocks it. "
+          "Down does what you choose here.\n\n"
+          "A locked app shows a padlock. It can't be swiped away, stays when a set is opened, "
+          "and stays live however the minis are set above."),
+    choice("swipeDown", "Swipe Down", 0, [(0, "Split with the Big App"), (1, "Full Screen"),
+                                          (2, "Replace"), (3, "Nothing")]),
+
+    group("Clock and Markets",
+          "Above the apps: a clock with seconds, and three market flags. A flag is in colour "
+          "with a ring, and shows the time left, while that market's regular session is on; "
+          "otherwise it is dimmed. Hours are worked out in each market's own time zone, "
+          "Monday to Friday.\n\n"
+          "There is no holiday calendar: on a market holiday the flag lights up all the same."),
+    switch("showClock", "Clock", True),
+    switch("showMarkets", "Market Flags", True),
+    choice("market1", "First Flag", "IN", MARKETS),
+    choice("market2", "Second Flag", "GB", MARKETS),
+    choice("market3", "Third Flag", "US", MARKETS),
+
+    group("Shortcut Apps",
+          "The apps you switch on here (the first six) sit as icons above the big app, each "
+          "with its badge. Tap one and it opens on the bench as the big app; if it is "
+          "already there it changes places with the big one. A full bench says so instead of "
+          "pushing an app off."),
+    app_list("shortcutApps", "Shortcut Apps"),
 
     group("Opening",
           "The edge strip is see-through, 16 points wide. It takes touches where it lies, so "

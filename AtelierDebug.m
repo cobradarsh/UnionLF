@@ -15,6 +15,14 @@
         menu <n> | menutap <row> | hidemenu
         plus                            what a tap on the "+" tile does
         freeze | touch                  freeze the minis now / what any touch on the bench does
+        swipe <n> left|right|up|down    what letting go of mini n swiped that way does (n = its slot, 1…)
+        lock <n> | pair <n>             lock or unlock the app in slot n / put it beside the main in Split
+        unlockall                       forget every lock
+        clock <ISO date> | clock off    the band's clock runs on from that moment, e.g. clock 2026-11-23T10:00:00+05:30
+        shortcuts <bundle id> …         the shortcut apps (what the Settings list would save); "shortcuts none" clears
+        shortcut <n>                    what a tap on shortcut n does
+        badge <bundle id> <n>           give an app a badge (0 clears it)
+        where                           log every tile, pill and shortcut with its frame; also → atelier_where.txt
         saveset | sets | picker         save the bench as a set / the Sets sheet / the app picker
         pick <row>                      choose row n of the sheet that is open
         sheetclose
@@ -175,6 +183,45 @@ static void AtelierRun(NSArray<NSString *> *lines, NSUInteger index) {
             [bench hideMenu];
         } else if ([cmd isEqualToString:@"plus"]) {
             AtelierSend(bench, @"_plusTapped");
+        } else if ([cmd isEqualToString:@"swipe"] && a2) {
+            NSArray<NSString *> *ways = @[ @"left", @"right", @"up", @"down" ];
+            NSUInteger way = [ways indexOfObject:a2.lowercaseString];
+            if (way != NSNotFound) [bench performSwipe:(AtelierSwipe)way onSlot:n];
+        } else if ([cmd isEqualToString:@"lock"] && a1) {
+            [bench toggleLockSlot:n];
+        } else if ([cmd isEqualToString:@"unlockall"]) {
+            [[AtelierSettings shared] setLockedApps:@[]];
+            AtelierSettingsChanged();
+        } else if ([cmd isEqualToString:@"pair"] && a1) {
+            [bench pairSlot:n];
+        } else if ([cmd isEqualToString:@"clock"] && a1) {
+            NSDate *when = nil;
+            if (![a1 isEqualToString:@"off"]) {
+                NSISO8601DateFormatter *iso = [NSISO8601DateFormatter new];
+                when = [iso dateFromString:a1];
+                if (!when) AtelierLog(@"clock: can't read %@ (want e.g. 2026-11-23T10:00:00+05:30)", a1);
+            }
+            [AtelierBand setDebugNow:when];
+            [bench settingsChanged];
+            AtelierLog(@"clock: %@", when ? [when description] : @"real time");
+        } else if ([cmd isEqualToString:@"shortcuts"]) {
+            NSArray<NSString *> *list = (rest.count == 1 && [rest[0] isEqualToString:@"none"]) ? @[] : rest;
+            [[AtelierSettings shared] setObject:list forKey:@"shortcutApps"];
+            AtelierSettingsChanged();
+        } else if ([cmd isEqualToString:@"shortcut"] && a1) {
+            NSArray<NSString *> *list = [[AtelierSettings shared] shortcutApps];
+            NSMutableArray<NSString *> *shown = [NSMutableArray array];
+            for (NSString *bid in list) if ([AtelierHost applicationForBundleID:bid] && shown.count < ATELIER_SHORTCUTS) [shown addObject:bid];
+            if (n < shown.count) [bench openShortcut:shown[n]];
+            else AtelierLog(@"shortcut %lu: there are %lu", (unsigned long)n, (unsigned long)shown.count);
+        } else if ([cmd isEqualToString:@"badge"] && a2) {
+            id app = [AtelierHost applicationForBundleID:a1];
+            NSInteger count = a2.integerValue;
+            BOOL sent = AtelierSendObj(app, @"setBadgeValue:", count > 0 ? @(count) : nil);
+            AtelierLog(@"badge %@ = %ld -> %d (now %@)", a1, (long)count, (int)sent, AtelierMsg(app, @"badgeValue"));
+            [bench settingsChanged];
+        } else if ([cmd isEqualToString:@"where"]) {
+            AtelierLog(@"where:\n    %@", [[bench debugWhere] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n    "]);
         } else if ([cmd isEqualToString:@"freeze"]) {
             [bench freezeNow];
         } else if ([cmd isEqualToString:@"touch"]) {

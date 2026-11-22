@@ -1,16 +1,20 @@
 /*  Atelier.h — a workbench of live apps for the iPhone (iOS 16.5, RootHide).
 
-    One big "main" app and up to four "mini" tiles of other apps, all hosted inside one
+    One big "main" app and up to five "mini" tiles of other apps, all hosted inside one
     SpringBoard window. Tap a mini and it changes places with the main. Three layouts: minis in
     a column on the left (Side), minis in a row across the top (Top), or two apps next to each
-    other, both usable (Split). Saved sets of 2 to 5 apps open together.
+    other, both usable (Split). Saved sets of 2 to 6 apps open together. Above the tiles a band
+    with a clock, three stock-market flags that light up while their market is open, and
+    shortcut apps.
 
     One dylib, loaded into SpringBoard only. How the apps get onto the bench:
 
       AtelierPane    one hosted app: finds (or starts) the app's FrontBoard scene, asks UIKit's
                      scene presentation manager for a presenter, shows the presenter's view, and
                      switches the scene between foreground (live) and background (still)
-      AtelierBench   the window: tiles, layouts, the swap, the "..." menu, the freeze clock
+      AtelierBench   the window: tiles, layouts, the swap, swipes on a mini, the "..." menu,
+                     locks, the freeze clock
+      AtelierBand    the clock, the market flags and the shortcut apps above the tiles
       AtelierSheets  the app picker and the Sets list (bottom sheets, no text fields)
       AtelierTrigger the strip in the bottom corner that opens the bench on a swipe
       AtelierDebug   test commands from a file, so the bench can be driven over SSH
@@ -23,13 +27,14 @@
 #import <objc/message.h>
 #import <notify.h>
 
-#define ATELIER_VERSION   @"1.0.0"                          // keep in step with control
+#define ATELIER_VERSION   @"1.1.0"                          // keep in step with control
 #define ATELIER_DOMAIN    @"com.adarsh.atelier"
 #define ATELIER_N_PREFS   "com.adarsh.atelier/prefs"        // Settings -> SpringBoard (PostNotification)
 #define ATELIER_N_OPEN    "com.adarsh.atelier.open"         // anyone -> SpringBoard
 #define ATELIER_N_CLOSE   "com.adarsh.atelier.close"
 #define ATELIER_N_TOGGLE  "com.adarsh.atelier.toggle"
-#define ATELIER_MAX_SLOTS 5                                 // the main and four minis
+#define ATELIER_MAX_SLOTS 6                                 // the main and five minis
+#define ATELIER_SHORTCUTS 6                                 // shortcut apps shown in the band
 
 typedef NS_ENUM(NSInteger, AtelierLayoutKind) {
     AtelierLayoutSide  = 0,     // minis in a column on the left, the main on the right
@@ -41,6 +46,13 @@ typedef NS_ENUM(NSInteger, AtelierMiniMode) {
     AtelierMiniSmart  = 0,      // live while the bench is being used, stills after a pause
     AtelierMiniLive   = 1,      // always live
     AtelierMiniStills = 2,      // always stills; only the main runs
+};
+
+typedef NS_ENUM(NSInteger, AtelierSwipeDown) {             // what a swipe down on a mini does
+    AtelierSwipeDownSplit   = 0,   // pairs it with the main app in Split
+    AtelierSwipeDownFull    = 1,   // opens it full screen
+    AtelierSwipeDownReplace = 2,   // opens the picker to put another app in its place
+    AtelierSwipeDownNothing = 3,
 };
 
 typedef NS_ENUM(NSInteger, AtelierHaptic) { AtelierHapticTick = 0, AtelierHapticSwap, AtelierHapticOpen };
@@ -84,6 +96,13 @@ void AtelierHapticPlay(AtelierHaptic kind);
 @property (nonatomic, readonly) BOOL resizeApps;             // beta: give apps the size of their tile
 @property (nonatomic, readonly) BOOL iconMenu;               // "Open in Atelier" in the Home Screen icon menu
 @property (nonatomic, readonly) NSInteger haptics;           // 0 off … 3 strong
+@property (nonatomic, readonly) BOOL showClock;
+@property (nonatomic, readonly) BOOL showMarkets;
+@property (nonatomic, readonly) AtelierSwipeDown swipeDown;
+- (NSArray<NSString *> *)markets;                            // three market codes, e.g. IN, GB, US
+- (NSArray<NSString *> *)shortcutApps;                       // bundle ids chosen in Settings, at most ATELIER_SHORTCUTS
+- (NSArray<NSString *> *)lockedApps;                         // apps locked onto the bench
+- (void)setLockedApps:(NSArray<NSString *> *)apps;
 @property (nonatomic, readonly) BOOL debugLog;
 - (double)tune:(NSString *)key fallback:(double)fallback;    // knobs without a Settings row (set from the debug file)
 // what is on the bench, and the saved sets
@@ -165,17 +184,21 @@ typedef NS_ENUM(NSInteger, AtelierPaneState) {
 typedef struct {
     CGRect main;                // the main tile
     CGRect second;              // Split: the other tile
-    CGRect minis[4];            // mini tiles (Side and Top)
+    CGRect minis[5];            // all five mini places (Side and Top), filled or not
     CGRect plus;                // the "+" tile, CGRectZero when the bench is full
+    CGRect band;                // clock, flags and shortcut apps; CGRectZero when there is none
+    BOOL bandCompact;           // one line (Top, Split) instead of two rows (Side)
     CGRect grabber;             // the "..." pill above the main
     CGRect grabber2;            // Split: the pill of the other tile
     CGRect divider;             // Split: the handle between the two
-    NSInteger miniCount;
+    NSInteger miniCount;        // how many of the places hold an app
     CGSize sceneSize;           // the size every hosted app is laid out at
 } AtelierGeometry;
 
 AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEdgeInsets safe, NSInteger apps,
-                                     double split, BOOL resize, double sideScale);
+                                     double split, BOOL resize, double sideScale, BOOL band);
+
+typedef NS_ENUM(NSInteger, AtelierSwipe) { AtelierSwipeLeft = 0, AtelierSwipeRight, AtelierSwipeUp, AtelierSwipeDownward };
 
 @interface AtelierBench : NSObject
 + (instancetype)shared;
@@ -192,6 +215,12 @@ AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEd
 - (void)closeSlot:(NSUInteger)slot;
 - (void)replaceSlot:(NSUInteger)slot with:(NSString *)bid;   // slot == count adds
 - (void)fullScreenSlot:(NSUInteger)slot;                     // open that app the normal way and put the bench away
+- (void)pairSlot:(NSUInteger)slot;                           // that app next to the main one, in Split
+- (void)toggleLockSlot:(NSUInteger)slot;                     // a locked app can't be swiped away and is never frozen
+- (BOOL)isLocked:(NSString *)bid;
+- (void)openShortcut:(NSString *)bid;                        // a shortcut app: it becomes the main app
+- (void)performSwipe:(AtelierSwipe)swipe onSlot:(NSUInteger)slot;   // what letting go of a swiped mini does
+- (NSString *)debugWhere;                                    // tests: every tile, pill and shortcut with its frame
 - (void)saveAsSet;
 - (void)openSet:(NSDictionary *)set;
 - (void)showMenuForSlot:(NSUInteger)slot;
@@ -203,6 +232,23 @@ AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEd
 - (void)settingsChanged;
 - (void)lockChanged;
 - (NSArray<NSString *> *)apps;
+- (NSString *)debugState;
+@end
+
+#pragma mark - the band (AtelierBand.m)
+
+// The strip above the tiles: a clock with seconds, three market flags, shortcut apps with their
+// badges. One timer on the second boundary while it is on screen, none otherwise.
+@interface AtelierBand : UIView
+@property (nonatomic, copy) void (^onShortcut)(NSString *bid);
++ (BOOL)wanted;                                              // anything to show, by the settings
++ (void)setDebugNow:(NSDate *)date;                          // tests: the clock runs on from this moment (nil = real time)
+- (void)setCompact:(BOOL)compact flagsWidth:(CGFloat)width;  // lay out for this frame; `width` is the room left of the pill
+- (void)reload;                                              // settings changed
+- (void)start;                                               // the bench came up
+- (void)stop;                                                // the bench went away
+- (void)debugTapShortcut:(NSUInteger)index;
+- (NSArray<NSDictionary *> *)debugFrames;                    // @{ @"name", @"frame" (NSValue, in the band's own space) }
 - (NSString *)debugState;
 @end
 

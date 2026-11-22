@@ -17,7 +17,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>A workbench of live apps: one big app and up to four mini tiles. Tap a mini and it changes places with the big one.
+			<string>A workbench of live apps: one big app and up to five mini tiles. Tap a mini and it changes places with the big one.
 
 To open it, slide a finger in from the edge of the screen just above the bottom corner (or up along that edge). Or hold an app's icon on the Home Screen and choose Open in Atelier.
 
@@ -137,6 +137,237 @@ Stills Only: only the big app runs; a mini is refreshed when it comes off the bi
 			<key>min</key>
 			<integer>5</integer>
 			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>A mini follows your finger and a small label says what letting go will do.
+
+Left closes the app. Right makes it the big app. Up locks it, or unlocks it. Down does what you choose here.
+
+A locked app shows a padlock. It can't be swiped away, stays when a set is opened, and stays live however the minis are set above.</string>
+			<key>label</key>
+			<string>Swipes on a Mini</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>swipeDown</string>
+			<key>label</key>
+			<string>Swipe Down</string>
+			<key>validTitles</key>
+			<array>
+				<string>Split with the Big App</string>
+				<string>Full Screen</string>
+				<string>Replace</string>
+				<string>Nothing</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>0</integer>
+				<integer>1</integer>
+				<integer>2</integer>
+				<integer>3</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Above the apps: a clock with seconds, and three market flags. A flag is in colour with a ring, and shows the time left, while that market's regular session is on; otherwise it is dimmed. Hours are worked out in each market's own time zone, Monday to Friday.
+
+There is no holiday calendar: on a market holiday the flag lights up all the same.</string>
+			<key>label</key>
+			<string>Clock and Markets</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>showClock</string>
+			<key>label</key>
+			<string>Clock</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>showMarkets</string>
+			<key>label</key>
+			<string>Market Flags</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>IN</string>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>market1</string>
+			<key>label</key>
+			<string>First Flag</string>
+			<key>validTitles</key>
+			<array>
+				<string>India (NSE, 9:15 to 15:30)</string>
+				<string>UK (LSE, 8:00 to 16:30)</string>
+				<string>USA (NYSE, 9:30 to 16:00)</string>
+				<string>Japan (TSE, 9:00 to 15:30)</string>
+				<string>Hong Kong (9:30 to 16:00)</string>
+				<string>Germany (Xetra, 9:00 to 17:30)</string>
+				<string>China (Shanghai, 9:30 to 15:00)</string>
+				<string>Singapore (9:00 to 17:00)</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>IN</string>
+				<string>GB</string>
+				<string>US</string>
+				<string>JP</string>
+				<string>HK</string>
+				<string>DE</string>
+				<string>CN</string>
+				<string>SG</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>GB</string>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>market2</string>
+			<key>label</key>
+			<string>Second Flag</string>
+			<key>validTitles</key>
+			<array>
+				<string>India (NSE, 9:15 to 15:30)</string>
+				<string>UK (LSE, 8:00 to 16:30)</string>
+				<string>USA (NYSE, 9:30 to 16:00)</string>
+				<string>Japan (TSE, 9:00 to 15:30)</string>
+				<string>Hong Kong (9:30 to 16:00)</string>
+				<string>Germany (Xetra, 9:00 to 17:30)</string>
+				<string>China (Shanghai, 9:30 to 15:00)</string>
+				<string>Singapore (9:00 to 17:00)</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>IN</string>
+				<string>GB</string>
+				<string>US</string>
+				<string>JP</string>
+				<string>HK</string>
+				<string>DE</string>
+				<string>CN</string>
+				<string>SG</string>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>US</string>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>market3</string>
+			<key>label</key>
+			<string>Third Flag</string>
+			<key>validTitles</key>
+			<array>
+				<string>India (NSE, 9:15 to 15:30)</string>
+				<string>UK (LSE, 8:00 to 16:30)</string>
+				<string>USA (NYSE, 9:30 to 16:00)</string>
+				<string>Japan (TSE, 9:00 to 15:30)</string>
+				<string>Hong Kong (9:30 to 16:00)</string>
+				<string>Germany (Xetra, 9:00 to 17:30)</string>
+				<string>China (Shanghai, 9:30 to 15:00)</string>
+				<string>Singapore (9:00 to 17:00)</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>IN</string>
+				<string>GB</string>
+				<string>US</string>
+				<string>JP</string>
+				<string>HK</string>
+				<string>DE</string>
+				<string>CN</string>
+				<string>SG</string>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>The apps you switch on here (the first six) sit as icons above the big app, each with its badge. Tap one and it opens on the bench as the big app; if it is already there it changes places with the big one. A full bench says so instead of pushing an app off.</string>
+			<key>label</key>
+			<string>Shortcut Apps</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>alphabeticIndexingEnabled</key>
+			<true/>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>defaultApplicationSwitchValue</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>detail</key>
+			<string>ATLApplicationListMultiSelectionController</string>
+			<key>hideSearchBarWhileScrolling</key>
+			<false/>
+			<key>key</key>
+			<string>shortcutApps</string>
+			<key>label</key>
+			<string>Shortcut Apps</string>
+			<key>sections</key>
+			<array>
+				<dict>
+					<key>sectionType</key>
+					<string>Visible</string>
+				</dict>
+			</array>
+			<key>useSearchBar</key>
 			<true/>
 		</dict>
 		<dict>

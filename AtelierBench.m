@@ -7,7 +7,12 @@
 
       main tile     nothing of SpringBoard's lies over it, so touches go straight to the app
       mini tile     a shield on top takes the touches: a tap makes it the main, a hold opens
-                    its menu. A frozen mini also shows a still, and its app is in the background.
+                    its menu, a swipe acts on it (left closes, right makes it the main, up locks
+                    or unlocks, down is the Settings choice). A frozen mini also shows a still,
+                    and its app is in the background. A locked app is never frozen and can't be
+                    swiped away.
+
+    Above the tiles is the band (AtelierBand.m): clock, market flags, shortcut apps.
 
     While the bench is up a half-second clock looks after it: it puts the bench away when
     SpringBoard moves on (another app in front, the App Switcher, a lock), restarts an app that
@@ -25,6 +30,8 @@
 @property (nonatomic, strong) UIImageView *still;
 @property (nonatomic, strong) UIControl *shield;
 @property (nonatomic, strong) UIImageView *badge;
+@property (nonatomic, strong) UIImageView *lockBadge;
+@property (nonatomic) BOOL locked;                  // stays on the bench, never frozen, can't be swiped away
 @property (nonatomic) BOOL frozen;                  // showing a still, its app in the background
 @property (nonatomic) BOOL parked;                  // not shown in this layout
 @property (nonatomic) BOOL mini;
@@ -75,6 +82,20 @@
     _badge.hidden = YES;
     _badge.userInteractionEnabled = NO;
     [self addSubview:_badge];
+
+    UIImage *lock = [UIImage systemImageNamed:@"lock.fill"
+                           withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:8.5 weight:UIImageSymbolWeightBold]];
+    _lockBadge = [[UIImageView alloc] initWithImage:[lock imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
+    _lockBadge.tintColor = UIColor.whiteColor;
+    _lockBadge.contentMode = UIViewContentModeCenter;
+    _lockBadge.backgroundColor = [UIColor colorWithRed:0.42 green:0.40 blue:0.95 alpha:1];
+    _lockBadge.layer.cornerRadius = 9;
+    _lockBadge.layer.borderColor = [UIColor colorWithWhite:0 alpha:0.35].CGColor;
+    _lockBadge.layer.borderWidth = 0.5;
+    _lockBadge.hidden = YES;
+    _lockBadge.userInteractionEnabled = NO;
+    AtelierSendBool(_lockBadge.layer, @"setAllowsHitTesting:", NO);      // over the main tile it must not take the app's touches
+    [self addSubview:_lockBadge];
     return self;
 }
 
@@ -98,6 +119,9 @@
     CGFloat side = MAX(18, MIN(26, rect.size.width * 0.34));
     _badge.frame = CGRectMake(-4, -4, side, side);
     _badge.hidden = !mini;
+    // the padlock hangs on the top right corner (a mini's icon badge is on the top left)
+    _lockBadge.frame = CGRectMake(rect.size.width - 13, -5, 18, 18);
+    _lockBadge.hidden = !_locked;
 }
 
 @end
@@ -254,6 +278,13 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     BOOL _closing;
     BOOL _swipeFromBottom;
     AtelierGeometry _geometry;
+    AtelierBand *_band;                      // clock, flags, shortcut apps
+    NSMutableArray<UIView *> *_outlines;     // the free mini places
+    UILabel *_swipePill;                     // names what letting go of a swiped mini will do
+    AtelierTile *_swipeTile;
+    NSInteger _swipeAxis;                    // 1 sideways, 2 up and down
+    BOOL _swipeArmed;
+    NSMutableSet<NSString *> *_locked;       // bundle ids
 }
 
 + (instancetype)shared {
@@ -345,6 +376,35 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _plus.hidden = YES;
     [_root addSubview:_plus];
 
+    _outlines = [NSMutableArray array];
+    for (int i = 0; i < 5; i++) {
+        UIView *o = [[UIView alloc] initWithFrame:CGRectZero];
+        o.userInteractionEnabled = NO;
+        o.backgroundColor = [UIColor colorWithWhite:1 alpha:0.035];
+        o.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.13].CGColor;
+        o.layer.borderWidth = 1;
+        o.layer.cornerRadius = 9;
+        o.layer.cornerCurve = kCACornerCurveContinuous;
+        o.alpha = 0;
+        [_root insertSubview:o belowSubview:_stage];
+        [_outlines addObject:o];
+    }
+
+    _band = [[AtelierBand alloc] initWithFrame:CGRectZero];
+    _band.alpha = 0;
+    _band.onShortcut = ^(NSString *bid) { [weak openShortcut:bid]; };
+    [_root addSubview:_band];
+
+    _swipePill = [UILabel new];
+    _swipePill.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    _swipePill.textColor = UIColor.whiteColor;
+    _swipePill.textAlignment = NSTextAlignmentCenter;
+    _swipePill.layer.cornerRadius = 13;
+    _swipePill.clipsToBounds = YES;
+    _swipePill.userInteractionEnabled = NO;
+    _swipePill.alpha = 0;
+    AtelierSendBool(_swipePill.layer, @"setAllowsHitTesting:", NO);
+
     _grabber = [self _makeGrabber:0];
     _grabber2 = [self _makeGrabber:1];
     [_root addSubview:_grabber];
@@ -360,6 +420,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [_divider addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_dividerDragged:)]];
     _divider.hidden = YES;
     [_root addSubview:_divider];
+    [_root addSubview:_swipePill];
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other { return YES; }
@@ -377,12 +438,28 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     return out;
 }
 
+- (void)_loadLocks {
+    _locked = [NSMutableSet setWithArray:[[AtelierSettings shared] lockedApps]];
+}
+
+- (BOOL)isLocked:(NSString *)bid {
+    if (!_locked) [self _loadLocks];
+    return bid.length && [_locked containsObject:bid];
+}
+
+// `bid` first, the rest after it. A bench that is full loses its last app that isn't locked;
+// nil when every other app is locked and there is no room.
 - (NSArray<NSString *> *)_list:(NSArray<NSString *> *)list withFirst:(NSString *)bid {
     NSMutableArray<NSString *> *out = [NSMutableArray arrayWithArray:list ?: @[]];
     if (bid.length) {
         [out removeObject:bid];
         [out insertObject:bid atIndex:0];
-        while (out.count > ATELIER_MAX_SLOTS) [out removeLastObject];
+        while (out.count > ATELIER_MAX_SLOTS) {
+            NSUInteger drop = NSNotFound;
+            for (NSUInteger i = out.count - 1; i >= 1; i--) if (![self isLocked:out[i]]) { drop = i; break; }
+            if (drop == NSNotFound) return nil;
+            [out removeObjectAtIndex:drop];
+        }
     }
     return out;
 }
@@ -390,9 +467,10 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 - (void)open {
     if (_visible) return;
     AtelierSettings *s = [AtelierSettings shared];
+    [self _loadLocks];
     NSArray<NSString *> *apps = [s slots];
     NSString *front = [AtelierHost frontmostBundleID];
-    if (front && s.addFront) apps = [self _list:apps withFirst:front];
+    if (front && s.addFront) apps = [self _list:apps withFirst:front] ?: apps;
     [self _presentApps:apps layout:[s layout]];
 }
 
@@ -406,7 +484,31 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
 - (void)openAdding:(NSString *)bid {
     NSArray<NSString *> *base = _visible ? [self apps] : [[AtelierSettings shared] slots];
-    [self openWithApps:[self _list:base withFirst:bid] layout:-1];
+    NSArray<NSString *> *with = [self _list:base withFirst:bid];
+    if (!with) [AtelierHost toast:@"The bench is full of locked apps. Unlock one to make room."];
+    [self openWithApps:(with ?: base) layout:-1];
+}
+
+// A shortcut app from the band: it becomes the main app. Nothing is pushed off a full bench.
+- (void)openShortcut:(NSString *)bid {
+    if (!_visible || bid.length == 0) return;
+    [self hideMenu];
+    NSArray<NSString *> *apps = [self apps];
+    NSUInteger at = [apps indexOfObject:bid];
+    if (at != NSNotFound) {
+        AtelierLog(@"shortcut %@: already on the bench (place %lu)", bid, (unsigned long)at);
+        if (at > 0) [self makeMain:at];
+        return;
+    }
+    if (apps.count >= ATELIER_MAX_SLOTS) {
+        AtelierLog(@"shortcut %@: the bench is full", bid);
+        AtelierHapticPlay(AtelierHapticSwap);
+        [AtelierHost toast:@"The bench is full. Close an app to make room."];
+        return;
+    }
+    AtelierLog(@"shortcut %@: opened as the main app", bid);
+    [self _setApps:[@[ bid ] arrayByAddingObjectsFromArray:apps] animated:YES];
+    [self touched];
 }
 
 - (void)toggle {
@@ -420,8 +522,10 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if ([AtelierHost isLocked]) { AtelierLog(@"open: the phone is locked"); return; }
     if (_closing) return;
     [self _ensureWindow];
+    [self _loadLocks];
     _window.windowLevel = (UIWindowLevel)[s tune:@"windowLevel" fallback:999];
     _layout = layout;
+    [_band reload];
     _split = MAX(0.3, MIN(0.7, [s tune:@"split" fallback:0.5]));
     _frontAtOpen = [AtelierHost frontmostBundleID];
     _visible = YES;
@@ -440,6 +544,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         @try { [weak _tick]; } @catch (NSException *e) { AtelierLog(@"bench clock threw %@", e.reason); }
     }];
     _watch.tolerance = 0.15;
+    [_band start];
     AtelierHIDStart();
     [[AtelierTrigger shared] refresh];
     AtelierLog(@"bench open: %@ · layout %ld · front %@ · level %.0f", [[self apps] componentsJoinedByString:@" "],
@@ -457,8 +562,11 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [self _persist];
     [_watch invalidate];
     _watch = nil;
+    [_band stop];
     AtelierHIDStop();
     [self hideMenu];
+    [self _hideSwipePill];
+    _swipeTile = nil;
     [AtelierSheets dismiss];
     void (^finish)(void) = ^{
         NSString *front = [AtelierHost frontmostBundleID];
@@ -496,6 +604,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierSettings *s = [AtelierSettings shared];
     if (!s.enabled) { [self closeAnimated:YES reason:@"switched off"]; return; }
     _layout = [s layout];                               // the Layout row in Settings writes the same key
+    [self _loadLocks];
+    [_band reload];
     [self _thawAll];
     [self _layoutAnimated:YES];
 }
@@ -516,6 +626,9 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
             UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_miniHeld:)];
             hold.minimumPressDuration = 0.4;
             [tile.shield addGestureRecognizer:hold];
+            UIPanGestureRecognizer *swipe = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_miniPanned:)];
+            swipe.maximumNumberOfTouches = 1;
+            [tile.shield addGestureRecognizer:swipe];
             tile.alpha = 0;
             tile.liveSince = CFAbsoluteTimeGetCurrent();
             [_stage addSubview:tile];
@@ -535,15 +648,16 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 - (CGRect)_rectForSlot:(NSUInteger)slot geometry:(AtelierGeometry)g {
     if (slot == 0) return g.main;
     if (_layout == AtelierLayoutSplit) return slot == 1 ? g.second : CGRectZero;
-    return (slot - 1 < 4) ? g.minis[slot - 1] : CGRectZero;
+    return ((NSInteger)slot - 1 < g.miniCount && slot - 1 < 5) ? g.minis[slot - 1] : CGRectZero;
 }
 
 - (void)_layoutAnimated:(BOOL)animated {
+    if (_closing) return;
     AtelierSettings *s = [AtelierSettings shared];
     CGSize screen = [AtelierHost screenSize];
     BOOL resize = s.resizeApps;
     AtelierGeometry g = AtelierLayoutCompute(_layout, screen, [AtelierHost safeInsets], (NSInteger)_tiles.count, _split, resize,
-                                             [s tune:@"sideScale" fallback:0.80]);
+                                             [s tune:@"sideScale" fallback:0.80], [AtelierBand wanted]);
     _geometry = g;
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
 
@@ -561,7 +675,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         if (resize) size = (_layout == AtelierLayoutSplit) ? r.size : g.sceneSize;
         [t.pane setSceneSize:size];
         BOOL mini = (i > 0 && _layout != AtelierLayoutSplit);
-        if (!mini && t.frozen) [self _thaw:t];
+        t.locked = [self isLocked:t.pane.bundleID];
+        if ((!mini || t.locked) && t.frozen) [self _thaw:t];
         if (mini && !t.mini) t.liveSince = now;
         if (t.pane.state == AtelierPaneIdle || (t.pane.state == AtelierPaneFailed && !t.restarts)) [t.pane attach];
         [t.pane setLive:!t.frozen];
@@ -578,6 +693,22 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         }
         self->_plus.frame = CGRectIsEmpty(g.plus) ? self->_plus.frame : g.plus;
         self->_plus.alpha = CGRectIsEmpty(g.plus) ? 0 : 1;
+        // the free places after the "+": faint outlines, so the column (or row) keeps its length
+        BOOL places = self->_layout != AtelierLayoutSplit;
+        for (NSInteger i = 0; i < 5; i++) {
+            UIView *o = self->_outlines[(NSUInteger)i];
+            BOOL show = places && (self->_tiles.count == 0 || i > g.miniCount);
+            if (show) o.frame = g.minis[i];
+            o.alpha = show ? 1 : 0;
+        }
+        BOOL band = !CGRectIsEmpty(g.band);
+        if (band) {
+            self->_band.frame = g.band;
+            CGFloat room = CGRectIsEmpty(g.grabber) ? g.band.size.width : g.grabber.origin.x - 8 - g.band.origin.x;
+            [self->_band setCompact:g.bandCompact flagsWidth:room];
+            [self->_band layoutIfNeeded];
+        }
+        self->_band.alpha = band ? 1 : 0;
         self->_grabber.frame = g.grabber;
         self->_grabber.alpha = CGRectIsEmpty(g.grabber) ? 0 : 1;
         self->_grabber2.frame = g.grabber2;
@@ -653,9 +784,37 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 - (void)closeSlot:(NSUInteger)slot {
     if (slot >= _tiles.count) return;
     NSMutableArray<NSString *> *apps = [[self apps] mutableCopy];
+    if ([self isLocked:apps[slot]]) {
+        AtelierLog(@"close app %@: refused, it is locked", apps[slot]);
+        [AtelierHost toast:@"Locked. Unlock it to close it."];
+        return;
+    }
     AtelierLog(@"close app %@", apps[slot]);
     [apps removeObjectAtIndex:slot];
     [self _setApps:apps animated:YES];
+}
+
+- (void)toggleLockSlot:(NSUInteger)slot {
+    if (slot >= _tiles.count) return;
+    AtelierTile *t = _tiles[slot];
+    NSString *bid = t.pane.bundleID;
+    if (!_locked) [self _loadLocks];
+    BOOL lock = ![_locked containsObject:bid];
+    if (lock) [_locked addObject:bid]; else [_locked removeObject:bid];
+    [[AtelierSettings shared] setLockedApps:[_locked.allObjects sortedArrayUsingSelector:@selector(compare:)]];
+    AtelierHapticPlay(AtelierHapticSwap);
+    AtelierLog(@"%@ %@", lock ? @"lock" : @"unlock", bid);
+    _lastTouch = CFAbsoluteTimeGetCurrent();
+    [self _layoutAnimated:YES];                          // shows or hides the padlock, wakes it if it was a still
+}
+
+- (void)pairSlot:(NSUInteger)slot {
+    if (slot == 0 || slot >= _tiles.count) return;
+    AtelierTile *t = _tiles[slot];
+    [_tiles removeObjectAtIndex:slot];
+    [_tiles insertObject:t atIndex:1];
+    AtelierLog(@"pair: %@ beside %@", t.pane.bundleID, _tiles[0].pane.bundleID);
+    [self setLayout:AtelierLayoutSplit animated:YES];
 }
 
 - (void)replaceSlot:(NSUInteger)slot with:(NSString *)bid {
@@ -667,6 +826,9 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         [apps addObject:bid];
     } else if (has != NSNotFound) {
         [apps exchangeObjectAtIndex:slot withObjectAtIndex:has];      // already on the bench: the two change places
+    } else if ([self isLocked:apps[slot]]) {
+        [AtelierHost toast:@"Locked. Unlock it to replace it."];
+        return;
     } else {
         apps[slot] = bid;
     }
@@ -690,7 +852,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
 - (void)saveAsSet {
     NSArray<NSString *> *apps = [self apps];
-    if (apps.count < 2) { [AtelierHost toast:@"Add a second app first. A set is two to five apps."]; return; }
+    if (apps.count < 2) { [AtelierHost toast:@"Add a second app first. A set is two to six apps."]; return; }
     AtelierSettings *s = [AtelierSettings shared];
     NSMutableArray<NSDictionary *> *sets = [[s sets] mutableCopy];
     NSSet *mine = [NSSet setWithArray:apps];
@@ -702,10 +864,31 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [AtelierHost toast:[NSString stringWithFormat:@"Saved “%@”. Hold any of its apps' icons to open it.", [AtelierSheets setTitle:set]]];
 }
 
+// Locked apps keep their places; the set's apps take the others, in order.
 - (void)openSet:(NSDictionary *)set {
     NSArray *apps = set[@"apps"];
     if (![apps isKindOfClass:NSArray.class] || apps.count == 0) return;
-    [self openWithApps:apps layout:[set[@"layout"] integerValue]];
+    [self _loadLocks];
+    NSArray<NSString *> *current = _visible ? [self apps] : [[AtelierSettings shared] slots];
+    NSMutableArray<NSString *> *incoming = [[self _usable:apps] mutableCopy];
+    NSMutableDictionary<NSNumber *, NSString *> *pinned = [NSMutableDictionary dictionary];
+    for (NSUInteger i = 0; i < current.count; i++) {
+        if (![self isLocked:current[i]]) continue;
+        pinned[@(i)] = current[i];
+        [incoming removeObject:current[i]];
+    }
+    NSMutableArray<NSString *> *result = [NSMutableArray array];
+    NSUInteger total = MIN((NSUInteger)ATELIER_MAX_SLOTS, pinned.count + incoming.count), next = 0;
+    for (NSUInteger i = 0; result.count < total && i < 2 * ATELIER_MAX_SLOTS; i++) {
+        NSString *pin = pinned[@(i)];
+        if (pin) { [result addObject:pin]; [pinned removeObjectForKey:@(i)]; }
+        else if (next < incoming.count && result.count + pinned.count < total) [result addObject:incoming[next++]];
+        else if (pinned.count == 0) break;
+    }
+    if (next < incoming.count)
+        [AtelierHost toast:[NSString stringWithFormat:@"%lu of the set's apps had no room beside the locked ones.", (unsigned long)(incoming.count - next)]];
+    AtelierLog(@"set: %@ (%lu locked kept)", [result componentsJoinedByString:@" "], (unsigned long)(total - next));
+    [self openWithApps:result layout:[set[@"layout"] integerValue]];
 }
 
 #pragma mark live and still
@@ -763,7 +946,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if (_layout == AtelierLayoutSplit) return out;
     for (NSUInteger i = 1; i < _tiles.count; i++) {
         AtelierTile *t = _tiles[i];
-        if (!t.frozen && !t.parked && t.pane.state == AtelierPaneHosted) [out addObject:t];
+        if (!t.frozen && !t.parked && !t.locked && t.pane.state == AtelierPaneHosted) [out addObject:t];
     }
     return out;
 }
@@ -838,6 +1021,141 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if (g.state != UIGestureRecognizerStateBegan) return;
     NSUInteger slot = [self _slotOfTileWithShield:g.view];
     if (slot != NSNotFound) { AtelierHapticPlay(AtelierHapticSwap); [self showMenuForSlot:slot]; }
+}
+
+#pragma mark swipes on a mini
+
+// What letting go would do, and whether it may. nil = nothing is set for this direction.
+- (NSString *)_swipeTitle:(AtelierSwipe)swipe tile:(AtelierTile *)t allowed:(BOOL *)allowed {
+    BOOL locked = [self isLocked:t.pane.bundleID];
+    *allowed = YES;
+    switch (swipe) {
+        case AtelierSwipeLeft:
+            if (locked) { *allowed = NO; return @"Locked"; }
+            return @"Close";
+        case AtelierSwipeRight:
+            return @"Make Main";
+        case AtelierSwipeUp:
+            return locked ? @"Unlock" : @"Lock";
+        case AtelierSwipeDownward:
+            switch ([AtelierSettings shared].swipeDown) {
+                case AtelierSwipeDownSplit:   return @"Split with Main";
+                case AtelierSwipeDownFull:    return @"Full Screen";
+                case AtelierSwipeDownReplace:
+                    if (locked) { *allowed = NO; return @"Locked"; }
+                    return @"Replace";
+                default: break;
+            }
+            *allowed = NO;
+            return nil;
+    }
+    *allowed = NO;
+    return nil;
+}
+
+- (void)performSwipe:(AtelierSwipe)swipe onSlot:(NSUInteger)slot {
+    if (slot == 0 || slot >= _tiles.count) return;
+    static NSArray<NSString *> *names;
+    if (!names) names = @[ @"left", @"right", @"up", @"down" ];
+    AtelierTile *t = _tiles[slot];
+    NSString *bid = t.pane.bundleID;
+    BOOL allowed = NO;
+    NSString *title = [self _swipeTitle:swipe tile:t allowed:&allowed];
+    if (!allowed) {
+        AtelierLog(@"swipe %@ on %@: refused (%@)", names[(NSUInteger)swipe], bid, title ?: @"nothing set");
+        if (title) AtelierHapticPlay(AtelierHapticSwap);
+        return;
+    }
+    AtelierLog(@"swipe %@ on %@: %@", names[(NSUInteger)swipe], bid, title);
+    switch (swipe) {
+        case AtelierSwipeLeft:  [self closeSlot:slot]; break;
+        case AtelierSwipeRight: [self makeMain:slot]; break;
+        case AtelierSwipeUp:    [self toggleLockSlot:slot]; break;
+        case AtelierSwipeDownward: {
+            AtelierSwipeDown what = [AtelierSettings shared].swipeDown;
+            if (what == AtelierSwipeDownSplit) [self pairSlot:slot];
+            else if (what == AtelierSwipeDownFull) [self fullScreenSlot:slot];
+            else if (what == AtelierSwipeDownReplace) {
+                __weak typeof(self) weak = self;
+                [AtelierSheets pickAppWithTitle:@"Replace with" excluding:@[ bid ] then:^(NSString *picked) {
+                    NSUInteger at = [[weak apps] indexOfObject:bid];
+                    if (at != NSNotFound) [weak replaceSlot:at with:picked];
+                }];
+            }
+            break;
+        }
+    }
+}
+
+- (void)_hideSwipePill {
+    if (_swipePill.alpha == 0) return;
+    [UIView animateWithDuration:0.12 animations:^{ self->_swipePill.alpha = 0; }];
+}
+
+- (void)_showSwipePill:(NSString *)title armed:(BOOL)armed refused:(BOOL)refused beside:(CGRect)tile {
+    if (title.length == 0) { [self _hideSwipePill]; return; }
+    _swipePill.text = title;
+    _swipePill.backgroundColor = armed ? [UIColor colorWithRed:0.42 green:0.40 blue:0.95 alpha:1]
+                                       : (refused ? [UIColor colorWithRed:0.45 green:0.16 blue:0.16 alpha:0.92] : [UIColor colorWithWhite:0.05 alpha:0.85]);
+    _swipePill.textColor = (armed || refused) ? UIColor.whiteColor : [UIColor colorWithWhite:1 alpha:0.78];
+    CGSize screen = [AtelierHost screenSize];
+    CGFloat w = ceil([_swipePill sizeThatFits:CGSizeMake(200, 26)].width) + 22, h = 26;
+    // beside the tile in the column, under it in the row
+    CGFloat x = _layout == AtelierLayoutTop ? CGRectGetMidX(tile) - w / 2.0 : CGRectGetMaxX(tile) + 10;
+    CGFloat y = _layout == AtelierLayoutTop ? CGRectGetMaxY(tile) + 8 : CGRectGetMidY(tile) - h / 2.0;
+    x = MAX(8, MIN(screen.width - w - 8, x));
+    _swipePill.frame = CGRectMake(x, y, w, h);
+    _swipePill.alpha = 1;
+}
+
+// The mini follows the finger along the way the swipe set out; past 40 points letting go acts.
+- (void)_miniPanned:(UIPanGestureRecognizer *)g {
+    NSUInteger slot = [self _slotOfTileWithShield:g.view];
+    if (slot == NSNotFound || slot == 0) return;
+    AtelierTile *t = _tiles[slot];
+    CGPoint d = [g translationInView:_root];
+    if (g.state == UIGestureRecognizerStateBegan) {
+        [self hideMenu];
+        _swipeTile = t;
+        _swipeAxis = fabs(d.x) >= fabs(d.y) ? 1 : 2;
+        _swipeArmed = NO;
+        _lastTouch = CFAbsoluteTimeGetCurrent();
+        [_stage bringSubviewToFront:t];
+    }
+    if (t != _swipeTile) return;
+    CGFloat v = _swipeAxis == 1 ? d.x : d.y;
+    AtelierSwipe swipe = _swipeAxis == 1 ? (v < 0 ? AtelierSwipeLeft : AtelierSwipeRight) : (v < 0 ? AtelierSwipeUp : AtelierSwipeDownward);
+    BOOL allowed = NO;
+    NSString *title = [self _swipeTitle:swipe tile:t allowed:&allowed];
+    CGFloat threshold = 40;
+    if (g.state == UIGestureRecognizerStateBegan || g.state == UIGestureRecognizerStateChanged) {
+        CGFloat shown = MAX(-96, MIN(96, allowed ? v : v * 0.22));          // a refused swipe barely gives
+        t.transform = _swipeAxis == 1 ? CGAffineTransformMakeTranslation(shown, 0) : CGAffineTransformMakeTranslation(0, shown);
+        BOOL armed = allowed && fabs(v) >= threshold;
+        if (armed != _swipeArmed) {
+            _swipeArmed = armed;
+            if (armed) AtelierHapticPlay(AtelierHapticTick);
+        }
+        [self _showSwipePill:title armed:armed refused:(!allowed && title.length) beside:[self _rectForSlot:slot geometry:_geometry]];
+        return;
+    }
+    BOOL fire = g.state == UIGestureRecognizerStateEnded && _swipeArmed;
+    BOOL refused = g.state == UIGestureRecognizerStateEnded && !allowed && title.length && fabs(v) >= threshold;
+    _swipeTile = nil;
+    _swipeArmed = NO;
+    [self _hideSwipePill];
+    if (fire) {
+        // it stays where the finger left it; what follows animates it from there
+        CGRect where = t.frame;
+        t.transform = CGAffineTransformIdentity;
+        t.frame = where;
+        [self performSwipe:swipe onSlot:slot];
+        [self _layoutAnimated:YES];
+        return;
+    }
+    if (refused) [self performSwipe:swipe onSlot:slot];                     // logs it and taps the finger
+    [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.3
+                        options:UIViewAnimationOptionAllowUserInteraction animations:^{ t.transform = CGAffineTransformIdentity; } completion:nil];
 }
 
 - (void)_grabberTapped:(UIButton *)b {
@@ -926,7 +1244,8 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
         if (i != NSNotFound) [weak fullScreenSlot:i];
     })];
     if (!mini) [items addObject:AtelierMenuItem(@"Switch Layout", @"rectangle.3.group", NO, ^{ [weak cycleLayout]; })];
-    if (has) {
+    BOOL locked = has && [self isLocked:bid];
+    if (has && !locked) {
         [items addObject:AtelierMenuItem(@"Replace App", @"arrow.triangle.2.circlepath", NO, ^{
             if (where() == NSNotFound) return;
             [AtelierSheets pickAppWithTitle:@"Replace with" excluding:(bid ? @[ bid ] : @[]) then:^(NSString *picked) {
@@ -939,6 +1258,10 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
             if (i != NSNotFound) [weak closeSlot:i];
         })];
     }
+    if (has) [items addObject:AtelierMenuItem(locked ? @"Unlock" : @"Lock", locked ? @"lock.open" : @"lock", NO, ^{
+        NSUInteger i = where();
+        if (i != NSNotFound) [weak toggleLockSlot:i];
+    })];
     if (!mini) {
         [items addObject:AtelierMenuItem(@"Save as Set", @"square.stack.3d.up", NO, ^{ [weak saveAsSet]; })];
         [items addObject:AtelierMenuItem(@"Sets…", @"list.bullet.rectangle", NO, ^{ [AtelierSheets showSets]; })];
@@ -970,16 +1293,50 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     for (NSUInteger i = 0; i < _tiles.count; i++) {
         AtelierTile *t = _tiles[i];
-        [parts addObject:[NSString stringWithFormat:@"[%lu %@%@%@ %.0f,%.0f %.0fx%.0f x%.3f]", (unsigned long)i, [t.pane debugState],
-                          t.frozen ? @" frozen" : @"", t.parked ? @" parked" : @"", t.frame.origin.x, t.frame.origin.y,
+        [parts addObject:[NSString stringWithFormat:@"[%lu %@%@%@%@ %.0f,%.0f %.0fx%.0f x%.3f]", (unsigned long)i, [t.pane debugState],
+                          t.frozen ? @" frozen" : @"", t.parked ? @" parked" : @"", [self isLocked:t.pane.bundleID] ? @" LOCKED" : @"",
+                          t.frame.origin.x, t.frame.origin.y,
                           t.frame.size.width, t.frame.size.height, [t tileScale]]];
     }
     NSMutableArray<NSString *> *menu = [NSMutableArray array];
     for (NSDictionary *item in _menu.items) [menu addObject:item[@"title"]];
-    return [NSString stringWithFormat:@"bench %@ layout %ld split %.2f front-at-open %@ idle %.1fs menu [%@] %@",
+    return [NSString stringWithFormat:@"bench %@ layout %ld split %.2f front-at-open %@ idle %.1fs menu [%@] %@ · %@",
             _visible ? @"up" : @"hidden", (long)_layout, _split, _frontAtOpen ?: @"home",
             _visible ? CFAbsoluteTimeGetCurrent() - _lastTouch : 0.0, [menu componentsJoinedByString:@" | "],
-            [parts componentsJoinedByString:@" "]];
+            [parts componentsJoinedByString:@" "], _band ? [_band debugState] : @"no band"];
+}
+
+// Every tile, pill, place and shortcut with its frame on the screen, one per line:
+//   name x y width height scale        (scale: the app's picture, 0 for things that aren't apps)
+// Also written to <log dir>/atelier_where.txt, for a test that has to aim a finger.
+- (NSString *)debugWhere {
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    void (^add)(NSString *, CGRect, CGFloat) = ^(NSString *name, CGRect r, CGFloat scale) {
+        if (CGRectIsEmpty(r)) return;
+        [lines addObject:[NSString stringWithFormat:@"%@ %.1f %.1f %.1f %.1f %.4f", name, r.origin.x, r.origin.y, r.size.width, r.size.height, scale]];
+    };
+    if (_visible) {
+        for (NSUInteger i = 0; i < _tiles.count; i++) {
+            AtelierTile *t = _tiles[i];
+            if (t.parked) continue;
+            NSString *name = i == 0 ? @"main" : (_layout == AtelierLayoutSplit ? @"second" : [NSString stringWithFormat:@"mini%lu", (unsigned long)(i - 1)]);
+            add(name, [self _rectForSlot:i geometry:_geometry], [t tileScale]);
+        }
+        if (_layout != AtelierLayoutSplit) for (NSInteger i = 0; i < 5; i++) add([NSString stringWithFormat:@"place%ld", (long)i], _geometry.minis[i], 0);
+        add(@"plus", _geometry.plus, 0);
+        add(@"pill", _geometry.grabber, 0);
+        add(@"pill2", _geometry.grabber2, 0);
+        add(@"divider", _geometry.divider, 0);
+        add(@"band", _geometry.band, 0);
+        if (!CGRectIsEmpty(_geometry.band)) {
+            for (NSDictionary *item in [_band debugFrames]) add(item[@"name"], [_band convertRect:[item[@"frame"] CGRectValue] toView:_root], 0);
+        }
+        if (_menu) add(@"menu", _menu.frame, 0);
+    }
+    NSString *text = [lines componentsJoinedByString:@"\n"];
+    [[text stringByAppendingString:@"\n"] writeToFile:[AtelierLogDir() stringByAppendingPathComponent:@"atelier_where.txt"]
+                                          atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    return text;
 }
 
 - (void)debugMenuTap:(NSUInteger)index {

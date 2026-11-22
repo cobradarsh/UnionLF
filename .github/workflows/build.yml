@@ -41,7 +41,7 @@ jobs:
           clang --version
           SDK="$RUNNER_TEMP/sdk/iPhoneOS16.5.sdk"
           fail=0
-          for f in Tweak.m Atelier*.m probe/main.m; do
+          for f in Tweak.m Atelier*.m PrefsHelper.m probe/main.m; do
             echo "== $f"
             clang -fsyntax-only -x objective-c -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc \
               -Wall -Werror -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function \
@@ -132,17 +132,20 @@ jobs:
 
       - name: Gate (versioned arm64e slice, system libraries only)
         run: |
-          # the staged (fat) copy, not a thin per-arch one from .theos/obj/<arch>/
-          DY=$(find . -path "*DynamicLibraries/Atelier.dylib" | head -1)
-          [ -n "$DY" ] || DY=.theos/obj/Atelier.dylib
-          echo "dylib under test: $DY"
-          lipo -detailed_info "$DY" || true
-          python3 tools/verify_dylib.py "$DY"
-          for arch in arm64 arm64e; do
-            echo "--- $arch: links against ---"
-            otool -arch $arch -L "$DY" || true
-            echo "--- $arch: size ---"
-            size -arch $arch "$DY" || true
+          # the staged (fat) copies, not thin per-arch ones from .theos/obj/<arch>/
+          # Atelier goes into SpringBoard, AtelierPrefs into Settings: both are arm64e processes
+          for name in Atelier AtelierPrefs; do
+            DY=$(find . -path "*DynamicLibraries/$name.dylib" | head -1)
+            [ -n "$DY" ] || DY=.theos/obj/$name.dylib
+            echo "dylib under test: $DY"
+            lipo -detailed_info "$DY" || true
+            python3 tools/verify_dylib.py "$DY"
+            for arch in arm64 arm64e; do
+              echo "--- $arch: links against ---"
+              otool -arch $arch -L "$DY" || true
+              echo "--- $arch: size ---"
+              size -arch $arch "$DY" || true
+            done
           done
           echo "--- what is in the package ---"
           mkdir -p "$RUNNER_TEMP/deb"
