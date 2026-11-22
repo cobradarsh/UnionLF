@@ -40,7 +40,7 @@ echo "== build for the simulator ($ARCH, $SDK)"
   APP="$OUT/ShaniProbe.app"
   rm -rf "$APP"
   mkdir -p "$APP"
-  xcrun --sdk iphonesimulator clang $FLAGS -framework UIKit -framework Foundation -framework UserNotifications \
+  xcrun --sdk iphonesimulator clang $FLAGS -framework UIKit -framework Foundation -framework CoreGraphics -framework UserNotifications \
     -o "$APP/ShaniProbe" probe/main.m || exit 1
   cp probe/Info.plist "$APP/Info.plist"
   codesign -f -s - "$APP" || exit 1
