@@ -24,7 +24,7 @@ import sys
 
 MARGIN, GAP, GRAB, MAX_SLOTS = 10.0, 8.0, 26.0, 6
 SIDE, TOP, SPLIT = 0, 1, 2
-DOCKS = {"toggles, the credit between them": 30.0, "credit only": 12.0, "compact": 28.0}     # AtelierDock +heightForWidth:compact:
+DOCKS = {"switches, the credit between them": 28.0, "credit only": 12.0}     # AtelierDock +heightForWidth:compact:
 
 
 def edge_strip(W, H, safe_bottom, dock, side, height):
@@ -176,7 +176,7 @@ def main():
 
     for name, W, H, st, sb, island in SCREENS:
         for kind in (SIDE, TOP, SPLIT):
-            docks = [30.0, 12.0] if kind == SIDE else [28.0, 12.0]
+            docks = list(DOCKS.values())
             for resize in (False, True):
                 for indices in (True, False):
                     for dock_h in docks:
@@ -259,7 +259,7 @@ def main():
                                 ratio = (g["main"][2] / g["main"][3]) / (W / H)
                                 if abs(ratio - 1) > 0.012:
                                     bad("PROPORTION", where, "main %s" % (g["main"],))
-        g = compute(SIDE, W, H, st, sb, 6, dock_h=30.0)
+        g = compute(SIDE, W, H, st, sb, 6, dock_h=28.0)
         t = compute(TOP, W, H, st, sb, 6, dock_h=28.0)
         print("%-18s side: main %3.0fx%3.0f at %3.0f,%3.0f (x%.3f) minis %2.0fx%5.1f band %3.0f..%3.0f dock %3.0f..%3.0f   top: main %3.0fx%3.0f (x%.3f) minis %4.1fx%2.0f"
               % (name, g["main"][2], g["main"][3], g["main"][0], g["main"][1], g["main"][2] / W, g["minis"][0][2], g["minis"][0][3],

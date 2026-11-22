@@ -18,7 +18,9 @@
       - India's session is open (AtelierIndiaSessionOpen: weekdays, 09:15 to 15:30, holidays
         excluded): every 5 seconds.
       - It is closed: one fetch when the bench comes up, for the last close; then nothing but a
-        look at the clock every 30 seconds to see whether the session has opened.
+        look at the clock every 30 seconds to see whether the session has opened. (If the bench
+        was up through the close, one more fetch ten minutes later: the closing figure takes a
+        few minutes to settle.)
       - A failure or an HTTP 429: the old numbers stay, dimmed, and the next tries come after
         10, 20, 40 and then 60 seconds.
     -stop cancels whatever is in flight and throws the session away.                           */
@@ -154,6 +156,9 @@
     NSArray<AtelierQuote *> *_quotes;
     NSTimer *_timer;
     BOOL _running, _inFlight, _failing, _fake;
+    BOOL _fresh;                         // an answer has come since the bench last came up
+    BOOL _sawOpen;                       // the session was open at the last answer
+    CFAbsoluteTime _settleAt;            // when to fetch the settled close (0 = not waiting for one)
     NSInteger _failures;                 // in a row
     NSInteger _generation;               // answers to an older start are dropped
     NSUInteger _fetches, _good;
@@ -180,6 +185,9 @@
     _running = YES;
     _generation++;
     _failures = 0;
+    _fresh = NO;                         // what is left from the last time is shown, and fetched again
+    _sawOpen = NO;
+    _settleAt = 0;
     if (![AtelierSettings shared].showIndices || _fake) return;
     [self _after:0.05];
 }
@@ -213,12 +221,14 @@
     _timer = nil;
     if (!_running || _fake || ![AtelierSettings shared].showIndices) return;
     BOOL open = AtelierIndiaSessionOpen(AtelierNow());
-    if (!open && _quotes.count && !_failing) {
+    BOOL settle = _settleAt > 0 && CFAbsoluteTimeGetCurrent() >= _settleAt;
+    if (!open && _quotes.count && !_failing && _fresh && !settle) {
         // closed, and the close is on the glass: nothing to fetch, just notice the open
         [self _changed];
         [self _after:30];
         return;
     }
+    if (settle) _settleAt = 0;
     [self _fetch:NO];
 }
 
@@ -251,6 +261,9 @@
         _good++;
         _lastProblem = nil;
         BOOL open = AtelierIndiaSessionOpen(AtelierNow());
+        if (_sawOpen && !open) _settleAt = CFAbsoluteTimeGetCurrent() + 600;      // it closed while the bench was up
+        _sawOpen = open;
+        _fresh = YES;
         next = open ? 5 : 30;
         if (wasFailing || once) AtelierLog(@"quotes: %@ from %@ in %.2f s (%@)", [self _numbers], host ?: @"?", took,
                                            open ? @"session open, every 5 s" : @"session closed, this is the close");

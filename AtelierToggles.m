@@ -25,8 +25,9 @@
     the slower radios), and every three seconds while the bench is on screen; nothing is read or
     watched while it is not. Every action is logged with the state before and after.
 
-    The credit line sits in the same strip: in one line where there is room for it, else as two
-    short lines (the name over the rest), so that it never costs the apps any height.          */
+    The switches stand in two even groups, left and right, and the credit sits between them,
+    centred on the screen: in one line where there is room for it, else as two short lines (the
+    name over the rest), so that it never costs the apps any height.                           */
 
 #import "Atelier.h"
 #import <dlfcn.h>
@@ -398,9 +399,9 @@ static BOOL AtelierIdleReset(BOOL really) {
     self.alpha = highlighted ? 0.6 : 1.0;
 }
 
-// a little more to aim at than the 30 points that show
+// a little more to aim at than the 28 points that show (never as far as the next switch)
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
-    return CGRectContainsPoint(CGRectInset(self.bounds, -4, -4), point);
+    return CGRectContainsPoint(CGRectInset(self.bounds, -3, -4), point);
 }
 
 @end
@@ -424,34 +425,44 @@ static NSArray<NSNumber *> *AtelierShownToggles(void) {
     return out;
 }
 
-// "HyperTrade created by Adarsh Somashekar": in one line, or the name over the rest.
-static NSAttributedString *AtelierCreditText(BOOL stacked, NSTextAlignment alignment) {
+// "HyperTrade created by Adarsh Somashekar": in one line of `size` points, or (size 0) the name
+// over the rest.
+static NSAttributedString *AtelierCreditText(CGFloat size) {
+    BOOL stacked = size <= 0;
     NSMutableParagraphStyle *para = [NSMutableParagraphStyle new];
-    para.alignment = alignment;
+    para.alignment = NSTextAlignmentCenter;
     para.lineSpacing = 0;
     para.lineBreakMode = NSLineBreakByTruncatingTail;
     NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:ATELIER_NAME attributes:@{
-        NSFontAttributeName: [UIFont systemFontOfSize:stacked ? 10.5 : 9.5 weight:UIFontWeightSemibold],
+        NSFontAttributeName: [UIFont systemFontOfSize:stacked ? 10.5 : size weight:UIFontWeightSemibold],
         NSForegroundColorAttributeName: [UIColor colorWithWhite:1 alpha:0.62], NSKernAttributeName: @(stacked ? 0.5 : 0.2),
         NSParagraphStyleAttributeName: para }];
     [text appendAttributedString:[[NSAttributedString alloc] initWithString:[(stacked ? @"\n" : @" ") stringByAppendingString:kCredit] attributes:@{
-        NSFontAttributeName: [UIFont systemFontOfSize:stacked ? 9 : 9.5 weight:UIFontWeightRegular],
+        NSFontAttributeName: [UIFont systemFontOfSize:stacked ? 9 : size weight:UIFontWeightRegular],
         NSForegroundColorAttributeName: [UIColor colorWithWhite:1 alpha:0.42], NSKernAttributeName: @0.1,
         NSParagraphStyleAttributeName: para }]];
     return text;
 }
 
-static CGFloat AtelierCreditWidth(BOOL stacked) {
-    return ceil([AtelierCreditText(stacked, NSTextAlignmentCenter) boundingRectWithSize:CGSizeMake(1000, 100)
-                                                  options:NSStringDrawingUsesLineFragmentOrigin context:nil].size.width);
+static CGFloat AtelierCreditWidth(CGFloat size) {
+    return ceil([AtelierCreditText(size) boundingRectWithSize:CGSizeMake(1000, 100)
+                                                      options:NSStringDrawingUsesLineFragmentOrigin context:nil].size.width);
 }
 
-// How tall the dock is for what it shows: a row of 30-point switches (28 in Top and Split), or
-// just the credit line when every switch is off in Settings. The credit never adds to it.
+// The credit for a room `width` points wide: one line at 9.5 points, or at 9, or the two short
+// lines; nil when not even those fit.
+static NSAttributedString *AtelierCreditFor(CGFloat width) {
+    static const CGFloat sizes[] = { 9.5, 9.0, 0 };
+    for (int i = 0; i < 3; i++) if (AtelierCreditWidth(sizes[i]) <= width) return AtelierCreditText(sizes[i]);
+    return nil;
+}
+
+static const CGFloat kToggle = 28, kToggleGap = 6;
+
+// How tall the dock is for what it shows: a row of switches, or just the credit line when every
+// switch is off in Settings. The credit never adds to it.
 + (CGFloat)heightForWidth:(CGFloat)width compact:(BOOL)compact {
-    NSUInteger n = AtelierShownToggles().count;
-    if (n == 0) return 12;
-    return compact ? 28 : 30;
+    return AtelierShownToggles().count ? kToggle : 12;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -517,33 +528,23 @@ static CGFloat AtelierCreditWidth(BOOL stacked) {
     CGFloat W = self.bounds.size.width, H = self.bounds.size.height;
     NSUInteger n = _buttons.count;
     if (n == 0) {
-        _credit.attributedText = AtelierCreditText(NO, NSTextAlignmentCenter);
+        _credit.attributedText = AtelierCreditText(9.5);
         _credit.hidden = NO;
         _credit.frame = CGRectMake(0, MAX(0, H - 12), W, 12);
         return;
     }
-    if (_compact) {
-        // Top and Split: the switches in one group on the left, the credit against the right edge
-        CGFloat side = 28, gap = 7, x = 0;
-        for (AtelierToggleButton *b in _buttons) { b.frame = CGRectMake(x, (H - side) / 2.0, side, side); x += side + gap; }
-        CGFloat room = W - x - 4;
-        BOOL stacked = room < AtelierCreditWidth(NO);
-        _credit.attributedText = AtelierCreditText(stacked, NSTextAlignmentRight);
-        _credit.hidden = room < AtelierCreditWidth(stacked);
-        _credit.frame = CGRectMake(W - room, 0, room, H);
-        return;
-    }
-    // Side: the first two on the left, the others against the right edge, the credit between them
-    CGFloat side = 30, gap = 8;
-    NSUInteger left = MIN((NSUInteger)2, n);
-    for (NSUInteger i = 0; i < left; i++) _buttons[i].frame = CGRectMake(i * (side + gap), 0, side, side);
-    for (NSUInteger i = left; i < n; i++) _buttons[i].frame = CGRectMake(W - side - (n - 1 - i) * (side + gap), 0, side, side);
-    CGFloat from = left * (side + gap), to = n > left ? W - (n - left) * (side + gap) : W;
-    CGFloat room = MAX(0, to - from);
-    BOOL stacked = room < AtelierCreditWidth(NO);
-    _credit.attributedText = AtelierCreditText(stacked, NSTextAlignmentCenter);
-    _credit.hidden = room < AtelierCreditWidth(stacked);
-    _credit.frame = CGRectMake(from, 0, room, H);
+    // Half of the switches against the left edge (the radios, when all six are on), the other half
+    // against the right; the credit in the middle of the dock, which is the middle of the screen.
+    CGFloat side = MIN(kToggle, H), pitch = side + kToggleGap, y = (H - side) / 2.0;
+    NSUInteger left = (n + 1) / 2;
+    for (NSUInteger i = 0; i < left; i++) _buttons[i].frame = CGRectMake(i * pitch, y, side, side);
+    for (NSUInteger i = left; i < n; i++) _buttons[i].frame = CGRectMake(W - side - (n - 1 - i) * pitch, y, side, side);
+    CGFloat from = left * pitch, to = n > left ? W - (n - left) * pitch : W;
+    CGFloat half = MIN(W / 2.0 - from, to - W / 2.0) - 4;            // the room each side of the middle
+    NSAttributedString *credit = half > 0 ? AtelierCreditFor(2 * half) : nil;
+    _credit.attributedText = credit;
+    _credit.hidden = credit == nil;
+    _credit.frame = CGRectMake(W / 2.0 - MAX(0, half), 0, 2 * MAX(0, half), H);
 }
 
 #pragma mark tests
@@ -569,7 +570,7 @@ static CGFloat AtelierCreditWidth(BOOL stacked) {
     for (AtelierToggleButton *b in _buttons) [parts addObject:[NSString stringWithFormat:@"%@ %@", [AtelierToggles key:b.kind], b.on ? @"ON" : @"off"]];
     NSMutableArray<NSString *> *missing = [NSMutableArray array];
     for (NSInteger k = 0; k < AtelierToggleCount; k++) if (![AtelierToggles available:(AtelierToggleKind)k]) [missing addObject:[AtelierToggles key:(AtelierToggleKind)k]];
-    return [NSString stringWithFormat:@"dock %@ [%@]%@ credit %@", _compact ? @"compact" : @"tall", [parts componentsJoinedByString:@" · "],
+    return [NSString stringWithFormat:@"dock [%@]%@ credit %@", [parts componentsJoinedByString:@" · "],
             missing.count ? [NSString stringWithFormat:@" (no calls here for: %@)", [missing componentsJoinedByString:@" "]] : @"",
             _credit.hidden ? @"hidden" : [NSString stringWithFormat:@"\"%@\" in %.0f pt",
                                           [_credit.attributedText.string stringByReplacingOccurrencesOfString:@"\n" withString:@" / "], _credit.frame.size.width]];
