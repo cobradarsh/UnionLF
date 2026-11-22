@@ -12,7 +12,9 @@
                     and its app is in the background. A locked app is never frozen and can't be
                     swiped away.
 
-    Above the tiles is the band (AtelierBand.m): clock, market flags, shortcut apps.
+    Above the tiles is the band (AtelierBand.m): index numbers, clock, market flags, shortcut
+    apps. Under them the dock (AtelierToggles.m): six switches and the credit line. A swipe up
+    that starts on the dock or below it puts the bench away.
 
     While the bench is up a half-second clock looks after it: it puts the bench away when
     SpringBoard moves on (another app in front, the App Switcher, a lock), restarts an app that
@@ -169,6 +171,8 @@
         title.text = item[@"title"];
         title.textColor = tint;
         title.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
+        title.adjustsFontSizeToFitWidth = YES;          // "Remove from Shortcuts" is a hair too long at full size
+        title.minimumScaleFactor = 0.8;
         title.userInteractionEnabled = NO;
         [row addSubview:title];
         UIImage *glyph = [UIImage systemImageNamed:item[@"symbol"] ?: @""
@@ -278,14 +282,19 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     double _split;
     BOOL _closing;
     BOOL _swipeFromBottom;
-    UIPanGestureRecognizer *_bottomPan;
+    CGPoint _bottomDown;                     // where the finger of a swipe up from the bottom came down
+    UIPanGestureRecognizer *_bottomPan, *_dockPan;
     AtelierGeometry _geometry;
-    AtelierBand *_band;                      // clock, flags, shortcut apps
+    AtelierBand *_band;                      // index numbers, clock, flags, shortcut apps
+    AtelierDock *_dock;                      // toggles and the credit line
+    NSInteger _ticks;                        // of the half-second clock, since the bench came up
+    CGFloat _stripFloor;                     // the dock's top as the edge strip last heard it
     NSMutableArray<UIView *> *_outlines;     // the free mini places
     UILabel *_swipePill;                     // names what letting go of a swiped mini will do
     AtelierTile *_swipeTile;
     NSInteger _swipeAxis;                    // 1 sideways, 2 up and down
     BOOL _swipeArmed;
+    CGPoint _swipeDown;                      // where the finger on a mini came down
     NSMutableSet<NSString *> *_locked;       // bundle ids
 }
 
@@ -396,7 +405,19 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _band = [[AtelierBand alloc] initWithFrame:CGRectZero];
     _band.alpha = 0;
     _band.onShortcut = ^(NSString *bid) { [weak openShortcut:bid]; };
+    _band.onShortcutHeld = ^(NSString *bid, CGRect frame) { [weak _showShortcutMenu:bid frame:frame]; };
+    _band.onAddShortcut = ^{ [weak _addShortcut]; };
     [_root addSubview:_band];
+
+    _dock = [[AtelierDock alloc] initWithFrame:CGRectZero];
+    _dock.alpha = 0;
+    // a swipe up that starts on one of the switches closes the bench too (and does not flip the switch)
+    UIPanGestureRecognizer *dockUp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_bottomSwipe:)];
+    dockUp.maximumNumberOfTouches = 1;
+    dockUp.delegate = self;
+    [_dock addGestureRecognizer:dockUp];
+    _dockPan = dockUp;
+    [_root addSubview:_dock];
 
     _swipePill = [UILabel new];
     _swipePill.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
@@ -426,12 +447,23 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [_root addSubview:_swipePill];
 }
 
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other { return YES; }
+// Recognisers on different views never end one another: nothing on the backdrop, the dock or the
+// screen's edge can cut a mini's swipe short. On one and the same view they stay rivals, so a
+// mini's hold (its menu) and its swipe are still one or the other, whichever comes first.
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return g.view != other.view;
+}
 
-// Where the finger came down is noted here: by the time a pan begins it has already travelled,
-// and how far it says it has is not to be relied on.
+// Where the finger came down is noted here: by the time a pan begins it has already travelled
+// ten points or so, and its own figure for how far it has gone leaves those out.
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
-    if (g == _bottomPan) _swipeFromBottom = [touch locationInView:_root].y >= [AtelierHost screenSize].height - 56;
+    CGPoint p = [touch locationInView:_root];
+    if (g == _bottomPan || g == _dockPan) {
+        _bottomDown = p;
+        _swipeFromBottom = CGRectContainsPoint(_geometry.closeStrip, p);
+    } else if ([g isKindOfClass:UIPanGestureRecognizer.class] && [self _slotOfTileWithShield:g.view] != NSNotFound) {
+        _swipeDown = p;
+    }
     return YES;
 }
 
@@ -442,6 +474,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     for (NSString *bid in bids) {
         if (![bid isKindOfClass:NSString.class] || bid.length == 0 || [out containsObject:bid]) continue;
         if (![AtelierHost applicationForBundleID:bid]) continue;
+        if ([AtelierHost isHiddenApp:bid]) continue;                    // hidden by SporeX: never on the bench
         if (out.count >= ATELIER_MAX_SLOTS) break;
         [out addObject:bid];
     }
@@ -477,6 +510,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 - (void)open {
     if (_visible) return;
     AtelierSettings *s = [AtelierSettings shared];
+    [AtelierHost reloadHiddenApps];
     [self _loadLocks];
     NSArray<NSString *> *apps = [s slots];
     NSString *front = [AtelierHost frontmostBundleID];
@@ -493,6 +527,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 }
 
 - (void)openAdding:(NSString *)bid {
+    [AtelierHost reloadHiddenApps];
+    if ([AtelierHost isHiddenApp:bid]) return;
     NSArray<NSString *> *base = _visible ? [self apps] : [[AtelierSettings shared] slots];
     NSArray<NSString *> *with = [self _list:base withFirst:bid];
     if (!with) [AtelierHost toast:@"The bench is full of locked apps. Unlock one to make room."];
@@ -501,7 +537,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
 // A shortcut app from the band: it becomes the main app. Nothing is pushed off a full bench.
 - (void)openShortcut:(NSString *)bid {
-    if (!_visible || bid.length == 0) return;
+    if (!_visible || bid.length == 0 || [AtelierHost isHiddenApp:bid]) return;
     [self hideMenu];
     NSArray<NSString *> *apps = [self apps];
     NSUInteger at = [apps indexOfObject:bid];
@@ -528,14 +564,17 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
 - (void)_presentApps:(NSArray<NSString *> *)bids layout:(AtelierLayoutKind)layout {
     AtelierSettings *s = [AtelierSettings shared];
-    if (!s.enabled) { AtelierLog(@"open: Atelier is switched off"); return; }
+    if (!s.enabled) { AtelierLog(@"open: %@ is switched off", ATELIER_NAME); return; }
     if ([AtelierHost isLocked]) { AtelierLog(@"open: the phone is locked"); return; }
     if (_closing) return;
+    [AtelierHost reloadHiddenApps];                      // SporeX's list, as it is now
     [self _ensureWindow];
     [self _loadLocks];
     _window.windowLevel = (UIWindowLevel)[s tune:@"windowLevel" fallback:999];
     _layout = layout;
+    _ticks = 0;
     [_band reload];
+    [_dock reload];
     _split = MAX(0.3, MIN(0.7, [s tune:@"split" fallback:0.5]));
     _frontAtOpen = [AtelierHost frontmostBundleID];
     _visible = YES;
@@ -555,6 +594,10 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     }];
     _watch.tolerance = 0.15;
     [_band start];
+    [_dock refresh];                                     // what the switches are at, now
+    AtelierQuotes *quotes = [AtelierQuotes shared];      // index numbers: fetched only from here to the close
+    quotes.onChange = ^{ [weak _quotesChanged]; };
+    [quotes start];
     AtelierHIDStart();
     [[AtelierTrigger shared] refresh];
     AtelierLog(@"bench open: %@ · layout %ld · front %@ · level %.0f", [[self apps] componentsJoinedByString:@" "],
@@ -573,6 +616,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [_watch invalidate];
     _watch = nil;
     [_band stop];
+    [[AtelierQuotes shared] stop];                       // nothing is fetched once the bench is on its way out
+    [AtelierToggles benchWentAway];                      // Keep Awake ends here, whatever closed the bench
     AtelierHIDStop();
     [self hideMenu];
     [self _hideSwipePill];
@@ -589,6 +634,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         self->_window.hidden = YES;
         self->_visible = NO;
         self->_closing = NO;
+        self->_stripFloor = 0;
         [[AtelierTrigger shared] refresh];
         if (then) then();
     };
@@ -616,8 +662,38 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _layout = [s layout];                               // the Layout row in Settings writes the same key
     [self _loadLocks];
     [_band reload];
+    [_dock reload];
+    [_dock refresh];
+    [[AtelierQuotes shared] settingsChanged];
     [self _thawAll];
     [self _layoutAnimated:YES];
+}
+
+// SporeX's list changed (its own notification): an app it hides now leaves the bench, the
+// shortcut row and any list that is open.
+- (void)hiddenAppsChanged {
+    [AtelierHost reloadHiddenApps];
+    if (!_visible) return;
+    NSArray<NSString *> *apps = [self apps], *kept = [self _usable:apps];
+    if ([AtelierSheets isOpen]) [AtelierSheets dismiss];
+    [self hideMenu];
+    [_band reload];
+    if (kept.count != apps.count) {
+        AtelierLog(@"hidden apps changed: %lu app(s) leave the bench", (unsigned long)(apps.count - kept.count));
+        [self _setApps:kept animated:YES];
+    } else {
+        [self _layoutAnimated:YES];
+    }
+}
+
+- (void)_quotesChanged {
+    if (_visible) [_band quotesChanged];
+}
+
+// The dock's top while the bench is up (0 when it is not): the edge strip ends above it, so the
+// strip never lies over a switch.
+- (CGFloat)dockTop {
+    return (_visible && !CGRectIsEmpty(_geometry.dock)) ? _geometry.dock.origin.y : 0;
 }
 
 #pragma mark tiles
@@ -638,6 +714,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
             [tile.shield addGestureRecognizer:hold];
             UIPanGestureRecognizer *swipe = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_miniPanned:)];
             swipe.maximumNumberOfTouches = 1;
+            swipe.delegate = self;                       // notes where the finger came down
             [tile.shield addGestureRecognizer:swipe];
             tile.alpha = 0;
             tile.liveSince = CFAbsoluteTimeGetCurrent();
@@ -666,9 +743,14 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierSettings *s = [AtelierSettings shared];
     CGSize screen = [AtelierHost screenSize];
     BOOL resize = s.resizeApps;
+    CGFloat dockHeight = [AtelierDock heightForWidth:screen.width - 20 compact:(_layout != AtelierLayoutSide)];
     AtelierGeometry g = AtelierLayoutCompute(_layout, screen, [AtelierHost safeInsets], (NSInteger)_tiles.count, _split, resize,
-                                             [s tune:@"sideScale" fallback:0.80], [AtelierBand wanted]);
+                                             [s tune:@"sideScale" fallback:0.80], s.showIndices, dockHeight);
     _geometry = g;
+    if (g.dock.origin.y != _stripFloor) {                // the edge strip ends above the dock
+        _stripFloor = g.dock.origin.y;
+        [[AtelierTrigger shared] refresh];
+    }
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
 
     // who is on show, at which size, and who runs
@@ -719,6 +801,10 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
             [self->_band layoutIfNeeded];
         }
         self->_band.alpha = band ? 1 : 0;
+        self->_dock.frame = g.dock;
+        [self->_dock setCompact:g.bandCompact];
+        [self->_dock layoutIfNeeded];
+        self->_dock.alpha = CGRectIsEmpty(g.dock) ? 0 : 1;
         self->_grabber.frame = g.grabber;
         self->_grabber.alpha = CGRectIsEmpty(g.grabber) ? 0 : 1;
         self->_grabber2.frame = g.grabber2;
@@ -828,7 +914,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 }
 
 - (void)replaceSlot:(NSUInteger)slot with:(NSString *)bid {
-    if (bid.length == 0 || ![AtelierHost applicationForBundleID:bid]) return;
+    if (bid.length == 0 || ![AtelierHost applicationForBundleID:bid] || [AtelierHost isHiddenApp:bid]) return;
     NSMutableArray<NSString *> *apps = [[self apps] mutableCopy];
     NSUInteger has = [apps indexOfObject:bid];
     if (slot >= apps.count) {
@@ -878,8 +964,9 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 - (void)openSet:(NSDictionary *)set {
     NSArray *apps = set[@"apps"];
     if (![apps isKindOfClass:NSArray.class] || apps.count == 0) return;
+    [AtelierHost reloadHiddenApps];
     [self _loadLocks];
-    NSArray<NSString *> *current = _visible ? [self apps] : [[AtelierSettings shared] slots];
+    NSArray<NSString *> *current = _visible ? [self apps] : [self _usable:[[AtelierSettings shared] slots]];
     NSMutableArray<NSString *> *incoming = [[self _usable:apps] mutableCopy];
     NSMutableDictionary<NSNumber *, NSString *> *pinned = [NSMutableDictionary dictionary];
     for (NSUInteger i = 0; i < current.count; i++) {
@@ -984,6 +1071,10 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         return;
     }
     if ([AtelierHost switcherVisible]) { [self closeAnimated:YES reason:@"the App Switcher opened"]; return; }
+
+    _ticks++;
+    [AtelierToggles benchTick];                          // Keep Awake, if it is on: only ever from this clock
+    if (_ticks % 6 == 0) [_dock refresh];                // the switches, in case something else flipped one
 
     // an app that was closed underneath is started again (twice at most, then it waits for a tap)
     for (AtelierTile *t in _tiles) {
@@ -1118,12 +1209,24 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _swipePill.alpha = 1;
 }
 
-// The mini follows the finger along the way the swipe set out; past 40 points letting go acts.
+// The mini follows the finger along the way the swipe set out, past the screen's edge if the
+// finger goes there, and its label goes with it. Letting go acts when the swipe is armed:
+//
+//   far enough   55% of the way from where the finger came down to the edge of the screen it is
+//                heading for, never more than 40 points and never less than 14. (A mini in the
+//                column lies against the left edge: a finger that comes down 30 points from it
+//                can't travel 40.) A finger that has reached the edge counts as well.
+//   or a flick   350 points a second or more along the swipe at the lift, after 10 points.
+//
+// The travel is measured from where the finger came down (the recogniser's own figure leaves
+// out the first ten points or so, which it spends making up its mind). A swipe that ends
+// without acting says why in the log: direction, travel, speed and room.
 - (void)_miniPanned:(UIPanGestureRecognizer *)g {
     NSUInteger slot = [self _slotOfTileWithShield:g.view];
     if (slot == NSNotFound || slot == 0) return;
     AtelierTile *t = _tiles[slot];
-    CGPoint d = [g translationInView:_root];
+    CGPoint at = [g locationInView:_root];
+    CGPoint d = CGPointMake(at.x - _swipeDown.x, at.y - _swipeDown.y);
     if (g.state == UIGestureRecognizerStateBegan) {
         [self hideMenu];
         _swipeTile = t;
@@ -1133,35 +1236,57 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         [_stage bringSubviewToFront:t];
     }
     if (t != _swipeTile) return;
-    // Which way it is going is settled once the finger has moved six points: at the very start
-    // the recogniser may report no movement at all, and a guess then would stick.
+    BOOL moving = g.state == UIGestureRecognizerStateBegan || g.state == UIGestureRecognizerStateChanged;
+    // Which way it is going is settled once the finger has moved six points.
     if (_swipeAxis == 0 && MAX(fabs(d.x), fabs(d.y)) >= 6) _swipeAxis = fabs(d.x) > fabs(d.y) ? 1 : 2;
     if (_swipeAxis == 0) {
-        if (g.state != UIGestureRecognizerStateBegan && g.state != UIGestureRecognizerStateChanged) { _swipeTile = nil; [self _hideSwipePill]; }
+        if (!moving) {
+            AtelierLog(@"swipe on %@ did not arm: the finger moved %.0f pt, too little to tell a direction", t.pane.bundleID, MAX(fabs(d.x), fabs(d.y)));
+            _swipeTile = nil;
+            [self _hideSwipePill];
+        }
         return;
     }
+    static NSArray<NSString *> *names;
+    if (!names) names = @[ @"left", @"right", @"up", @"down" ];
     CGFloat v = _swipeAxis == 1 ? d.x : d.y;
     AtelierSwipe swipe = _swipeAxis == 1 ? (v < 0 ? AtelierSwipeLeft : AtelierSwipeRight) : (v < 0 ? AtelierSwipeUp : AtelierSwipeDownward);
     BOOL allowed = NO;
     NSString *title = [self _swipeTitle:swipe tile:t allowed:&allowed];
-    CGFloat threshold = 40;
-    if (g.state == UIGestureRecognizerStateBegan || g.state == UIGestureRecognizerStateChanged) {
-        CGFloat shown = MAX(-96, MIN(96, allowed ? v : v * 0.22));          // a refused swipe barely gives
+    CGSize screen = [AtelierHost screenSize];
+    // the room the finger had that way when it came down, and what is left of it now
+    CGFloat room = swipe == AtelierSwipeLeft ? _swipeDown.x : (swipe == AtelierSwipeRight ? screen.width - _swipeDown.x
+                 : (swipe == AtelierSwipeUp ? _swipeDown.y : screen.height - _swipeDown.y));
+    CGFloat left = swipe == AtelierSwipeLeft ? at.x : (swipe == AtelierSwipeRight ? screen.width - at.x
+                 : (swipe == AtelierSwipeUp ? at.y : screen.height - at.y));
+    CGFloat threshold = MIN(40.0, MAX(14.0, 0.55 * room));
+    BOOL far = fabs(v) >= threshold || (fabs(v) >= 10 && left <= 3);
+    if (moving) {
+        CGFloat shown = allowed ? MAX(-180, MIN(180, v)) : MAX(-20, MIN(20, v * 0.22));     // a refused swipe barely gives
         t.transform = _swipeAxis == 1 ? CGAffineTransformMakeTranslation(shown, 0) : CGAffineTransformMakeTranslation(0, shown);
-        BOOL armed = allowed && fabs(v) >= threshold;
+        BOOL armed = allowed && far;
         if (armed != _swipeArmed) {
             _swipeArmed = armed;
             if (armed) AtelierHapticPlay(AtelierHapticTick);
         }
-        [self _showSwipePill:title armed:armed refused:(!allowed && title.length) beside:[self _rectForSlot:slot geometry:_geometry]];
+        CGRect rect = [self _rectForSlot:slot geometry:_geometry];
+        rect = _swipeAxis == 1 ? CGRectOffset(rect, shown, 0) : CGRectOffset(rect, 0, shown);      // the label goes with the tile
+        [self _showSwipePill:title armed:armed refused:(!allowed && title.length) beside:rect];
         return;
     }
-    BOOL fire = g.state == UIGestureRecognizerStateEnded && _swipeArmed;
-    BOOL refused = g.state == UIGestureRecognizerStateEnded && !allowed && title.length && fabs(v) >= threshold;
+    CGPoint velocity = [g velocityInView:_root];
+    CGFloat speed = (_swipeAxis == 1 ? velocity.x : velocity.y) * (v < 0 ? -1 : 1);      // along the swipe; negative = going back
+    BOOL ended = g.state == UIGestureRecognizerStateEnded;
+    BOOL flick = fabs(v) >= 10 && speed >= 350;
+    BOOL fire = ended && allowed && (far || flick);
+    BOOL refused = ended && !allowed && title.length && (far || flick);
+    NSString *numbers = [NSString stringWithFormat:@"travel %.0f pt (it needed %.0f), %.0f pt/s at the lift, room %.0f pt",
+                         fabs(v), threshold, speed, room];
     _swipeTile = nil;
     _swipeArmed = NO;
     [self _hideSwipePill];
     if (fire) {
+        AtelierLog(@"swipe %@ on %@ armed by %@: %@", names[(NSUInteger)swipe], t.pane.bundleID, far ? @"travel" : @"a flick", numbers);
         // it stays where the finger left it; what follows animates it from there
         CGRect where = t.frame;
         t.transform = CGAffineTransformIdentity;
@@ -1170,6 +1295,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         [self _layoutAnimated:YES];
         return;
     }
+    AtelierLog(@"swipe %@ on %@ did not arm: %@%@", names[(NSUInteger)swipe], t.pane.bundleID, numbers,
+               !ended ? @" (the touch was cancelled)" : (refused ? @" (refused)" : (!allowed ? @" (nothing is set for that way)" : @"")));
     if (refused) [self performSwipe:swipe onSlot:slot];                     // logs it and taps the finger
     [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.3
                         options:UIViewAnimationOptionAllowUserInteraction animations:^{ t.transform = CGAffineTransformIdentity; } completion:nil];
@@ -1188,12 +1315,18 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if (g.state == UIGestureRecognizerStateBegan) [self closeAnimated:YES reason:@"Home gesture"];
 }
 
+// A finger that came down on the dock or below it and goes up: 48 points of travel (from where it
+// came down), or a quick flick up after 20.
 - (void)_bottomSwipe:(UIPanGestureRecognizer *)g {
-    CGPoint moved = [g translationInView:_root];
-    if (!_swipeFromBottom || (g.state != UIGestureRecognizerStateBegan && g.state != UIGestureRecognizerStateChanged)) return;
-    if (moved.y <= -56 && fabs(moved.x) < fabs(moved.y)) {
+    if (!_swipeFromBottom || g.state == UIGestureRecognizerStateCancelled || g.state == UIGestureRecognizerStateFailed) return;
+    CGPoint at = [g locationInView:_root];
+    CGPoint moved = CGPointMake(at.x - _bottomDown.x, at.y - _bottomDown.y);
+    BOOL up = moved.y < 0 && fabs(moved.x) < fabs(moved.y);
+    BOOL far = up && moved.y <= -48;
+    BOOL flick = g.state == UIGestureRecognizerStateEnded && up && moved.y <= -20 && [g velocityInView:_root].y <= -350;
+    if (far || flick) {
         _swipeFromBottom = NO;
-        [self closeAnimated:YES reason:@"swipe up from the bottom"];
+        [self closeAnimated:YES reason:(far ? @"swipe up from the bottom" : @"flick up from the bottom")];
     }
 }
 
@@ -1278,15 +1411,69 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
     if (!mini) {
         [items addObject:AtelierMenuItem(@"Save as Set", @"square.stack.3d.up", NO, ^{ [weak saveAsSet]; })];
         [items addObject:AtelierMenuItem(@"Sets…", @"list.bullet.rectangle", NO, ^{ [AtelierSheets showSets]; })];
-        [items addObject:AtelierMenuItem(@"Close Atelier", @"xmark.circle", YES, ^{ [weak closeAnimated:YES reason:@"menu"]; })];
+        [items addObject:AtelierMenuItem([@"Close " stringByAppendingString:ATELIER_NAME], @"xmark.circle", YES, ^{ [weak closeAnimated:YES reason:@"menu"]; })];
     }
-    AtelierMenu *menu = [[AtelierMenu alloc] initWithItems:items];
     CGSize screen = [AtelierHost screenSize];
     CGRect anchor = mini ? _tiles[slot].frame : (slot == 1 && !CGRectIsEmpty(_geometry.grabber2) ? _geometry.grabber2 : _geometry.grabber);
     if (CGRectIsEmpty(anchor)) anchor = CGRectMake(screen.width / 2.0 - 32, [AtelierHost safeInsets].top + 8, 64, 22);
-    CGFloat x = mini ? CGRectGetMaxX(anchor) + 8 : CGRectGetMidX(anchor) - menu.bounds.size.width / 2.0;
-    CGFloat y = mini ? anchor.origin.y : CGRectGetMaxY(anchor) + 6;
-    if (mini && _layout == AtelierLayoutTop) { x = anchor.origin.x; y = CGRectGetMaxY(anchor) + 8; }
+    [self _showMenu:items anchor:anchor beside:(mini && _layout != AtelierLayoutTop) leftAligned:(mini && _layout == AtelierLayoutTop)];
+}
+
+// A hold on a shortcut icon.
+- (void)_showShortcutMenu:(NSString *)bid frame:(CGRect)frame {
+    [self hideMenu];
+    if (!_visible || bid.length == 0) return;
+    __weak typeof(self) weak = self;
+    NSArray<NSDictionary *> *items = @[
+        AtelierMenuItem(@"Open", @"arrow.up.left.and.arrow.down.right", NO, ^{ [weak openShortcut:bid]; }),
+        AtelierMenuItem(@"Remove from Shortcuts", @"minus.circle", YES, ^{ [weak removeShortcut:bid]; }),
+    ];
+    AtelierLog(@"shortcut %@: menu", bid);
+    [self _showMenu:items anchor:[_band convertRect:frame toView:_root] beside:NO leftAligned:NO];
+}
+
+// The "+" at the end of the shortcut row.
+- (void)_addShortcut {
+    if (_menu) { [self hideMenu]; return; }
+    __weak typeof(self) weak = self;
+    [AtelierSheets pickAppWithTitle:@"Add a Shortcut" excluding:[AtelierBand shownShortcuts] then:^(NSString *bid) { [weak addShortcut:bid]; }];
+}
+
+- (void)addShortcut:(NSString *)bid {
+    if (bid.length == 0 || ![AtelierHost applicationForBundleID:bid] || [AtelierHost isHiddenApp:bid]) return;
+    AtelierSettings *s = [AtelierSettings shared];
+    NSArray<NSString *> *shown = [AtelierBand shownShortcuts];
+    if ([shown containsObject:bid]) return;
+    if (shown.count >= ATELIER_SHORTCUTS) { [AtelierHost toast:@"Six shortcuts is the most. Remove one first."]; return; }
+    // the ones the row shows, then the new one, then any the row does not show (apps that are not installed, or are hidden)
+    NSMutableArray<NSString *> *list = [shown mutableCopy];
+    [list addObject:bid];
+    for (NSString *other in [s shortcutApps]) if (![list containsObject:other]) [list addObject:other];
+    [s setShortcutApps:list];
+    AtelierLog(@"shortcut added: %@ (%lu in the row)", bid, (unsigned long)(shown.count + 1));
+    [_band reload];
+    [self _layoutAnimated:NO];
+}
+
+- (void)removeShortcut:(NSString *)bid {
+    AtelierSettings *s = [AtelierSettings shared];
+    NSMutableArray<NSString *> *list = [[s shortcutApps] mutableCopy];
+    if (![list containsObject:bid]) return;
+    [list removeObject:bid];
+    [s setShortcutApps:list];
+    AtelierLog(@"shortcut removed: %@ (%lu in the row)", bid, (unsigned long)[AtelierBand shownShortcuts].count);
+    [_band reload];
+    [self _layoutAnimated:NO];
+}
+
+// Puts a menu on the screen: under its anchor and centred on it, or beside it (a mini in the
+// column), or under it with the left edges in line (a mini in the row).
+- (void)_showMenu:(NSArray<NSDictionary *> *)items anchor:(CGRect)anchor beside:(BOOL)beside leftAligned:(BOOL)leftAligned {
+    AtelierMenu *menu = [[AtelierMenu alloc] initWithItems:items];
+    CGSize screen = [AtelierHost screenSize];
+    CGFloat x = beside ? CGRectGetMaxX(anchor) + 8 : CGRectGetMidX(anchor) - menu.bounds.size.width / 2.0;
+    CGFloat y = beside ? anchor.origin.y : CGRectGetMaxY(anchor) + 6;
+    if (leftAligned) { x = anchor.origin.x; y = CGRectGetMaxY(anchor) + 8; }
     x = MAX(8, MIN(screen.width - menu.bounds.size.width - 8, x));
     y = MAX([AtelierHost safeInsets].top + 4, MIN(screen.height - menu.bounds.size.height - 40, y));
     menu.frame = CGRectMake(x, y, menu.bounds.size.width, menu.bounds.size.height);
@@ -1313,11 +1500,15 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
     }
     NSMutableArray<NSString *> *menu = [NSMutableArray array];
     for (NSDictionary *item in _menu.items) [menu addObject:item[@"title"]];
-    return [NSString stringWithFormat:@"bench %@ layout %ld split %.2f front-at-open %@ idle %.1fs menu [%@] %@ · %@",
+    return [NSString stringWithFormat:@"bench %@ layout %ld split %.2f front-at-open %@ idle %.1fs menu [%@] %@ · %@ · %@ · %@ · hidden apps %lu",
             _visible ? @"up" : @"hidden", (long)_layout, _split, _frontAtOpen ?: @"home",
             _visible ? CFAbsoluteTimeGetCurrent() - _lastTouch : 0.0, [menu componentsJoinedByString:@" | "],
-            [parts componentsJoinedByString:@" "], _band ? [_band debugState] : @"no band"];
+            [parts componentsJoinedByString:@" "], _band ? [_band debugState] : @"no band", _dock ? [_dock debugState] : @"no dock",
+            [[AtelierQuotes shared] debugState], (unsigned long)[AtelierHost hiddenAppCount]];
 }
+
+- (AtelierBand *)debugBand { return _band; }
+- (AtelierDock *)debugDock { return _dock; }
 
 // Every tile, pill, place and shortcut with its frame on the screen, one per line:
 //   name x y width height scale        (scale: the app's picture, 0 for things that aren't apps)
@@ -1344,8 +1535,14 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
         if (!CGRectIsEmpty(_geometry.band)) {
             for (NSDictionary *item in [_band debugFrames]) add(item[@"name"], [_band convertRect:[item[@"frame"] CGRectValue] toView:_root], 0);
         }
+        add(@"dock", _geometry.dock, 0);
+        if (!CGRectIsEmpty(_geometry.dock)) {
+            for (NSDictionary *item in [_dock debugFrames]) add(item[@"name"], [_dock convertRect:[item[@"frame"] CGRectValue] toView:_root], 0);
+        }
+        add(@"strip", _geometry.closeStrip, 0);
         if (_menu) add(@"menu", _menu.frame, 0);
     }
+    for (NSString *line in [AtelierSheets debugWhere]) [lines addObject:line];           // the picker's field and keyboard, when it is up
     NSString *text = [lines componentsJoinedByString:@"\n"];
     [[text stringByAppendingString:@"\n"] writeToFile:[AtelierLogDir() stringByAppendingPathComponent:@"atelier_where.txt"]
                                           atomically:YES encoding:NSUTF8StringEncoding error:nil];

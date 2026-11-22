@@ -1,19 +1,21 @@
-/*  Tweak.m — Atelier's entry point. Loads into SpringBoard only.
+/*  Tweak.m — the entry point of HyperTrade (in the code: Atelier, its first name). Loads into
+    SpringBoard only.
 
     The constructor only sets up listeners. Atelier starts a few seconds after SpringBoard
     reports that it has finished starting (com.apple.springboard.finishedstartup), and after
     that everything happens on the main thread, from notifications:
 
-      com.adarsh.atelier/prefs                   a switch was flipped under Settings → Atelier
+      com.adarsh.atelier/prefs                   a switch was flipped under Settings → HyperTrade
       com.adarsh.atelier.open | close | toggle   another tool asks for the bench
       com.apple.springboard.lockstate            locked: the bench goes away
       com.apple.springboard.hasBlankedScreen     screen off: the bench goes away
+      com.adarsh.sporex/reload                   SporeX's hidden apps changed: they leave every list
 
     While the bench is hidden nothing runs: no timer, no polling. (The bench has a clock of its
     own, which lives only while the bench is on screen.)
 
-    Two methods of SBIconView are replaced, for the Home Screen icon menu ("Open in Atelier",
-    "Atelier Sets…"); both pass everything that isn't Atelier's on to the code that was there.
+    Two methods of SBIconView are replaced, for the Home Screen icon menu ("Open in HyperTrade",
+    "HyperTrade Sets…"); both pass everything that isn't Atelier's on to the code that was there.
     Dynamic Stage+ replaces the same two, and the two tweaks chain through each other.
 
     Start-up guard: each start adds one to <log dir>/Atelier.boot, and the file is cleared once
@@ -88,8 +90,9 @@ NSArray *AtelierIconMenuItems(NSString *bid) {
     AtelierSettings *s = [AtelierSettings shared];
     if (!s.enabled || !s.iconMenu || bid.length == 0) return nil;
     if (![AtelierHost applicationForBundleID:bid]) return nil;        // folders, widgets, web clips
+    if ([AtelierHost isHiddenApp:bid]) return nil;
     NSMutableArray *items = [NSMutableArray array];
-    id open = AtelierShortcutItem(kTypeOpen, @"Open in Atelier", nil, @"rectangle.3.group");
+    id open = AtelierShortcutItem(kTypeOpen, [@"Open in " stringByAppendingString:ATELIER_NAME], nil, @"rectangle.3.group");
     if (open) [items addObject:open];
     NSUInteger shown = 0;
     for (NSDictionary *set in [s sets]) {
@@ -97,13 +100,13 @@ NSArray *AtelierIconMenuItems(NSString *bid) {
         if (![apps containsObject:bid]) continue;
         NSString *type = [NSString stringWithFormat:@"%@|%@|%@", kTypeSet, set[@"layout"], [apps componentsJoinedByString:@","]];
         NSMutableArray<NSString *> *names = [NSMutableArray array];
-        for (NSString *other in apps) [names addObject:[AtelierHost displayNameForBundleID:other]];
+        for (NSString *other in apps) if (![AtelierHost isHiddenApp:other]) [names addObject:[AtelierHost displayNameForBundleID:other]];
         id item = AtelierShortcutItem(type, [NSString stringWithFormat:@"Open %@", [AtelierSheets setTitle:set]],
                                       [names componentsJoinedByString:@", "], @"square.stack.3d.up");
         if (item) [items addObject:item];
         if (++shown >= 2) break;
     }
-    id sets = AtelierShortcutItem(kTypeSets, @"Atelier Sets…", nil, @"list.bullet.rectangle");
+    id sets = AtelierShortcutItem(kTypeSets, [ATELIER_NAME stringByAppendingString:@" Sets…"], nil, @"list.bullet.rectangle");
     if (sets) [items addObject:sets];
     return items;
 }
@@ -191,8 +194,8 @@ static void AtelierBegin(NSInteger attempt) {
     NSInteger failed = AtelierBootCount();
     if (failed >= 3 && AtelierGuardOn()) {
         gHeld = YES;
-        AtelierLog(@"standing by: the last %ld times Atelier started, SpringBoard restarted within 25 seconds. "
-                   "Change any setting under Settings → Atelier to start it again.", (long)failed);
+        AtelierLog(@"standing by: the last %ld times %@ started, SpringBoard restarted within 25 seconds. "
+                   "Change any setting under Settings → %@ to start it again.", (long)failed, ATELIER_NAME, ATELIER_NAME);
         AtelierLogFlush();
         return;
     }
@@ -204,8 +207,8 @@ static void AtelierBegin(NSInteger attempt) {
     [s reload];
     CGSize sz = [AtelierHost screenSize];
     UIEdgeInsets safe = [AtelierHost safeInsets];
-    AtelierStep([NSString stringWithFormat:@"Atelier %@ in SpringBoard (pid %d), iOS %@, screen %.0fx%.0f (safe %.0f/%.0f), enabled=%d, start %ld (%@)",
-                 ATELIER_VERSION, (int)getpid(), UIDevice.currentDevice.systemVersion, sz.width, sz.height, safe.top, safe.bottom,
+    AtelierStep([NSString stringWithFormat:@"%@ %@ in SpringBoard (pid %d), iOS %@, screen %.0fx%.0f (safe %.0f/%.0f), enabled=%d, start %ld (%@)",
+                 ATELIER_NAME, ATELIER_VERSION, (int)getpid(), UIDevice.currentDevice.systemVersion, sz.width, sz.height, safe.top, safe.bottom,
                  (int)s.enabled, (long)(failed + 1), gStartReason ?: @"?"]);
 
     @try {
@@ -223,6 +226,8 @@ static void AtelierBegin(NSInteger attempt) {
         notify_register_dispatch(ATELIER_N_OPEN, &token, mq, ^(int t) { [[AtelierBench shared] open]; });
         notify_register_dispatch(ATELIER_N_CLOSE, &token, mq, ^(int t) { [[AtelierBench shared] closeAnimated:YES reason:@"asked to"]; });
         notify_register_dispatch(ATELIER_N_TOGGLE, &token, mq, ^(int t) { [[AtelierBench shared] toggle]; });
+        // SporeX (the user's app hider) says its list changed. Without SporeX this never comes.
+        notify_register_dispatch(ATELIER_N_SPORE, &token, mq, ^(int t) { [[AtelierBench shared] hiddenAppsChanged]; });
     } @catch (NSException *e) {
         AtelierLog(@"start: the observers threw %@", e.reason);
     }
@@ -235,8 +240,10 @@ static void AtelierBegin(NSInteger attempt) {
     AtelierStep([[AtelierTrigger shared] debugState]);
 
     AtelierDebugStart();
-    AtelierLog(@"started: mini mode %ld, freeze after %.0f s, resize %d, %lu saved app(s), %lu set(s)", (long)s.miniMode, s.freezeAfter,
-               (int)s.resizeApps, (unsigned long)[s slots].count, (unsigned long)[s sets].count);
+    [AtelierHost reloadHiddenApps];
+    AtelierLog(@"started: mini mode %ld, freeze after %.0f s, resize %d, %lu saved app(s), %lu set(s), %lu shortcut(s), %lu hidden by SporeX",
+               (long)s.miniMode, s.freezeAfter, (int)s.resizeApps, (unsigned long)[s slots].count, (unsigned long)[s sets].count,
+               (unsigned long)[s shortcutApps].count, (unsigned long)[AtelierHost hiddenAppCount]);
     AtelierLogFlush();
 }
 
@@ -254,9 +261,12 @@ static void AtelierBoot(void) {
         if (!gStarted) return;
         AtelierSettingsChanged();
         AtelierSettings *s = [AtelierSettings shared];
-        AtelierLog(@"settings: enabled=%d layout=%ld mini=%ld freeze=%.0f trigger=%d side=%ld size=%.0f addFront=%d resize=%d iconMenu=%d haptics=%ld",
+        AtelierLog(@"settings: enabled=%d layout=%ld mini=%ld freeze=%.0f trigger=%d side=%ld size=%.0f addFront=%d resize=%d iconMenu=%d haptics=%ld "
+                   "clock=%d flags=%d indices=%d toggles=%d%d%d%d%d%d shortcuts=%lu",
                    (int)s.enabled, (long)[s layout], (long)s.miniMode, s.freezeAfter, (int)s.trigger, (long)s.triggerSide, s.triggerSize,
-                   (int)s.addFront, (int)s.resizeApps, (int)s.iconMenu, (long)s.haptics);
+                   (int)s.addFront, (int)s.resizeApps, (int)s.iconMenu, (long)s.haptics, (int)s.showClock, (int)s.showMarkets, (int)s.showIndices,
+                   (int)[s showsToggle:@"wifi"], (int)[s showsToggle:@"bluetooth"], (int)[s showsToggle:@"data"], (int)[s showsToggle:@"dnd"],
+                   (int)[s showsToggle:@"awake"], (int)[s showsToggle:@"lowpower"], (unsigned long)[s shortcutApps].count);
     });
 
     // Atelier starts only once SpringBoard says it has finished starting, and a few seconds after

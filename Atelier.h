@@ -1,4 +1,7 @@
-/*  Atelier.h — a workbench of live apps for the iPhone (iOS 16.5, RootHide).
+/*  Atelier.h — HyperTrade (the tweak's name since 1.2.0; the code, the package id, the settings
+    domain and the files keep the name it began with, Atelier, so that updates install over the
+    old version and keep the user's settings): a workbench of live apps for the iPhone
+    (iOS 16.5, RootHide).
 
     One big "main" app and up to five "mini" tiles of other apps, all hosted inside one
     SpringBoard window. Tap a mini and it changes places with the main. Three layouts: minis in
@@ -14,8 +17,11 @@
                      switches the scene between foreground (live) and background (still)
       AtelierBench   the window: tiles, layouts, the swap, swipes on a mini, the "..." menu,
                      locks, the freeze clock
-      AtelierBand    the clock, the market flags and the shortcut apps above the tiles
-      AtelierSheets  the app picker and the Sets list (bottom sheets, no text fields)
+      AtelierBand    the index numbers, the clock, the market flags and the shortcut apps above
+                     the tiles
+      AtelierQuotes  the live NIFTY and SENSEX numbers (a public feed, only while the bench is up)
+      AtelierDock    the toggles and the credit line under the tiles
+      AtelierSheets  the app picker (with a search field) and the Sets list, as bottom sheets
       AtelierTrigger the strip in the bottom corner that opens the bench on a swipe
       AtelierDebug   test commands from a file, so the bench can be driven over SSH
 
@@ -27,12 +33,14 @@
 #import <objc/message.h>
 #import <notify.h>
 
-#define ATELIER_VERSION   @"1.1.0"                          // keep in step with control
+#define ATELIER_VERSION   @"1.2.0"
+#define ATELIER_NAME      @"HyperTrade"                     // what the user reads
 #define ATELIER_DOMAIN    @"com.adarsh.atelier"
 #define ATELIER_N_PREFS   "com.adarsh.atelier/prefs"        // Settings -> SpringBoard (PostNotification)
 #define ATELIER_N_OPEN    "com.adarsh.atelier.open"         // anyone -> SpringBoard
 #define ATELIER_N_CLOSE   "com.adarsh.atelier.close"
 #define ATELIER_N_TOGGLE  "com.adarsh.atelier.toggle"
+#define ATELIER_N_SPORE   "com.adarsh.sporex/reload"        // SporeX: its hidden apps changed
 #define ATELIER_MAX_SLOTS 6                                 // the main and five minis
 #define ATELIER_SHORTCUTS 6                                 // shortcut apps shown in the band
 
@@ -98,6 +106,9 @@ void AtelierHapticPlay(AtelierHaptic kind);
 @property (nonatomic, readonly) NSInteger haptics;           // 0 off … 3 strong
 @property (nonatomic, readonly) BOOL showClock;
 @property (nonatomic, readonly) BOOL showMarkets;
+@property (nonatomic, readonly) BOOL showIndices;            // live NIFTY and SENSEX above the clock
+- (BOOL)showsToggle:(NSString *)key;                         // wifi bluetooth data dnd awake lowpower
+- (void)setShortcutApps:(NSArray<NSString *> *)apps;
 @property (nonatomic, readonly) AtelierSwipeDown swipeDown;
 - (NSArray<NSString *> *)markets;                            // three market codes, e.g. IN, GB, US
 - (NSString *)extraHolidays;                                 // India: more trading holidays, as typed in Settings
@@ -123,9 +134,22 @@ void AtelierHapticPlay(AtelierHaptic kind);
 @property (nonatomic, copy) void (^onTouch)(void);           // any finger that lands on this window
 @end
 
+// The one window that does: the app picker's, which has a search field.
+@interface AtelierKeyWindow : AtelierWindow
+@end
+
 @interface AtelierHost : NSObject
 + (UIWindowScene *)mainScene;                                // SpringBoard's main scene, never the Dynamic Island's
 + (AtelierWindow *)windowAtLevel:(UIWindowLevel)level;       // full screen, clear, hidden, portrait
++ (AtelierWindow *)windowAtLevel:(UIWindowLevel)level key:(BOOL)key;     // key: one that may take the keyboard
+// SpringBoard's keyboard goes to the app in front unless SpringBoard itself is asked to keep
+// it. These ask (for a window in the main scene only) and give it back.
++ (BOOL)takeKeyboardForWindow:(UIWindow *)window;
++ (void)giveKeyboardBack;
+// Apps hidden by SporeX (the user's own tweak) while it is switched on: never listed anywhere.
++ (void)reloadHiddenApps;
++ (BOOL)isHiddenApp:(NSString *)bid;
++ (NSUInteger)hiddenAppCount;
 + (CGSize)screenSize;                                        // portrait, in points
 + (UIEdgeInsets)safeInsets;
 + (BOOL)isLocked;
@@ -138,6 +162,7 @@ void AtelierHapticPlay(AtelierHaptic kind);
 + (BOOL)launchApp:(NSString *)bid suspended:(BOOL)suspended;
 + (void)toast:(NSString *)message;
 + (NSArray<NSDictionary *> *)installedApps;                  // @[ @{ @"id", @"name" } ] A to Z
++ (NSArray<NSDictionary *> *)listedApps;                     // the same without SporeX's hidden apps: what a list may show
 + (void)noteFront;                                           // remember the app in front, for the picker
 + (NSArray<NSString *> *)recentApps;                         // newest first: seen in front, then the App Switcher's
 + (UIImage *)screenImage;                                    // what is on the screen right now (nil if it can't be had)
@@ -181,14 +206,18 @@ typedef NS_ENUM(NSInteger, AtelierPaneState) {
 
 #pragma mark - the bench (AtelierBench.m)
 
+@class AtelierBand, AtelierDock;
+
 // Where everything goes. Pure arithmetic, checked by tools/layout_check.py against the same numbers.
 typedef struct {
     CGRect main;                // the main tile
     CGRect second;              // Split: the other tile
     CGRect minis[5];            // all five mini places (Side and Top), filled or not
     CGRect plus;                // the "+" tile, CGRectZero when the bench is full
-    CGRect band;                // clock, flags and shortcut apps; CGRectZero when there is none
-    BOOL bandCompact;           // one line (Top, Split) instead of two rows (Side)
+    CGRect band;                // index numbers, clock, flags and shortcut apps, above the tiles
+    BOOL bandCompact;           // two short lines (Top, Split) instead of four rows (Side)
+    CGRect dock;                // the toggles and the credit line, under the tiles
+    CGRect closeStrip;          // a swipe up that starts in here closes the bench: the dock and all below it
     CGRect grabber;             // the "..." pill above the main
     CGRect grabber2;            // Split: the pill of the other tile
     CGRect divider;             // Split: the handle between the two
@@ -196,8 +225,9 @@ typedef struct {
     CGSize sceneSize;           // the size every hosted app is laid out at
 } AtelierGeometry;
 
+CGFloat AtelierBandHeight(BOOL compact, BOOL indices);
 AtelierGeometry AtelierLayoutCompute(AtelierLayoutKind kind, CGSize screen, UIEdgeInsets safe, NSInteger apps,
-                                     double split, BOOL resize, double sideScale, BOOL band);
+                                     double split, BOOL resize, double sideScale, BOOL indices, CGFloat dockHeight);
 
 typedef NS_ENUM(NSInteger, AtelierSwipe) { AtelierSwipeLeft = 0, AtelierSwipeRight, AtelierSwipeUp, AtelierSwipeDownward };
 
@@ -232,24 +262,92 @@ typedef NS_ENUM(NSInteger, AtelierSwipe) { AtelierSwipeLeft = 0, AtelierSwipeRig
 - (void)setSplit:(double)share;                              // Split: the first app's share of the width, 0.3 to 0.7
 - (void)settingsChanged;
 - (void)lockChanged;
+- (void)hiddenAppsChanged;                                   // SporeX's list changed
+- (void)addShortcut:(NSString *)bid;                         // to the end of the shortcut row
+- (void)removeShortcut:(NSString *)bid;
+- (CGFloat)dockTop;                                          // the dock's top while the bench is up, else 0
 - (NSArray<NSString *> *)apps;
 - (NSString *)debugState;
+- (AtelierBand *)debugBand;
+- (AtelierDock *)debugDock;
 @end
 
 #pragma mark - the band (AtelierBand.m)
 
-// The strip above the tiles: a clock with seconds, three market flags, shortcut apps with their
-// badges. One timer on the second boundary while it is on screen, none otherwise.
+NSDate *AtelierNow(void);                                    // the time the band shows (tests can move it)
+BOOL AtelierIndiaSessionOpen(NSDate *date);                  // NSE's regular session, trading holidays taken out
+NSString *AtelierIndianNumber(double value);                 // 100412.05 -> "1,00,412.05"
+
+// The strip above the tiles: index numbers, a clock with seconds, three market flags, shortcut
+// apps with their badges. One timer on the second boundary while it is on screen, none otherwise.
 @interface AtelierBand : UIView
 @property (nonatomic, copy) void (^onShortcut)(NSString *bid);
-+ (BOOL)wanted;                                              // anything to show, by the settings
+@property (nonatomic, copy) void (^onShortcutHeld)(NSString *bid, CGRect frame);    // a hold on an icon; frame in the band's space
+@property (nonatomic, copy) void (^onAddShortcut)(void);     // the "+" at the end of the row
 + (void)setDebugNow:(NSDate *)date;                          // tests: the clock runs on from this moment (nil = real time)
++ (NSArray<NSString *> *)shownShortcuts;                     // the shortcut apps as the row shows them
 - (void)setCompact:(BOOL)compact flagsWidth:(CGFloat)width;  // lay out for this frame; `width` is the room left of the pill
 - (void)reload;                                              // settings changed
+- (void)quotesChanged;                                       // new index numbers, or none
 - (void)start;                                               // the bench came up
 - (void)stop;                                                // the bench went away
 - (void)debugTapShortcut:(NSUInteger)index;
+- (void)debugHoldShortcut:(NSUInteger)index;                 // tests: what a hold on shortcut n does
+- (void)debugTapPlus;                                        // tests: what a tap on the row's "+" does
 - (NSArray<NSDictionary *> *)debugFrames;                    // @{ @"name", @"frame" (NSValue, in the band's own space) }
+- (NSString *)debugState;
+@end
+
+#pragma mark - index numbers (AtelierQuotes.m)
+
+@interface AtelierQuote : NSObject
+@property (nonatomic, copy) NSString *symbol, *label;
+@property (nonatomic) double price, previousClose;
+@property (nonatomic, strong) NSDate *marketTime;            // when the exchange last traded it
+@end
+
+// NIFTY and SENSEX from a public feed. Runs only between -start and -stop (the bench on screen).
+@interface AtelierQuotes : NSObject
++ (instancetype)shared;
+@property (nonatomic, copy) void (^onChange)(void);          // on the main thread
+- (NSArray<AtelierQuote *> *)quotes;                         // NIFTY, SENSEX; empty until the first answer
+- (BOOL)failing;                                             // the last try failed: what is shown is old
+- (BOOL)running;
+- (void)start;
+- (void)stop;
+- (void)settingsChanged;
+- (void)fetchOnce;                                           // tests: one real fetch, logged with what was parsed
+- (void)inject:(NSString *)kind;                             // tests: rise fall mixed stale error none off
+- (NSString *)debugState;
+@end
+
+#pragma mark - toggles and the credit line (AtelierToggles.m)
+
+typedef NS_ENUM(NSInteger, AtelierToggleKind) {
+    AtelierToggleWifi = 0, AtelierToggleBluetooth, AtelierToggleData, AtelierToggleDND, AtelierToggleAwake, AtelierToggleLowPower,
+    AtelierToggleCount
+};
+
+@interface AtelierToggles : NSObject
++ (NSString *)name:(AtelierToggleKind)kind;
++ (NSString *)key:(AtelierToggleKind)kind;
++ (AtelierToggleKind)kindForKey:(NSString *)key;             // AtelierToggleCount when there is none
++ (BOOL)available:(AtelierToggleKind)kind;                   // this iOS has the calls it needs
++ (BOOL)isOn:(AtelierToggleKind)kind;
++ (void)refresh:(void (^)(void))then;                        // reads the slow ones off the main thread, then calls back on it
++ (void)setOn:(BOOL)on kind:(AtelierToggleKind)kind then:(void (^)(void))then;
++ (void)benchTick;                                           // the bench's clock: Keep Awake does its work here
++ (void)benchWentAway;                                       // Keep Awake ends with the bench, always
++ (void)debugFake:(AtelierToggleKind)kind look:(NSInteger)look;     // tests: 1 on, 0 off, -1 real again
+@end
+
+@interface AtelierDock : UIView
++ (CGFloat)heightForWidth:(CGFloat)width compact:(BOOL)compact;
+- (void)setCompact:(BOOL)compact;
+- (void)reload;                                              // settings changed
+- (void)refresh;                                             // read the states again
+- (void)debugTap:(NSString *)key;
+- (NSArray<NSDictionary *> *)debugFrames;
 - (NSString *)debugState;
 @end
 
@@ -262,6 +360,10 @@ typedef NS_ENUM(NSInteger, AtelierSwipe) { AtelierSwipeLeft = 0, AtelierSwipeRig
 + (void)pickAppWithTitle:(NSString *)title excluding:(NSArray<NSString *> *)exclude then:(void (^)(NSString *bid))then;
 + (void)showSets;                                            // open, rename, reorder, delete
 + (void)debugPick:(NSUInteger)row;                           // tests: choose row n of the list on screen
++ (void)debugType:(NSString *)text;                          // tests: put this in the picker's search field, as typing would
++ (void)debugReturn;                                         // tests: the Return key in the search field
++ (NSArray<NSString *> *)debugWhere;                         // tests: the picker's field, keyboard and first rows, on the screen
++ (NSString *)debugState;
 + (NSString *)setTitle:(NSDictionary *)set;                  // its name, or its apps' names
 @end
 

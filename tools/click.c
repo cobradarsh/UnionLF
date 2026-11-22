@@ -3,9 +3,11 @@
     The simulator turns a click on its window into a finger on the phone's screen, which is the
     only way to put a real touch through the window server of a simulated iPhone from a script.
 
-    usage: click <x> <y> [hold seconds]            a click
+    usage: click <x> <y> [hold seconds]            a click (or, with a hold of half a second or more, a long press)
            click drag <x1> <y1> <x2> <y2> [s] [h]  press at the first point, slide to the second in s seconds,
                                                    and keep the finger down there for h seconds
+           click flick <x1> <y1> <x2> <y2> [s]     the same slide, fast (0.05 s unless told), and the finger
+                                                   lifts while it is still moving
            (global display points, origin at the top left)
     build: clang -o click tools/click.c -framework ApplicationServices                        */
 
@@ -22,11 +24,12 @@ static void post(CGEventType type, CGPoint p) {
 }
 
 int main(int argc, char **argv) {
-    if (argc >= 6 && strcmp(argv[1], "drag") == 0) {
+    if (argc >= 6 && (strcmp(argv[1], "drag") == 0 || strcmp(argv[1], "flick") == 0)) {
+        int flick = strcmp(argv[1], "flick") == 0;
         CGPoint a = CGPointMake(atof(argv[2]), atof(argv[3])), b = CGPointMake(atof(argv[4]), atof(argv[5]));
-        double seconds = argc > 6 ? atof(argv[6]) : 0.4;
+        double seconds = argc > 6 ? atof(argv[6]) : (flick ? 0.05 : 0.4);
         double hold = argc > 7 ? atof(argv[7]) : 0.0;
-        int steps = 24;
+        int steps = flick ? 6 : 24;
         post(kCGEventMouseMoved, a);
         usleep(200000);
         post(kCGEventLeftMouseDown, a);
@@ -36,7 +39,7 @@ int main(int argc, char **argv) {
             post(kCGEventLeftMouseDragged, p);
             usleep((useconds_t)(seconds * 1000000 / steps));
         }
-        usleep(60000 + (useconds_t)(hold * 1000000));
+        if (!flick) usleep(60000 + (useconds_t)(hold * 1000000));      // a flick lifts at once, still at speed
         post(kCGEventLeftMouseUp, b);
         usleep(100000);
         return 0;

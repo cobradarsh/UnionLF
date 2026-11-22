@@ -1,12 +1,12 @@
 /*  AtelierDebug.m — test commands, so the bench can be driven without touching the screen.
 
-    On while the debug log is on (Settings → Atelier → Debug Log). Command file:
+    On while the debug log is on (Settings → HyperTrade → Debug Log). Command file:
     <log dir>/atelier_cmd.txt, one command per line. SpringBoard notices the file appear (it
     watches the folder; nothing polls), deletes it and runs the lines in order:
 
         open | close | toggle           the bench, as the edge swipe would
         apps <bundle id> …              open the bench with exactly these apps (first = main)
-        add <bundle id>                 what "Open in Atelier" in the icon menu does
+        add <bundle id>                 what "Open in HyperTrade" in the icon menu does
         layout side|top|split|next
         main <n>                        slot n changes places with the main (0 = main, 1… = minis)
         closeapp <n> | full <n>         close that app / open it full screen and put the bench away
@@ -21,6 +21,19 @@
         clock <ISO date> | clock off    the band's clock runs on from that moment, e.g. clock 2026-11-23T10:00:00+05:30
         shortcuts <bundle id> …         the shortcut apps (what the Settings list would save); "shortcuts none" clears
         shortcut <n>                    what a tap on shortcut n does
+        shortcuthold <n>                what a hold on shortcut n does (its menu)
+        shortcutplus                    what a tap on the "+" at the end of the shortcut row does
+        shortcutadd <bundle id> | shortcutremove <bundle id>
+        quotes rise|fall|mixed|stale|error|none     test numbers for NIFTY and SENSEX (nothing is fetched)
+        quotes off                      real numbers again
+        quotes fetch                    one real fetch, logged with what was parsed
+        toggle <wifi|bluetooth|data|dnd|awake|lowpower>          what a tap on that switch does
+        togglefake <key> on|off|real    show that switch as on or off without touching the phone; "togglefake clear"
+        spore <bundle id> … | spore dict <bundle id> … | spore off
+                                        (simulator only) write a SporeX hidden-apps list, as an array or as a
+                                        dictionary, and post SporeX's notification
+        type <text> | return            put text in the picker's search field as typing would / its Return key
+        sheet                           log what the sheet on screen shows
         badge <bundle id> <n>           give an app a badge (0 clears it)
         where                           log every tile, pill and shortcut with its frame; also → atelier_where.txt
         saveset | sets | picker         save the bench as a set / the Sets sheet / the app picker
@@ -216,11 +229,65 @@ static double AtelierRunLine(NSString *raw) {
             [[AtelierSettings shared] setObject:list forKey:@"shortcutApps"];
             AtelierSettingsChanged();
         } else if ([cmd isEqualToString:@"shortcut"] && a1) {
-            NSArray<NSString *> *list = [[AtelierSettings shared] shortcutApps];
-            NSMutableArray<NSString *> *shown = [NSMutableArray array];
-            for (NSString *bid in list) if ([AtelierHost applicationForBundleID:bid] && shown.count < ATELIER_SHORTCUTS) [shown addObject:bid];
+            NSArray<NSString *> *shown = [AtelierBand shownShortcuts];
             if (n < shown.count) [bench openShortcut:shown[n]];
             else AtelierLog(@"shortcut %lu: there are %lu", (unsigned long)n, (unsigned long)shown.count);
+        } else if ([cmd isEqualToString:@"shortcuthold"] && a1) {
+            [[bench debugBand] debugHoldShortcut:n];
+        } else if ([cmd isEqualToString:@"shortcutplus"]) {
+            [[bench debugBand] debugTapPlus];
+        } else if ([cmd isEqualToString:@"shortcutadd"] && a1) {
+            [bench addShortcut:a1];
+        } else if ([cmd isEqualToString:@"shortcutremove"] && a1) {
+            [bench removeShortcut:a1];
+        } else if ([cmd isEqualToString:@"quotes"] && a1) {
+            if ([a1 isEqualToString:@"fetch"]) [[AtelierQuotes shared] fetchOnce];
+            else [[AtelierQuotes shared] inject:a1];
+        } else if ([cmd isEqualToString:@"toggle"] && a1) {
+            AtelierDock *dock = [bench debugDock];
+            if (dock && bench.visible) [dock debugTap:a1];
+            else AtelierLog(@"toggle %@: the bench is not up", a1);
+        } else if ([cmd isEqualToString:@"togglefake"] && a1) {
+            if ([a1 isEqualToString:@"clear"]) {
+                [AtelierToggles debugFake:AtelierToggleCount look:-1];
+            } else {
+                AtelierToggleKind kind = [AtelierToggles kindForKey:a1];
+                NSInteger look = [a2 isEqualToString:@"on"] ? 1 : ([a2 isEqualToString:@"off"] ? 0 : -1);
+                if (kind == AtelierToggleCount) AtelierLog(@"togglefake: no switch \"%@\"", a1);
+                else [AtelierToggles debugFake:kind look:look];
+            }
+            [[bench debugDock] refresh];
+        } else if ([cmd isEqualToString:@"spore"] && a1) {
+#if TARGET_OS_SIMULATOR
+            CFStringRef domain = CFSTR("com.adarsh.sporex");
+            if ([a1 isEqualToString:@"off"]) {
+                CFPreferencesSetAppValue(CFSTR("Enabled"), NULL, domain);
+                CFPreferencesSetAppValue(CFSTR("HiddenApps"), NULL, domain);
+            } else {
+                BOOL dict = [a1 isEqualToString:@"dict"];
+                NSArray<NSString *> *bids = dict ? [rest subarrayWithRange:NSMakeRange(1, rest.count - 1)] : rest;
+                id value = bids;
+                if (dict) {
+                    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+                    for (NSString *bid in bids) d[bid] = @YES;
+                    value = d;
+                }
+                CFPreferencesSetAppValue(CFSTR("Enabled"), kCFBooleanTrue, domain);
+                CFPreferencesSetAppValue(CFSTR("HiddenApps"), (__bridge CFPropertyListRef)value, domain);
+            }
+            CFPreferencesAppSynchronize(domain);
+            notify_post(ATELIER_N_SPORE);
+            AtelierLog(@"spore: test list written (%@), notification posted", a1);
+#else
+            AtelierLog(@"spore: simulator only. On the phone this would overwrite SporeX's own list.");
+#endif
+        } else if ([cmd isEqualToString:@"type"]) {
+            NSRange r = [line rangeOfString:@"type"];
+            [AtelierSheets debugType:[[line substringFromIndex:r.location + r.length] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet]];
+        } else if ([cmd isEqualToString:@"return"]) {
+            [AtelierSheets debugReturn];
+        } else if ([cmd isEqualToString:@"sheet"]) {
+            AtelierLog(@"sheet: %@", [AtelierSheets debugState]);
         } else if ([cmd isEqualToString:@"badge"] && a2) {
             id app = [AtelierHost applicationForBundleID:a1];
             NSInteger count = a2.integerValue;
@@ -282,8 +349,8 @@ static double AtelierRunLine(NSString *raw) {
             if (AtelierShape(app, s, "v", 1)) ((void (*)(id, SEL, id))objc_msgSend)(app, s, nil);
             else AtelierLog(@"home: -> %d", (int)AtelierSend(app, @"_simulateHomeButtonPress"));
         } else if ([cmd isEqualToString:@"state"]) {
-            AtelierLog(@"state: %@ · %@ · front %@ · locked %d · switcher %d", [bench debugState], [[AtelierTrigger shared] debugState],
-                       [AtelierHost frontmostBundleID] ?: @"home", (int)[AtelierHost isLocked], (int)[AtelierHost switcherVisible]);
+            AtelierLog(@"state: %@ · %@ · %@ · front %@ · locked %d · switcher %d", [bench debugState], [[AtelierTrigger shared] debugState],
+                       [AtelierSheets debugState], [AtelierHost frontmostBundleID] ?: @"home", (int)[AtelierHost isLocked], (int)[AtelierHost switcherVisible]);
         } else if ([cmd isEqualToString:@"scenes"]) {
             AtelierLog(@"scenes: %@", [AtelierScenes describeAll]);
         } else if ([cmd isEqualToString:@"windows"]) {

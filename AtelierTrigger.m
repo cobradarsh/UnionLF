@@ -39,6 +39,9 @@
     CGFloat w = MAX(10, MIN(40, [s tune:@"triggerWidth" fallback:16]));
     CGFloat h = s.triggerSize;
     CGFloat bottom = screen.height - MAX([AtelierHost safeInsets].bottom, 12) - 6;
+    // while the bench is up its dock (the switches) lies along the bottom: the strip ends above it
+    CGFloat dock = [[AtelierBench shared] dockTop];
+    if (dock > 0) bottom = MIN(bottom, dock - 4);
     return CGRectMake(s.triggerSide == 0 ? 0 : screen.width - w, bottom - h, w, h);
 }
 

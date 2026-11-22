@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs Atelier inside the SpringBoard of an iOS simulator and photographs it.
+# Runs HyperTrade (Atelier) inside the SpringBoard of an iOS simulator and photographs it.
 #
 # Atelier hooks with the Objective-C runtime only, so the same sources build for the simulator
 # with plain clang (no Theos, no ElleKit). The dylib is loaded into the simulator's SpringBoard
@@ -9,8 +9,10 @@
 # came up, where it is touched.
 #
 # What this shows: real apps hosted live in a real SpringBoard of the phone's iOS generation
-# (16.4 when the runtime can be had), every layout, the swap, freezing, the sheets, and that
-# nothing crashes. What it cannot show: fingers. The simulator is not sent any touches here.
+# (16.4 when the runtime can be had), every layout, the swap, freezing, the sheets, the band
+# (index numbers, clock, flags, shortcuts), the dock (switches, credit), and that nothing
+# crashes; then real touches (clicks and drags on the Simulator's window): swipes, taps, the
+# picker's search field typed into with clicks on the keys.
 #
 # usage: tools/sim_test.sh [output folder] [wanted iOS version, e.g. 16.4]
 #        (run from the repository root, on a Mac with Xcode)
@@ -176,8 +178,17 @@ cmd() {                                               # one or more command line
 }
 shot() {                                              # shot <name>: a screenshot, kept as a small JPEG
   xcrun simctl io "$UDID" screenshot "$OUT/$1.png" > /dev/null 2>&1 || { echo "screenshot $1 failed"; return; }
+  cp "$OUT/$1.png" "$RUN/last.png" 2>/dev/null       # the full-size picture, for crop
   sips -s format jpeg -s formatOptions 75 -Z 1500 "$OUT/$1.png" --out "$OUT/$1.jpg" > /dev/null 2>&1 && rm -f "$OUT/$1.png"
   echo "  shot $1"
+}
+crop() {                                              # crop <the shot just taken> <name> <left> <top> <width> <height>: that part of it (fractions of the screen) at full size
+  local w h
+  [ -f "$RUN/last.png" ] || return 0
+  w=$(sips -g pixelWidth "$RUN/last.png" 2>/dev/null | awk '/pixelWidth/ { print $2 }')
+  h=$(sips -g pixelHeight "$RUN/last.png" 2>/dev/null | awk '/pixelHeight/ { print $2 }')
+  [ -n "$w" ] && [ -n "$h" ] || return 0
+  sips -s format jpeg -s formatOptions 88        -c "$(python3 -c "print(int($h * $6))")" "$(python3 -c "print(int($w * $5))")"        --cropOffset "$(python3 -c "print(int($h * $4))")" "$(python3 -c "print(int($w * $3))")"        "$RUN/last.png" --out "$OUT/$2.jpg" > /dev/null 2>&1 || echo "  (no crop $2 on this macOS)"
 }
 step() {                                              # step <name> <ignored> <command lines…>: run them, then take the picture
   local name="$1"; shift 2
@@ -200,14 +211,22 @@ WEST_OPEN=2026-11-23T21:00:00+05:30         # 15:30 in London and 10:30 in New Y
 ALL_CLOSED=2026-11-22T12:00:00+05:30        # a Sunday
 INDIA_HOLIDAY=2026-11-24T10:00:00+05:30     # Tuesday, Guru Nanak Jayanti: NSE is shut
 
+echo "== the Settings page, as the generator makes it"
+python3 tools/make_prefs.py --dump "$OUT/prefs-check" > "$OUT/settings-page.txt" 2>&1 || echo "the Settings page could not be dumped"
+head -4 "$OUT/settings-page.txt"
+rm -rf "$OUT/prefs-check"
+
 echo "== what this SpringBoard has"
 cmd "windows" "scenes" "iconmenu $MAPS" "state"
 sleep 5
 shot 01-home
 
-echo "== the bench: the band and six apps"
-step 02-side-three 26 "clock $INDIA_OPEN" "shortcuts $CAL $REM $HEALTH $MAPS" "badge $REM 3" "apps $SET $MAPS $SAFARI" "wait 21" "scenes" "state" "where"
+echo "== the bench: the band, the dock and six apps"
+# the index numbers are test numbers from the start, so that nothing is fetched until the step that says so
+step 02-side-three 26 "quotes rise" "clock $INDIA_OPEN" "shortcuts $CAL $REM $HEALTH $MAPS" "badge $REM 3" "apps $SET $MAPS $SAFARI" "wait 21" "scenes" "state" "where"
 step 03-side-six 32 "apps $SET $MAPS $SAFARI $FILES $PROBE $CAL" "wait 26" "state" "where"
+crop 03-side-six 03b-top-band 0 0.060 1 0.100          # the band, at full size
+crop 03-side-six 03c-dock 0 0.925 1 0.045              # the dock: the switches and the credit line
 step 04-markets-west-open 4 "clock $WEST_OPEN" "wait 1.5" "state"
 step 05-markets-all-closed 4 "clock $ALL_CLOSED" "wait 1.5" "state"
 step 06-markets-india-holiday 4 "clock $INDIA_HOLIDAY" "wait 1.5" "state"
@@ -221,11 +240,60 @@ step 11-mini-menu 3 "hidemenu" "wait 0.4" "menu 2"
 step 12-split 6 "hidemenu" "layout split" "wait 3" "state" "where"
 step 13-side-again 6 "layout side" "wait 3" "state"
 
+echo "== index numbers (test numbers, then one real fetch)"
+step 60-indices-up 3 "clock $INDIA_OPEN" "quotes rise" "wait 1" "state"
+crop 60-indices-up 60b-indices-up-band 0 0.060 1 0.100
+step 61-indices-down 3 "quotes fall" "wait 1" "state"
+crop 61-indices-down 61b-indices-down-band 0 0.060 1 0.100
+step 62-indices-one-up-one-down 3 "quotes mixed" "wait 1" "state"        # SENSEX above a lakh: 1,00,412.05
+crop 62-indices-one-up-one-down 62b-indices-mixed-band 0 0.060 1 0.100
+step 63-indices-stale 3 "quotes stale" "wait 1" "state"                  # 2 and 15 minutes old during the session
+crop 63-indices-stale 63b-indices-stale-band 0 0.060 1 0.100
+step 64-indices-feed-failing 3 "quotes error" "wait 1" "state"           # the last numbers, dimmed
+crop 64-indices-feed-failing 64b-indices-failing-band 0 0.060 1 0.100
+step 65-indices-closed 3 "clock $ALL_CLOSED" "quotes rise" "wait 1" "state"
+crop 65-indices-closed 65b-indices-closed-band 0 0.060 1 0.100
+step 66-indices-top 5 "layout top" "wait 3" "state" "where"              # the compact form
+step 67-indices-split 5 "layout split" "wait 3" "state" "where"
+cmd "layout side" "wait 2"
+# the real thing, once: Yahoo's public feed, at the real time of day
+step 68-indices-real-fetch 14 "clock off" "quotes fetch" "wait 10" "state"
+crop 68-indices-real-fetch 68b-indices-real-band 0 0.060 1 0.100
+echo "-- the real fetch:"; grep "quotes: " "$RUN/Atelier.log" | tail -4 | cut -c21-
+step 69-indices-off 4 "quotes rise" "set showIndices false" "wait 2" "state" "where"       # the switch in Settings: no lines, a bigger main
+cmd "set showIndices true" "clock $INDIA_OPEN" "wait 2"
+
+echo "== toggles"
+step 70-toggles-all-off 4 "togglefake wifi off" "togglefake bluetooth off" "togglefake data off" "togglefake dnd off" "togglefake lowpower off" "wait 1.5" "state" "where"
+crop 70-toggles-all-off 70b-toggles-all-off-dock 0 0.925 1 0.045
+step 71-toggles-all-on 5 "togglefake wifi on" "togglefake bluetooth on" "togglefake data on" "togglefake dnd on" "togglefake lowpower on" "toggle awake" "wait 2.5" "state"
+crop 71-toggles-all-on 71b-toggles-all-on-dock 0 0.925 1 0.045
+step 72-toggles-some 4 "togglefake bluetooth off" "togglefake dnd off" "togglefake lowpower off" "wait 1.5" "state"
+crop 72-toggles-some 72b-toggles-some-dock 0 0.925 1 0.045
+# Keep Awake is on: the bench's clock resets the idle timer; closing the bench ends it
+cmd "wait 12" "state" "close" "wait 2" "state" "open" "wait 6" "state"
+echo "-- Keep Awake:"; grep -E "Keep Awake|idle timer" "$RUN/Atelier.log" | tail -5 | cut -c21-
+# what the simulator's own switches say, and each one flipped for real and back (logged before and after)
+cmd "togglefake clear" "wait 2" "state"
+for t in wifi bluetooth lowpower dnd data; do cmd "toggle $t" "wait 3" "toggle $t" "wait 3"; done
+step 73-toggles-real 4 "state"
+echo "-- toggles flipped for real in the simulator:"; grep "toggle " "$RUN/Atelier.log" | grep -v "cmd>" | tail -14 | cut -c21-
+step 74-toggles-three-off-in-settings 5 "set toggleData false" "set toggleDND false" "set toggleLowPower false" "wait 2" "state" "where"
+step 74b-top-with-dock 5 "layout top" "wait 3" "state"
+cmd "set toggleData true" "set toggleDND true" "set toggleLowPower true" "layout side" "wait 2"
+
 echo "== shortcut apps"
 step 14-shortcut-already-on-the-bench 5 "shortcut 0" "wait 2" "state"       # Calendar is there: it becomes the main
 step 15-shortcut-bench-full 4 "shortcut 1" "wait 1" "state"                 # Contacts is not, and there is no room
 step 16-closed-one 5 "closeapp 5" "wait 2" "state" "where"
 step 17-shortcut-opened 14 "shortcut 1" "wait 10" "state"                   # now Contacts opens as the main
+step 17b-shortcut-menu 4 "shortcuthold 2" "wait 1" "state" "where"          # a hold: Open, Remove from Shortcuts
+step 17c-shortcut-removed 4 "menutap 1" "wait 1.5" "state" "where"          # Health leaves the row
+step 17d-shortcut-plus-picker 5 "shortcutplus" "wait 2.5" "sheet" "where" "windows"      # the "+": the picker, its field focused
+step 17e-shortcut-search 4 "type héa" "wait 1" "sheet"                      # accents and case don't matter: Health
+step 17f-shortcut-added-by-return 5 "return" "wait 2" "state" "where"
+step 17g-no-shortcuts 4 "shortcuts none" "wait 1.5" "state" "where"         # just the "+"
+cmd "shortcuts $CAL $REM $HEALTH $MAPS" "wait 1"
 
 echo "== locks, swipes and freezing, by command"
 step 18-locked 4 "lock 2" "wait 1.5" "state"
@@ -240,27 +308,48 @@ step 24-side-again 6 "layout side" "wait 3" "state"
 
 echo "== sheets and sets"
 step 25-closed-two 5 "closeapp 5" "wait 1.5" "closeapp 4" "wait 2" "state"
-step 26-picker 4 "plus"
-step 27-picked 9 "pick 4" "wait 6" "state"
+step 26-picker 5 "plus" "wait 2.5" "sheet" "where"
+step 26b-picker-search 4 "type ma" "wait 1" "sheet"
+step 26c-picker-search-nothing 4 "type zzq" "wait 1" "sheet"
+step 26d-picker-cleared 4 "type" "wait 1" "sheet"
+step 27-picked 9 "pick 4" "wait 6" "state" "windows"
 step 28-set-saved 6 "saveset" "wait 3" "sets"
 step 29-set-opened-lock-kept 9 "pick 0" "wait 6" "state"
 step 30-icon-menu 3 "sheetclose" "iconmenu $MAPS" "state"
+
+echo "== apps hidden by SporeX (a test list written in the simulator)"
+# the bench: Settings, Maps, Safari, Files · shortcuts: Calendar, Contacts, Health, Maps · a set with Maps in it
+cmd "unlockall" "spore off" "apps $SET $MAPS $SAFARI $FILES" "layout side" "wait 8" "saveset" "wait 3" "state"
+shot 80-spore-before
+step 81-spore-maps-and-health-hidden 6 "spore $MAPS $HEALTH" "wait 3" "state" "where"       # Maps leaves the bench, both leave the shortcut row
+step 82-spore-picker 5 "plus" "wait 2.5" "sheet"
+step 83-spore-search-maps 4 "type map" "wait 1" "sheet"                    # no Maps
+step 84-spore-sets 5 "sheetclose" "wait 0.6" "sets" "wait 1.5" "sheet"     # the set's names leave Maps out
+step 85-spore-set-opened 8 "pick 0" "wait 5" "state"                       # and opening it does not bring Maps
+cmd "sheetclose" "apps $SET $MAPS $HEALTH $SAFARI" "wait 4" "state"        # asked for by name: still not put on the bench
+cmd "iconmenu $MAPS" "iconmenu $SAFARI"
+# a saved bench with a hidden app in it: saved while nothing was hidden, opened after
+cmd "spore off" "wait 1" "apps $SET $MAPS $SAFARI" "wait 5" "close" "wait 2" "spore dict $MAPS" "wait 1"       # the dictionary form of the list
+step 86-spore-saved-bench-opened 8 "open" "wait 6" "state"
+step 87-spore-off 6 "spore off" "wait 1" "plus" "wait 2.5" "type map" "wait 1" "sheet"       # nothing hidden: Maps is found again
+cmd "sheetclose" "wait 1" "state"
+echo "-- what the log says about hidden apps:"; grep -E "hidden apps|leave the bench|spore:" "$RUN/Atelier.log" | tail -12 | cut -c21-
 
 echo "== leaving and coming back"
 step 31-full-screen 8 "full 0" "wait 5" "state" "scenes"
 step 32-open-over-app 10 "open" "wait 7" "state"
 step 33-closed 6 "close" "wait 3" "state" "scenes"
 step 34-edge-strip 5 "set triggerTint 1" "wait 1" "state"
-step 35-reopened 12 "set triggerTint 0" "trigger" "wait 8" "state"
-step 36-no-band 6 "set showClock false" "set showMarkets false" "shortcuts none" "wait 3" "state" "where"
-step 37-top-no-band 6 "layout top" "wait 3" "state"
-cmd "set showClock true" "set showMarkets true" "shortcuts $CAL $REM $HEALTH $MAPS" "layout side" "wait 2" "close" "wait 2" "state" "scenes"
+step 35-reopened 12 "trigger" "wait 8" "state"                              # the strip, still tinted: it ends above the dock now
+step 36-bare 6 "set triggerTint 0" "set showClock false" "set showMarkets false" "set showIndices false" "shortcuts none" "set toggleWifi false" "set toggleBluetooth false" "set toggleData false" "set toggleDND false" "set toggleAwake false" "set toggleLowPower false" "wait 3" "state" "where"
+step 37-top-bare 6 "layout top" "wait 3" "state"
+cmd "set showClock true" "set showMarkets true" "set showIndices true" "set toggleWifi true" "set toggleBluetooth true" "set toggleData true" "set toggleDND true" "set toggleAwake true" "set toggleLowPower true" "shortcuts $CAL $REM $HEALTH $MAPS" "layout side" "wait 2" "close" "wait 2" "state" "scenes"
 sleep 8
 
 # ---- fingers: clicks and drags on the Simulator's window become touches on the simulated screen ----
 # Nothing here can fail the test: a runner where the Mac's screen can't be clicked just reports that.
 touch_test() {
-  local DATA PLOG GEO WX WY WW WH METHOD before X1 Y1 X2 Y2 M1X M1Y M2X M2Y WHERE
+  local DATA PLOG GEO WX WY WW WH METHOD before X1 Y1 X2 Y2 M1X M1Y M2X M2Y WHERE KB
   WHERE="$RUN/atelier_where.txt"
   DATA=$(xcrun simctl get_app_container "$UDID" "$PROBE" data 2>/dev/null) || { echo "no probe app"; return 0; }
   PLOG="$DATA/Documents/probe.log"
@@ -283,7 +372,8 @@ touch_test() {
   }
   calc() { python3 -c "print($1)"; }
   SKIP=$(wc -l < "$RUN/Atelier.log" | tr -d ' ')       # only what the log says from here on counts as an answer
-  last() { tail -n +"$((SKIP + 1))" "$RUN/Atelier.log" | grep "$1" | tail -1 | cut -c21-150; }      # the last such line, without the date
+  last() { tail -n +"$((SKIP + 1))" "$RUN/Atelier.log" | grep "$1" | tail -1 | cut -c21-190; }      # the last such line, without the date
+  count() { tail -n +"$((SKIP + 1))" "$RUN/Atelier.log" | grep -c "$1"; }
 
   # 1. the probe app on its own, full screen: two clicks tell how Mac points map to phone points
   xcrun simctl launch "$UDID" "$PROBE" > /dev/null 2>&1
@@ -303,7 +393,9 @@ touch_test() {
   mx() { calc "$M1X + ($1 - $X1) * ($M2X - $M1X) / ($X2 - $X1)"; }
   my() { calc "$M1Y + ($1 - $Y1) * ($M2Y - $M1Y) / ($Y2 - $Y1)"; }
   phone() { mac_click "$(mx "$1")" "$(my "$2")"; }                    # phone <x> <y>: click that point of the phone's screen
-  phone_drag() { "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5; }
+  phone_hold() { "$OUT/click" "$(mx "$1")" "$(my "$2")" "$3"; }       # phone_hold <x> <y> <seconds>: a finger held there
+  phone_drag() { "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" "${5:-0.5}"; }
+  phone_flick() { "$OUT/click" flick "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" "${5:-0.05}"; }
   drag_shot() {                                       # drag_shot <x1> <y1> <x2> <y2> <picture>: the picture is taken with the finger still down
     "$OUT/click" drag "$(mx "$1")" "$(my "$2")" "$(mx "$3")" "$(my "$4")" 0.5 4.5 &
     sleep 1.5
@@ -318,13 +410,32 @@ touch_test() {
   }
   cx() { awk -v n="$1" '$1 == n { printf "%.1f", $2 + $4 / 2 }' "$WHERE"; }
   cy() { awk -v n="$1" '$1 == n { printf "%.1f", $3 + $5 / 2 }' "$WHERE"; }
+  lx() { awk -v n="$1" '$1 == n { printf "%.1f", $2 }' "$WHERE"; }                    # its left edge
   ax() { awk -v a="$1" '$1 == "main" { printf "%.1f", $2 + a * $6 }' "$WHERE"; }      # a point of the main app -> the screen
   ay() { awk -v a="$1" '$1 == "main" { printf "%.1f", $3 + a * $6 }' "$WHERE"; }
+  # a key of SpringBoard's own keyboard (the picker's): key <letter|return>. Rows are counted up from the
+  # keyboard's bottom edge, as measured on this screen size with the probe's keyboard (G is 214 pt above it).
+  key() {
+    local kb_bottom kb_w row col
+    kb_bottom=$(awk '$1 == "keyboard" { printf "%.1f", $3 + $5 }' "$WHERE")
+    kb_w=$(awk '$1 == "keyboard" { printf "%.1f", $4 }' "$WHERE")
+    [ -n "$kb_bottom" ] || return 1
+    case "$1" in
+      q|w|e|r|t|y|u|i|o|p) row=268; col=$(python3 -c "print('qwertyuiop'.index('$1') + 0.5)") ;;
+      a|s|d|f|g|h|j|k|l)   row=214; col=$(python3 -c "print('asdfghjkl'.index('$1') + 1.0)") ;;
+      z|x|c|v|b|n|m)       row=160; col=$(python3 -c "print('zxcvbnm'.index('$1') + 2.0)") ;;
+      return)              row=106; col=8.72 ;;
+      *) return 1 ;;
+    esac
+    phone "$(calc "$kb_w / 10.0 * $col")" "$(calc "$kb_bottom - $row")"
+    sleep 0.8
+  }
+  have_keyboard() { grep -q "^keyboard " "$WHERE"; }
   phone 300 250; sleep 2
   echo "T0 full screen: clicked phone 300,250 · the probe got $(last_touch)"
 
   # 2. the probe as the main of a full bench (Side), minis kept live so nothing freezes mid-test
-  cmd "unlockall" "set miniMode 1" "set swipeDown 0" "clock $INDIA_OPEN" "apps $PROBE $SET $MAPS $SAFARI $FILES $CAL" "layout side" "wait 8" "state"
+  cmd "unlockall" "quotes rise" "set miniMode 1" "set swipeDown 0" "clock $INDIA_OPEN" "apps $PROBE $SET $MAPS $SAFARI $FILES $CAL" "layout side" "wait 8" "state"
   sleep 8
   where
   cat "$WHERE"
@@ -337,7 +448,7 @@ touch_test() {
   echo "T2 keyboard: $(grep 'text ' "$PLOG" | tail -1)"
   shot 42-touch-key
 
-  # 3. the four swipes on a mini (mini0 Settings, mini1 Maps, mini2 Safari, mini3 Files, mini4 Calendar)
+  # 3. swipes on a mini (mini0 Settings, mini1 Maps, mini2 Safari, mini3 Files, mini4 Calendar)
   drag_shot "$(cx mini1)" "$(cy mini1)" "$(calc "$(cx mini1) + 80")" "$(cy mini1)" 43-swipe-right-held
   sleep 3
   echo "T3 swipe right on Maps: $(last 'swipe right') · $(last 'swap:')"
@@ -347,19 +458,30 @@ touch_test() {
   sleep 2
   echo "T4 swipe up on Settings: $(last 'swipe up') · $(last 'lock com')"
   shot 46-swipe-up-locked
-  drag_shot "$(calc "$(cx mini0) + 16")" "$(cy mini0)" "$(calc "$(cx mini0) - 46")" "$(cy mini0)" 47-swipe-left-locked-held
+  # Short swipes to the left. The column lies against the left edge: the finger comes down 30 pt
+  # into the tile (about 40 pt from the edge) and goes 28 pt, which 1.1.0's fixed 40 pt never saw.
+  echo "   minis start at x $(lx mini0); the finger comes down at x $(calc "$(lx mini0) + 30") and travels 28 pt to the left"
+  drag_shot "$(calc "$(lx mini0) + 30")" "$(cy mini0)" "$(calc "$(lx mini0) + 2")" "$(cy mini0)" 47-short-swipe-left-locked-held
   sleep 2
-  echo "T5 swipe left on locked Settings: $(last 'swipe left')"
-  shot 48-swipe-left-locked-after
-  drag_shot "$(calc "$(cx mini3) + 16")" "$(cy mini3)" "$(calc "$(cx mini3) - 46")" "$(cy mini3)" 49-swipe-left-held
+  echo "T5 short swipe left (28 pt) on locked Settings: $(last 'swipe left on com.apple.Preferences')"
+  shot 48-short-swipe-left-locked-after
+  drag_shot "$(calc "$(lx mini3) + 30")" "$(cy mini3)" "$(calc "$(lx mini3) + 2")" "$(cy mini3)" 49-short-swipe-left-held
   sleep 3
-  echo "T6 swipe left on Files: $(last 'swipe left') · $(last 'close app')"
-  shot 50-swipe-left-closed
+  echo "T6 short swipe left (28 pt) on Files: $(last 'swipe left on com.apple.DocumentsApp armed') · $(last 'close app')"
+  shot 50-short-swipe-left-closed
   where                                                 # main Maps · mini0 Settings (locked), mini1 the probe, mini2 Safari, mini3 Calendar
+  phone_drag "$(calc "$(lx mini2) + 30")" "$(cy mini2)" "$(calc "$(lx mini2) + 19")" "$(cy mini2)" 0.6; sleep 2
+  echo "T6b too short (11 pt, slowly) on Safari: $(last 'did not arm')"
+  phone_flick "$(calc "$(lx mini3) + 55")" "$(cy mini3)" "$(calc "$(lx mini3) + 37")" "$(cy mini3)" 0.04; sleep 3
+  echo "T6c a flick left (18 pt in 0.04 s, 65 pt from the edge) on Calendar: $(last 'swipe left on com.apple.mobilecal')"
+  shot 50b-after-flick
+  where
   drag_shot "$(cx mini2)" "$(cy mini2)" "$(cx mini2)" "$(calc "$(cy mini2) + 80")" 51-swipe-down-held
   sleep 4
   echo "T7 swipe down on Safari: $(last 'swipe down') · $(last 'pair:') · $(last '  layout [0-9]')"
   shot 52-swipe-down-split
+  echo "   every swipe that ended without acting, as the log has it:"
+  tail -n +"$((SKIP + 1))" "$RUN/Atelier.log" | grep "did not arm" | cut -c21- | sed 's/^/     /'
 
   # 4. taps: a mini, the pill, a menu row, a shortcut
   cmd "layout side" "wait 3" "state"; sleep 6
@@ -381,7 +503,79 @@ touch_test() {
   echo "T10 tap on a shortcut: $(last 'shortcut com')"
   shot 56-tap-shortcut
 
-  # 5. out and in again
+  # 5. the picker's search field, with clicks on the keys of SpringBoard's own keyboard
+  cmd "apps $PROBE $SET $MAPS" "layout side" "wait 7" "state"; sleep 4
+  where
+  phone "$(cx plus)" "$(cy plus)"; sleep 4                                 # the "+" tile
+  where
+  echo "T13 the + tile: $(last 'picker: window key') · $(last 'picker keyboard')"
+  shot 60-picker-open-keyboard
+  if have_keyboard; then
+    key q
+    echo "T13b the Q key: $(last 'picker search')"
+    where
+    phone "$(cx fieldclear)" "$(cy fieldclear)"; sleep 1.5                 # the clear button
+    echo "T13c the clear button: $(last 'picker search')"
+    key c; key a; key l
+    cmd "sheet"; where
+    echo "T13d the keys C, A, L: $(last 'picker search') · $(last 'sheet:' | cut -c1-150)"
+    shot 61-picker-typed-cal
+    phone "$(cx row0)" "$(cy row0)"; sleep 5                               # the first match
+    echo "T13e a tap on the first match: $(last 'picker: a tap') · $(last 'keyboard: given back')"
+  else
+    echo "T13b SpringBoard's keyboard did not come up here: the text is put in by command instead"
+    cmd "type cal" "wait 1" "sheet"; shot 61-picker-typed-cal
+    cmd "pick 0" "wait 4"
+    echo "T13e by command: $(last 'picker:')"
+  fi
+  cmd "state"; where
+  shot 62-picker-picked
+  # the keyboard goes back to the bench's main app: its field is tapped and a key of its own keyboard pressed
+  before=$(grep -c 'text ' "$PLOG" 2>/dev/null || echo 0)
+  phone "$(ax 170)" "$(ay 152)"; sleep 2
+  phone "$(ax 215)" "$(ay 718)"; sleep 2
+  echo "T14 after the picker, the main app's own keyboard: $(grep 'text ' "$PLOG" | tail -1) ($(( $(grep -c 'text ' "$PLOG" 2>/dev/null || echo 0) - before )) new line(s) of text)"
+  shot 63-main-app-types-again
+
+  # 6. the shortcut row: its "+" (search, then Return), a hold, Remove
+  cmd "shortcuts $CAL $REM" "wait 1.5"; where
+  phone "$(cx shortcut-plus)" "$(cy shortcut-plus)"; sleep 4
+  where
+  echo "T15 the + of the shortcut row: $(last 'picker: window key')"
+  if have_keyboard; then
+    key s; key a; key f
+    cmd "sheet"
+    echo "T15b the keys S, A, F: $(last 'picker search')"
+    shot 64-shortcut-picker-typed-saf
+    key return; sleep 3
+    echo "T15c the Return key: $(last 'picker: Return') · $(last 'shortcut added')"
+  else
+    cmd "type saf" "wait 1" "return" "wait 2"
+    echo "T15c by command: $(last 'picker:') · $(last 'shortcut added')"
+  fi
+  where
+  shot 65-shortcut-added
+  phone_hold "$(cx shortcut2)" "$(cy shortcut2)" 0.9; sleep 2              # a hold on the new icon
+  where
+  echo "T16 a hold on the new shortcut: $(last 'shortcut com.apple.mobilesafari: menu') · $(grep 'menu ' "$WHERE" || echo 'no menu')"
+  shot 66-shortcut-menu
+  phone "$(cx menu)" "$(calc "$(awk '$1 == "menu" { print $3 }' "$WHERE") + 46 + 23")"; sleep 2      # its second row: Remove from Shortcuts
+  echo "T16b Remove from Shortcuts: $(last 'shortcut removed')"
+  where
+  shot 67-shortcut-removed
+
+  # 7. the dock: a switch tapped, and a swipe up that starts on a switch
+  phone "$(cx toggle-awake)" "$(cy toggle-awake)"; sleep 3
+  echo "T17 a tap on Keep Awake: $(last 'toggle Keep Awake')"
+  shot 68-toggle-tapped
+  crop 68-toggle-tapped 68b-toggle-tapped-dock 0 0.925 1 0.045
+  before=$(count 'toggle Wi-Fi')
+  phone_drag "$(cx toggle-wifi)" "$(cy toggle-wifi)" "$(cx toggle-wifi)" "$(calc "$(cy toggle-wifi) - 120")"; sleep 4
+  echo "T18 swipe up that starts on the Wi-Fi switch: $(last 'bench close') · $(last 'Keep Awake: off') · Wi-Fi flipped $(( $(count 'toggle Wi-Fi') - before )) time(s)"
+  shot 69-swipe-up-from-switch
+
+  # 8. out and in again
+  cmd "open" "wait 6"; sleep 3
   phone_drag 215 921 215 560; sleep 4                 # up from the bottom of the screen
   echo "T11 swipe up from the bottom: $(last 'bench close')"
   shot 57-swipe-up-closed
@@ -389,7 +583,7 @@ touch_test() {
   phone_drag 426 840 300 815; sleep 5                 # in from the right edge, on the strip
   echo "T12 edge strip: $(last 'trigger:') · $(last 'bench open' | cut -c1-60)"
   shot 58-edge-swipe-opened
-  cmd "state" "set miniMode 0" "clock off" "close" "wait 2" "state"
+  cmd "state" "set miniMode 0" "clock off" "quotes off" "close" "wait 2" "state"
   sleep 6
 }
 echo "== touches (clicks and drags on the Simulator window)"
@@ -403,11 +597,11 @@ cat "$OUT/probe.log" 2>/dev/null || echo "(none)"
 echo "== Atelier.log"
 cat "$OUT/Atelier.log" 2>/dev/null
 collect_crashes
-ls -la "$OUT" | head -80
+ls -la "$OUT" | head -150
 xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
 if ls "$OUT"/SpringBoard*.ips > /dev/null 2>&1; then echo "SpringBoard crashed during the test: see the crash reports"; exit 1; fi
-starts=$(grep -c "start: Atelier" "$OUT/Atelier.log" 2>/dev/null || echo 0)
-echo "Atelier started $starts time(s) during the test"
+starts=$(grep -c "in SpringBoard (pid" "$OUT/Atelier.log" 2>/dev/null || echo 0)
+echo "HyperTrade started $starts time(s) during the test"
 if [ "$starts" != "1" ]; then echo "SpringBoard restarted during the test: see the crash reports"; exit 1; fi
 if grep -q "threw" "$OUT/Atelier.log" 2>/dev/null; then echo "an exception was caught: see the log"; grep "threw" "$OUT/Atelier.log" | head; exit 1; fi
 if ! grep -q "hosted sceneID" "$OUT/Atelier.log" 2>/dev/null; then echo "no app was ever hosted"; exit 1; fi

@@ -1,4 +1,11 @@
-/*  AtelierBand.m — the strip above the tiles: a clock, three market flags, shortcut apps.
+/*  AtelierBand.m — the strip above the tiles: index numbers, a clock, three market flags,
+    shortcut apps.
+
+    Indices    NIFTY and SENSEX: last price in Indian grouping, the change and the change in
+               per cent with an up or down mark, green or red. The numbers come from
+               AtelierQuotes.m. A small tag says "Closed" outside India's session, and how old
+               the number is when it is more than a minute old during the session; while the
+               feed is failing the last numbers stay, dimmed.
 
     Clock      hours and minutes large, in digits that all have the same width so nothing shifts
                as they change; the seconds beside them, smaller and in the accent colour; the
@@ -10,16 +17,18 @@
                own time zone (so daylight saving is right), Monday to Friday. India also
                has its trading holidays: on one of those its flag stays dimmed and says
                "Holiday" (and which, where there is room). The list is AtelierIndiaHolidays()
-               below, one table per year, plus the dates typed under Settings → Atelier →
+               below, one table per year, plus the dates typed under Settings → HyperTrade →
                Extra India Holidays. A year without a table is weekdays only. The other markets
                have no holiday list: on their holidays the flag lights up all the same.
 
-    Shortcuts  icons of the apps chosen under Settings → Atelier → Shortcut Apps, each with the
-               app's badge if it has one (SpringBoard's own badge value). A tap puts that app on
-               the bench as the main app.
+    Shortcuts  icons of the chosen apps (up to six), each with the app's badge if it has one
+               (SpringBoard's own badge value). A tap puts that app on the bench as the main
+               app; a hold offers Open and Remove. While there are fewer than six, a "+" at the
+               end adds one from the app picker. (The same list can be edited under Settings.)
 
-    Two shapes: two rows in the Side layout (clock and icons above, flags below, left of the
-    "..." pill), one compact line in Top and Split.
+    Two shapes. Side: four rows (two index lines; the clock, with the shortcuts on the right;
+    the flags, left of the "..." pill). Top and Split: two compact lines (both indices; then
+    clock, flags and shortcuts).
 
     Cost: one timer, on the second boundary, only between -start and -stop (the bench on
     screen). With the clock switched off it fires once a minute. The flags and badges are worked
@@ -91,7 +100,7 @@ static NSDictionary<NSString *, NSString *> *AtelierIndiaHolidays(NSString *extr
 
 static NSTimeInterval gNowOffset;            // tests: the clock runs on from another moment
 
-static NSDate *AtelierBandNow(void) {
+NSDate *AtelierNow(void) {
     return [NSDate dateWithTimeIntervalSinceNow:gNowOffset];
 }
 
@@ -130,9 +139,125 @@ static NSInteger AtelierMarketMinutesLeft(const AtelierMarket *m, NSDate *date, 
     return m->close - minute;
 }
 
+// India's regular session, holidays (built in and typed in Settings) taken out: when the index
+// numbers are live.
+BOOL AtelierIndiaSessionOpen(NSDate *date) {
+    return AtelierMarketMinutesLeft(&kMarkets[0], date ?: AtelierNow(), AtelierIndiaHolidays([[AtelierSettings shared] extraHolidays]), NULL) >= 0;
+}
+
 static UIColor *AtelierAccent(void) {
     return [UIColor colorWithRed:0.60 green:0.58 blue:1.0 alpha:1];
 }
+
+// 2580060 paise -> "25,800.60"; a lakh and more group the Indian way: "1,00,412.05".
+NSString *AtelierIndianNumber(double value) {
+    BOOL negative = value < 0;
+    long long paise = llround(fabs(value) * 100.0);
+    long long whole = paise / 100;
+    NSString *digits = [NSString stringWithFormat:@"%lld", whole];
+    NSMutableString *out = [NSMutableString string];
+    if (digits.length <= 3) {
+        [out appendString:digits];
+    } else {
+        NSString *head = [digits substringToIndex:digits.length - 3];
+        NSMutableArray<NSString *> *groups = [NSMutableArray array];
+        while (head.length > 2) {
+            [groups insertObject:[head substringFromIndex:head.length - 2] atIndex:0];
+            head = [head substringToIndex:head.length - 2];
+        }
+        [groups insertObject:head atIndex:0];
+        [out appendFormat:@"%@,%@", [groups componentsJoinedByString:@","], [digits substringFromIndex:digits.length - 3]];
+    }
+    return [NSString stringWithFormat:@"%@%@.%02lld", negative ? @"-" : @"", out, paise % 100];
+}
+
+#pragma mark - one index line
+
+@interface AtelierIndexLine : UIView
+@property (nonatomic, strong) UILabel *name, *price, *change, *tag;
+@property (nonatomic, copy) NSString *said;             // what it shows, for the tests
+@end
+
+@implementation AtelierIndexLine
+
+- (instancetype)init {
+    if (!(self = [super initWithFrame:CGRectMake(0, 0, 200, 14)])) return nil;
+    self.userInteractionEnabled = NO;
+    _name = [UILabel new];
+    _price = [UILabel new];
+    _change = [UILabel new];
+    _tag = [UILabel new];
+    _tag.textAlignment = NSTextAlignmentCenter;
+    _tag.layer.cornerRadius = 4;
+    _tag.clipsToBounds = YES;
+    for (UILabel *l in @[ _name, _price, _change, _tag ]) [self addSubview:l];
+    return self;
+}
+
+- (void)show:(AtelierQuote *)quote label:(NSString *)label failing:(BOOL)failing sessionOpen:(BOOL)open compact:(BOOL)compact {
+    CGFloat big = compact ? 12 : 13.5, small = compact ? 10.5 : 11;
+    _name.attributedText = [[NSAttributedString alloc] initWithString:label attributes:@{
+        NSFontAttributeName: [UIFont systemFontOfSize:compact ? 9 : 9.5 weight:UIFontWeightSemibold],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1 alpha:0.55], NSKernAttributeName: @0.5 }];
+    _price.font = [UIFont monospacedDigitSystemFontOfSize:big weight:UIFontWeightSemibold];
+    _price.textColor = UIColor.whiteColor;
+    _change.font = [UIFont monospacedDigitSystemFontOfSize:small weight:UIFontWeightMedium];
+    _tag.font = [UIFont systemFontOfSize:8.5 weight:UIFontWeightSemibold];
+    if (!quote) {
+        _price.text = @"—";
+        _change.text = nil;
+        _tag.text = failing ? @"No data" : nil;
+        _tag.textColor = [UIColor colorWithWhite:1 alpha:0.5];
+        _tag.backgroundColor = UIColor.clearColor;
+        self.alpha = 0.6;
+        self.said = [NSString stringWithFormat:@"%@ —%@", label, failing ? @" (no data)" : @""];
+        [self setNeedsLayout];
+        return;
+    }
+    _price.text = AtelierIndianNumber(quote.price);
+    double move = quote.previousClose > 0 ? quote.price - quote.previousClose : 0;
+    double percent = quote.previousClose > 0 ? move / quote.previousClose * 100.0 : 0;
+    UIColor *colour = move > 0.004 ? [UIColor colorWithRed:0.19 green:0.84 blue:0.42 alpha:1]
+                    : (move < -0.004 ? [UIColor colorWithRed:1.0 green:0.36 blue:0.33 alpha:1] : [UIColor colorWithWhite:1 alpha:0.6]);
+    NSString *mark = move > 0.004 ? @"▲" : (move < -0.004 ? @"▼" : @"•");
+    _change.textColor = colour;
+    _change.text = quote.previousClose <= 0 ? nil
+        : (compact ? [NSString stringWithFormat:@"%@%.2f%%", mark, fabs(percent)]
+                   : [NSString stringWithFormat:@"%@ %@ (%.2f%%)", mark, AtelierIndianNumber(fabs(move)), fabs(percent)]);
+    // the tag: closed, or how old the number is when that is worth saying
+    NSTimeInterval age = quote.marketTime ? [AtelierNow() timeIntervalSinceDate:quote.marketTime] : 0;
+    NSString *tag = nil;
+    BOOL boxed = NO;
+    if (!open) { tag = @"Closed"; boxed = YES; }
+    else if (age > 60) tag = age >= 3600 ? [NSString stringWithFormat:@"%ldh ago", (long)(age / 3600)] : [NSString stringWithFormat:@"%ldm ago", (long)(age / 60)];
+    _tag.text = tag;
+    _tag.textColor = [UIColor colorWithWhite:1 alpha:boxed ? 0.7 : 0.5];
+    _tag.backgroundColor = boxed ? [UIColor colorWithWhite:1 alpha:0.12] : UIColor.clearColor;
+    self.alpha = failing ? 0.45 : 1.0;                   // the feed is failing: these are old numbers
+    self.said = [NSString stringWithFormat:@"%@ %@ %@%@%@", label, _price.text, _change.text ?: @"", tag ? [NSString stringWithFormat:@" [%@]", tag] : @"",
+                 failing ? @" (dimmed)" : @""];
+    [self setNeedsLayout];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat W = self.bounds.size.width, H = self.bounds.size.height;
+    BOOL wide = W > 300;                                 // a line of its own: the names line up in a column
+    CGFloat nameW = wide ? 47 : ceil([_name sizeThatFits:CGSizeMake(80, H)].width) + 4;
+    _name.frame = CGRectMake(0, 0.5, nameW, H);
+    CGFloat x = nameW;
+    CGFloat pw = ceil([_price sizeThatFits:CGSizeMake(160, H)].width);
+    _price.frame = CGRectMake(x, 0, pw, H);
+    x += pw + (wide ? 8 : 5);
+    CGFloat cw = _change.text.length ? ceil([_change sizeThatFits:CGSizeMake(200, H)].width) : 0;
+    _change.frame = CGRectMake(x, 0.5, cw, H);
+    x += cw + (cw ? 7 : 0);
+    CGFloat tw = _tag.text.length ? ceil([_tag sizeThatFits:CGSizeMake(80, H)].width) + 8 : 0;
+    _tag.frame = CGRectMake(x, (H - 12) / 2.0 + 0.5, tw, 12);
+    _tag.hidden = tw == 0 || x + tw > W + 0.5;           // no room: the tag goes (the dimming still says "old")
+}
+
+@end
 
 #pragma mark - a market flag
 
@@ -178,7 +303,7 @@ static UIColor *AtelierAccent(void) {
 #pragma mark - a shortcut app
 
 @interface AtelierShortcutIcon : UIControl
-@property (nonatomic, copy) NSString *bundleID;
+@property (nonatomic, copy) NSString *bundleID;          // nil for the "+"
 @property (nonatomic, strong) UIImageView *icon;
 @property (nonatomic, strong) UILabel *badge;
 @end
@@ -186,13 +311,26 @@ static UIColor *AtelierAccent(void) {
 @implementation AtelierShortcutIcon
 
 - (instancetype)initWithBundleID:(NSString *)bid {
-    if (!(self = [super initWithFrame:CGRectMake(0, 0, 30, 30)])) return nil;
+    if (!(self = [super initWithFrame:CGRectMake(0, 0, 28, 28)])) return nil;
     _bundleID = [bid copy];
-    _icon = [[UIImageView alloc] initWithImage:[AtelierHost iconForBundleID:bid]];
+    if (bid) {
+        _icon = [[UIImageView alloc] initWithImage:[AtelierHost iconForBundleID:bid]];
+        _icon.clipsToBounds = YES;
+        self.accessibilityLabel = [AtelierHost displayNameForBundleID:bid];
+    } else {                                             // the "+" at the end of the row
+        UIImage *plus = [UIImage systemImageNamed:@"plus" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightBold]];
+        _icon = [[UIImageView alloc] initWithImage:[plus imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
+        _icon.tintColor = [UIColor colorWithWhite:1 alpha:0.8];
+        _icon.contentMode = UIViewContentModeCenter;
+        _icon.backgroundColor = [UIColor colorWithWhite:1 alpha:0.10];
+        _icon.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.22].CGColor;
+        _icon.layer.borderWidth = 1;
+        _icon.clipsToBounds = YES;
+        self.accessibilityLabel = @"Add a shortcut app";
+    }
     _icon.frame = self.bounds;
     _icon.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _icon.layer.cornerCurve = kCACornerCurveContinuous;
-    _icon.clipsToBounds = YES;
     _icon.userInteractionEnabled = NO;
     [self addSubview:_icon];
     _badge = [UILabel new];
@@ -205,7 +343,6 @@ static UIColor *AtelierAccent(void) {
     _badge.hidden = YES;
     _badge.userInteractionEnabled = NO;
     [self addSubview:_badge];
-    self.accessibilityLabel = [AtelierHost displayNameForBundleID:bid];
     return self;
 }
 
@@ -222,7 +359,8 @@ static UIColor *AtelierAccent(void) {
 }
 
 // The app's badge as SpringBoard holds it: a number, or now and then a string.
-- (NSString *)refreshBadge {
+- (void)refreshBadge {
+    if (!_bundleID) return;
     id value = AtelierMsg([AtelierHost applicationForBundleID:_bundleID], @"badgeValue");
     NSString *text = nil;
     if ([value isKindOfClass:NSNumber.class]) {
@@ -231,12 +369,11 @@ static UIColor *AtelierAccent(void) {
     } else if ([value isKindOfClass:NSString.class] && [value length]) {
         text = [value length] > 3 ? [[value substringToIndex:3] stringByAppendingString:@"…"] : value;
     }
-    if ((text ?: @"").length != (_badge.text ?: @"").length || ![(text ?: @"") isEqualToString:(_badge.text ?: @"")]) {
+    if (![(text ?: @"") isEqualToString:(_badge.text ?: @"")]) {
         _badge.text = text;
         [self setNeedsLayout];
     }
     _badge.hidden = text.length == 0;
-    return text;
 }
 
 @end
@@ -245,22 +382,18 @@ static UIColor *AtelierAccent(void) {
 
 @implementation AtelierBand {
     UILabel *_hm, *_sec, *_ampm, *_date;
+    NSMutableArray<AtelierIndexLine *> *_lines;
     NSMutableArray<AtelierFlagChip *> *_chips;
-    NSMutableArray<AtelierShortcutIcon *> *_icons;
+    NSMutableArray<AtelierShortcutIcon *> *_icons;       // the apps, then the "+" if there is one
     NSArray<NSString *> *_marketCodes;
     NSArray<NSString *> *_longCaptions;      // each flag's caption in full
     NSDictionary<NSString *, NSString *> *_indiaHolidays;
     NSTimer *_timer;
     NSDateFormatter *_hmFormat, *_ampmFormat, *_dateFormat;
     NSCalendar *_calendar;
-    BOOL _compact, _running, _showClock, _showMarkets;
+    BOOL _compact, _running, _showClock, _showMarkets, _showIndices;
     CGFloat _flagsWidth;
     NSInteger _lastMinute;
-}
-
-+ (BOOL)wanted {
-    AtelierSettings *s = [AtelierSettings shared];
-    return s.showClock || s.showMarkets || [s shortcutApps].count > 0;
 }
 
 + (void)setDebugNow:(NSDate *)date {
@@ -269,6 +402,7 @@ static UIColor *AtelierAccent(void) {
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if (!(self = [super initWithFrame:frame])) return nil;
+    _lines = [NSMutableArray array];
     _chips = [NSMutableArray array];
     _icons = [NSMutableArray array];
     _lastMinute = -1;
@@ -281,6 +415,12 @@ static UIColor *AtelierAccent(void) {
     _date = [UILabel new];
     _date.textColor = [UIColor colorWithWhite:1 alpha:0.6];
     for (UILabel *l in @[ _hm, _sec, _ampm, _date ]) { l.userInteractionEnabled = NO; [self addSubview:l]; }
+    for (int i = 0; i < 2; i++) {
+        AtelierIndexLine *line = [AtelierIndexLine new];
+        line.hidden = YES;
+        [self addSubview:line];
+        [_lines addObject:line];
+    }
     return self;
 }
 
@@ -288,7 +428,7 @@ static UIColor *AtelierAccent(void) {
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if (self.hidden || self.alpha < 0.05) return nil;
     for (AtelierShortcutIcon *icon in _icons) {
-        if (CGRectContainsPoint(CGRectInset(icon.frame, -4, -6), point)) return icon;
+        if (CGRectContainsPoint(CGRectInset(icon.frame, -3, -6), point)) return icon;
     }
     return nil;
 }
@@ -299,7 +439,9 @@ static UIColor *AtelierAccent(void) {
     AtelierSettings *s = [AtelierSettings shared];
     _showClock = s.showClock;
     _showMarkets = s.showMarkets;
+    _showIndices = s.showIndices;
     for (UILabel *l in @[ _hm, _sec, _ampm, _date ]) l.hidden = !_showClock;
+    for (AtelierIndexLine *line in _lines) line.hidden = !_showIndices;
 
     // 12 or 24 hours, as the phone is set
     NSLocale *locale = NSLocale.autoupdatingCurrentLocale;
@@ -328,17 +470,36 @@ static UIColor *AtelierAccent(void) {
 
     for (AtelierShortcutIcon *icon in _icons) [icon removeFromSuperview];
     [_icons removeAllObjects];
-    for (NSString *bid in [s shortcutApps]) {
-        if (_icons.count >= ATELIER_SHORTCUTS) break;
-        if (![AtelierHost applicationForBundleID:bid]) continue;
+    for (NSString *bid in [AtelierBand shownShortcuts]) {
         AtelierShortcutIcon *icon = [[AtelierShortcutIcon alloc] initWithBundleID:bid];
         [icon addTarget:self action:@selector(_shortcutTapped:) forControlEvents:UIControlEventTouchUpInside];
+        UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_shortcutHeld:)];
+        hold.minimumPressDuration = 0.4;
+        [icon addGestureRecognizer:hold];
         [self addSubview:icon];
         [_icons addObject:icon];
     }
+    if (_icons.count < ATELIER_SHORTCUTS) {
+        AtelierShortcutIcon *plus = [[AtelierShortcutIcon alloc] initWithBundleID:nil];
+        [plus addTarget:self action:@selector(_plusTapped) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:plus];
+        [_icons addObject:plus];
+    }
     _lastMinute = -1;
     [self _tick];
+    [self quotesChanged];
     if (_running) [self _schedule];
+}
+
+// The shortcut apps as the row shows them: installed, not hidden by SporeX, six at most.
++ (NSArray<NSString *> *)shownShortcuts {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (NSString *bid in [[AtelierSettings shared] shortcutApps]) {
+        if (out.count >= ATELIER_SHORTCUTS) break;
+        if (![AtelierHost applicationForBundleID:bid] || [AtelierHost isHiddenApp:bid]) continue;
+        [out addObject:bid];
+    }
+    return out;
 }
 
 - (void)_shortcutTapped:(AtelierShortcutIcon *)icon {
@@ -346,9 +507,27 @@ static UIColor *AtelierAccent(void) {
     if (self.onShortcut) self.onShortcut(icon.bundleID);
 }
 
-- (void)debugTapShortcut:(NSUInteger)index {
-    if (index < _icons.count) [self _shortcutTapped:_icons[index]];
-    else AtelierLog(@"shortcut %lu: there are %lu", (unsigned long)index, (unsigned long)_icons.count);
+- (void)_shortcutHeld:(UILongPressGestureRecognizer *)g {
+    if (g.state != UIGestureRecognizerStateBegan) return;
+    AtelierShortcutIcon *icon = (AtelierShortcutIcon *)g.view;
+    AtelierHapticPlay(AtelierHapticSwap);
+    if (self.onShortcutHeld && icon.bundleID) self.onShortcutHeld(icon.bundleID, icon.frame);
+}
+
+- (void)_plusTapped {
+    AtelierHapticPlay(AtelierHapticTick);
+    if (self.onAddShortcut) self.onAddShortcut();
+}
+
+- (void)quotesChanged {
+    if (!_showIndices) return;
+    AtelierQuotes *source = [AtelierQuotes shared];
+    NSArray<AtelierQuote *> *quotes = [source quotes];
+    BOOL open = AtelierIndiaSessionOpen(AtelierNow());
+    NSArray<NSString *> *labels = @[ @"NIFTY", @"SENSEX" ];
+    for (NSUInteger i = 0; i < _lines.count; i++)
+        [_lines[i] show:(i < quotes.count ? quotes[i] : nil) label:labels[i] failing:[source failing] sessionOpen:open compact:_compact];
+    [self setNeedsLayout];
 }
 
 #pragma mark the clock
@@ -369,9 +548,8 @@ static UIColor *AtelierAccent(void) {
 - (void)_schedule {
     [_timer invalidate];
     _timer = nil;
-    if (!_showClock && !_showMarkets && _icons.count == 0) return;      // nothing that changes with time
-    NSTimeInterval period = _showClock ? 1.0 : 60.0;
-    NSTimeInterval shown = [AtelierBandNow() timeIntervalSinceReferenceDate];
+    NSTimeInterval period = _showClock ? 1.0 : 60.0;                     // without a clock only the minute matters
+    NSTimeInterval shown = [AtelierNow() timeIntervalSinceReferenceDate];
     NSTimeInterval wait = period - fmod(shown, period);                  // to the next whole second (or minute)
     __weak typeof(self) weak = self;
     _timer = [[NSTimer alloc] initWithFireDate:[NSDate dateWithTimeIntervalSinceNow:wait] interval:period repeats:YES block:^(NSTimer *t) {
@@ -382,7 +560,7 @@ static UIColor *AtelierAccent(void) {
 }
 
 - (void)_tick {
-    NSDate *now = [AtelierBandNow() dateByAddingTimeInterval:0.02];      // the timer may fire a hair early
+    NSDate *now = [AtelierNow() dateByAddingTimeInterval:0.02];          // the timer may fire a hair early
     NSDateComponents *c = [(_calendar ?: NSCalendar.currentCalendar) components:NSCalendarUnitMinute | NSCalendarUnitSecond fromDate:now];
     if (_showClock) _sec.text = [NSString stringWithFormat:@"%02ld", (long)c.second];
     if (c.minute == _lastMinute) return;
@@ -412,68 +590,83 @@ static UIColor *AtelierAccent(void) {
     }
     _longCaptions = captions;
     for (AtelierShortcutIcon *icon in _icons) [icon refreshBadge];
+    [self quotesChanged];                                 // the "Closed" tag and a number's age move with the minute
     [self setNeedsLayout];
 }
 
 #pragma mark layout
 
 - (void)setCompact:(BOOL)compact flagsWidth:(CGFloat)width {
+    BOOL changed = compact != _compact;
     _compact = compact;
     _flagsWidth = width;
+    if (changed) [self quotesChanged];
     [self setNeedsLayout];
 }
 
 - (void)_styleClock {
-    CGFloat big = _compact ? 20 : 31, small = _compact ? 12 : 15;
+    CGFloat big = _compact ? 20 : 26, small = _compact ? 12 : 13;
     _hm.font = [UIFont monospacedDigitSystemFontOfSize:big weight:UIFontWeightSemibold];
     // a little tighter than the font's own spacing
     if (_hm.text.length) {
         _hm.attributedText = [[NSAttributedString alloc] initWithString:_hm.text attributes:@{
-            NSFontAttributeName: _hm.font, NSKernAttributeName: @(_compact ? -0.4 : -0.9), NSForegroundColorAttributeName: UIColor.whiteColor }];
+            NSFontAttributeName: _hm.font, NSKernAttributeName: @(_compact ? -0.4 : -0.7), NSForegroundColorAttributeName: UIColor.whiteColor }];
     }
     _sec.font = [UIFont monospacedDigitSystemFontOfSize:small weight:UIFontWeightSemibold];
-    _ampm.font = [UIFont systemFontOfSize:_compact ? 9 : 10 weight:UIFontWeightSemibold];
-    _date.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightMedium];
+    _ampm.font = [UIFont systemFontOfSize:9 weight:UIFontWeightSemibold];
+    _date.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGFloat W = self.bounds.size.width;
-    CGFloat x = 0;
+    CGFloat y0 = 0;                                       // the top of the clock's line
 
-    // shortcut icons, right-aligned on the first line
-    CGFloat side = _compact ? 24 : 30, pitch = side + (_compact ? 6 : 7), top = 3;
-    NSUInteger n = _icons.count;
-    for (NSUInteger i = 0; i < n; i++) {
-        _icons[i].frame = CGRectMake(W - side - (n - 1 - i) * pitch, top, side, side);
+    // the index numbers: two lines of their own (Side), or side by side on one (Top, Split)
+    if (_showIndices) {
+        if (_compact) {
+            CGFloat half = floor(W / 2.0);
+            _lines[0].frame = CGRectMake(0, 0, half - 4, 16);
+            _lines[1].frame = CGRectMake(half, 0, W - half, 16);
+            y0 = 16;
+        } else {
+            _lines[0].frame = CGRectMake(0, 0, W, 14);
+            _lines[1].frame = CGRectMake(0, 14, W, 14);
+            y0 = 28;
+        }
     }
+
+    // shortcut icons (and the "+"), right-aligned on the clock's line
+    CGFloat side = _compact ? 24 : 27, pitch = side + (_compact ? 6 : 7), top = y0 + (_compact ? 3 : 0.5);
+    NSUInteger n = _icons.count;
+    for (NSUInteger i = 0; i < n; i++) _icons[i].frame = CGRectMake(W - side - (n - 1 - i) * pitch, top, side, side);
     CGFloat iconsLeft = n ? W - side - (n - 1) * pitch - 10 : W;
 
+    CGFloat x = 0;
     if (_showClock) {
         [self _styleClock];
         CGSize hm = [_hm sizeThatFits:CGSizeMake(300, 60)];
         CGSize sec = [_sec sizeThatFits:CGSizeMake(100, 40)];
+        CGSize ap = [_ampm sizeThatFits:CGSizeMake(60, 20)];
         if (_compact) {
-            _hm.frame = CGRectMake(0, 2, ceil(hm.width), 26);
-            _sec.frame = CGRectMake(CGRectGetMaxX(_hm.frame) + 3, 9, ceil(sec.width), 16);
-            CGSize ap = [_ampm sizeThatFits:CGSizeMake(60, 20)];
-            _ampm.frame = CGRectMake(CGRectGetMaxX(_sec.frame) + 3, 11, ceil(ap.width), 13);
+            _hm.frame = CGRectMake(0, y0 + 2, ceil(hm.width), 26);
+            _sec.frame = CGRectMake(CGRectGetMaxX(_hm.frame) + 3, y0 + 9, ceil(sec.width), 16);
+            _ampm.frame = CGRectMake(CGRectGetMaxX(_sec.frame) + 3, y0 + 11, ceil(ap.width), 13);
             _date.hidden = YES;
             x = (_ampm.text.length ? CGRectGetMaxX(_ampm.frame) : CGRectGetMaxX(_sec.frame)) + 12;
         } else {
-            _hm.frame = CGRectMake(0, -2, ceil(hm.width), 40);
-            CGFloat sx = CGRectGetMaxX(_hm.frame) + 6;
-            _sec.frame = CGRectMake(sx, 3, ceil(sec.width), 18);
-            CGSize ap = [_ampm sizeThatFits:CGSizeMake(60, 20)];
-            _ampm.frame = CGRectMake(CGRectGetMaxX(_sec.frame) + 4, 6, ceil(ap.width), 13);
+            _hm.frame = CGRectMake(0, y0 - 2, ceil(hm.width), 32);
+            CGFloat sx = CGRectGetMaxX(_hm.frame) + 5;
+            _sec.frame = CGRectMake(sx, y0 + 1, ceil(sec.width), 15);
+            _ampm.frame = CGRectMake(CGRectGetMaxX(_sec.frame) + 3, y0 + 3, ceil(ap.width), 12);
             CGSize d = [_date sizeThatFits:CGSizeMake(200, 20)];
-            _date.frame = CGRectMake(sx, 21, ceil(d.width), 14);
+            _date.frame = CGRectMake(sx, y0 + 15, ceil(d.width), 13);
             _date.hidden = CGRectGetMaxX(_date.frame) > iconsLeft;          // no room beside the icons: the date goes
         }
     }
 
-    // flags: after the clock on the compact line, or on the second row left of the pill
-    CGFloat fx = _compact ? x : 0, fy = _compact ? 4 : 38;
+    // flags: after the clock on the compact line, or on a row of their own left of the pill
+    CGFloat fx = _compact ? x : 0, fy = _compact ? y0 + 4 : y0 + 28;
     CGFloat room = _compact ? iconsLeft - fx : (_flagsWidth > 0 ? _flagsWidth : W);
     // captions in full if the row has room for them, else the short ones ("Holiday" without
     // the holiday's name), else none; the compact line has none
@@ -501,19 +694,42 @@ static UIColor *AtelierAccent(void) {
 
 #pragma mark tests
 
+- (void)debugTapShortcut:(NSUInteger)index {
+    if (index < _icons.count && _icons[index].bundleID) [self _shortcutTapped:_icons[index]];
+    else AtelierLog(@"shortcut %lu: there are %lu", (unsigned long)index, (unsigned long)[AtelierBand shownShortcuts].count);
+}
+
+- (void)debugHoldShortcut:(NSUInteger)index {
+    if (index < _icons.count && _icons[index].bundleID) {
+        if (self.onShortcutHeld) self.onShortcutHeld(_icons[index].bundleID, _icons[index].frame);
+    } else {
+        AtelierLog(@"shortcut %lu: there are %lu", (unsigned long)index, (unsigned long)[AtelierBand shownShortcuts].count);
+    }
+}
+
+- (void)debugTapPlus {
+    if (_icons.count && !_icons.lastObject.bundleID) [self _plusTapped];
+    else AtelierLog(@"shortcuts: the row is full, there is no +");
+}
+
 - (NSArray<NSDictionary *> *)debugFrames {
     [self layoutIfNeeded];
     NSMutableArray<NSDictionary *> *out = [NSMutableArray array];
+    if (_showIndices) for (NSUInteger i = 0; i < _lines.count; i++)
+        [out addObject:@{ @"name": [NSString stringWithFormat:@"index%lu", (unsigned long)i], @"frame": [NSValue valueWithCGRect:_lines[i].frame] }];
     if (_showClock) [out addObject:@{ @"name": @"clock", @"frame": [NSValue valueWithCGRect:CGRectUnion(_hm.frame, _sec.frame)] }];
     for (NSUInteger i = 0; i < _chips.count; i++)
         [out addObject:@{ @"name": [NSString stringWithFormat:@"flag%lu", (unsigned long)i], @"frame": [NSValue valueWithCGRect:_chips[i].frame] }];
-    for (NSUInteger i = 0; i < _icons.count; i++)
-        [out addObject:@{ @"name": [NSString stringWithFormat:@"shortcut%lu", (unsigned long)i], @"frame": [NSValue valueWithCGRect:_icons[i].frame] }];
+    NSUInteger k = 0;
+    for (AtelierShortcutIcon *icon in _icons)
+        [out addObject:@{ @"name": icon.bundleID ? [NSString stringWithFormat:@"shortcut%lu", (unsigned long)k++] : @"shortcut-plus",
+                          @"frame": [NSValue valueWithCGRect:icon.frame] }];
     return out;
 }
 
 - (NSString *)debugState {
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    if (_showIndices) for (AtelierIndexLine *line in _lines) [parts addObject:[NSString stringWithFormat:@"«%@»", line.said ?: @"?"]];
     if (_showClock) [parts addObject:[NSString stringWithFormat:@"clock %@:%@%@%@ %@", _hm.text ?: @"?", _sec.text ?: @"?",
                                       _ampm.text.length ? @" " : @"", _ampm.text ?: @"", _date.hidden ? @"(no date)" : (_date.text ?: @"")]];
     for (NSUInteger i = 0; i < _chips.count && i < _marketCodes.count; i++) {
@@ -525,7 +741,7 @@ static UIColor *AtelierAccent(void) {
     }
     NSMutableArray<NSString *> *icons = [NSMutableArray array];
     for (AtelierShortcutIcon *icon in _icons)
-        [icons addObject:[NSString stringWithFormat:@"%@%@", icon.bundleID, icon.badge.hidden ? @"" : [NSString stringWithFormat:@"(%@)", icon.badge.text]]];
+        [icons addObject:icon.bundleID ? [NSString stringWithFormat:@"%@%@", icon.bundleID, icon.badge.hidden ? @"" : [NSString stringWithFormat:@"(%@)", icon.badge.text]] : @"+"];
     [parts addObject:[NSString stringWithFormat:@"shortcuts [%@]", [icons componentsJoinedByString:@" "]]];
     return [NSString stringWithFormat:@"band %@%@ timer %@ · %@", _compact ? @"compact" : @"tall", self.hidden ? @" hidden" : @"",
             _timer ? @"on" : @"off", [parts componentsJoinedByString:@" · "]];

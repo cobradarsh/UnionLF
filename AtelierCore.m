@@ -286,6 +286,16 @@ static NSInteger AtelierClampInt(double v, NSInteger lo, NSInteger hi, NSInteger
 - (BOOL)debugLog                       { return [self _b:@"debugLog" def:YES]; }
 - (BOOL)showClock                      { return [self _b:@"showClock" def:YES]; }
 - (BOOL)showMarkets                    { return [self _b:@"showMarkets" def:YES]; }
+- (BOOL)showIndices                    { return [self _b:@"showIndices" def:YES]; }
+- (void)setShortcutApps:(NSArray<NSString *> *)apps { [self setObject:(apps ?: @[]) forKey:@"shortcutApps"]; }
+
+- (BOOL)showsToggle:(NSString *)key {
+    static NSDictionary<NSString *, NSString *> *names;
+    if (!names) names = @{ @"wifi": @"toggleWifi", @"bluetooth": @"toggleBluetooth", @"data": @"toggleData",
+                           @"dnd": @"toggleDND", @"awake": @"toggleAwake", @"lowpower": @"toggleLowPower" };
+    NSString *name = names[key ?: @""];
+    return name ? [self _b:name def:YES] : NO;
+}
 - (AtelierSwipeDown)swipeDown          { return (AtelierSwipeDown)AtelierClampInt([self _d:@"swipeDown" def:0], 0, 3, 0); }
 
 - (NSArray<NSString *> *)markets {
@@ -391,17 +401,139 @@ static NSArray<NSString *> *AtelierCleanApps(id raw) {
 
 @end
 
+@implementation AtelierKeyWindow
+- (BOOL)_canBecomeKeyWindow { return YES; }
+- (BOOL)canBecomeKeyWindow { return YES; }
+@end
+
 #pragma mark - SpringBoard helpers
 
 @implementation AtelierHost
 
+#pragma mark keyboard focus
+
+// With an app in front, iOS 16 sends the keyboard to that app: a text field in a SpringBoard
+// window becomes first responder and no keyboard appears. SpringBoard's keyboard focus
+// controller has two calls that let one of SpringBoard's own windows have it; each returns an
+// object, the hold, which is invalidated to give the keyboard back. This is the recipe Wingman
+// Plus has used on this phone since 1.0.24 (WPFocus.m), with its hard-won rule: only for a
+// window in SpringBoard's main scene. Given the Dynamic Island's scene the second call does not
+// throw, it traps, and SpringBoard restarts.
+static NSMutableArray *gFocusHolds;
+
+static id AtelierFocusController(void) {
+    NSMutableArray *hosts = [NSMutableArray array];
+    if (UIApplication.sharedApplication) [hosts addObject:UIApplication.sharedApplication];
+    for (NSString *name in @[ @"SBMainWorkspace", @"SBWorkspace" ]) {
+        Class c = NSClassFromString(name);
+        for (NSString *getter in @[ @"sharedInstance", @"mainWorkspace" ]) {
+            id o = AtelierMsg(c, getter);
+            if (o) [hosts addObject:o];
+        }
+    }
+    for (id host in hosts) {
+        id controller = AtelierMsg(host, @"keyboardFocusController");
+        if (controller) return controller;
+    }
+    return AtelierMsg(NSClassFromString(@"SBWorkspaceKeyboardFocusController"), @"sharedInstance");
+}
+
++ (BOOL)takeKeyboardForWindow:(UIWindow *)window {
+    [self giveKeyboardBack];                             // never two sets of holds
+    if (!window) return NO;
+    UIWindowScene *scene = window.windowScene;
+    Class main = NSClassFromString(@"SBWindowScene");
+    if (!scene || !main || [scene class] != main || scene != [self mainScene]) {
+        AtelierLog(@"keyboard: left alone, the window is not in SpringBoard's main scene (%@)", scene ? NSStringFromClass([scene class]) : @"none");
+        return NO;
+    }
+    id controller = AtelierFocusController();
+    if (!controller) { AtelierLog(@"keyboard: no focus controller on this iOS"); return NO; }
+    gFocusHolds = [NSMutableArray array];
+    NSMutableArray<NSString *> *said = [NSMutableArray array];
+    NSArray<NSArray *> *tries = @[ @[ @"requestFocusStealingForSpringBoardWindow:forReason:", window ],
+                                   @[ @"lockFocusToSpringBoardWindowScene:forReason:", scene ] ];
+    for (NSArray *t in tries) {
+        SEL s = NSSelectorFromString(t[0]);
+        // only a call that takes two objects and returns one: the object is what is released later
+        if (!AtelierShape(controller, s, "@", 2) || !AtelierArgIs(controller, s, 2, "@") || !AtelierArgIs(controller, s, 3, "@")) {
+            [said addObject:[NSString stringWithFormat:@"%@ not there", t[0]]];
+            continue;
+        }
+        id hold = nil;
+        @try { hold = ((id (*)(id, SEL, id, id))objc_msgSend)(controller, s, t[1], @"HyperTradePicker"); }
+        @catch (NSException *e) { [said addObject:[NSString stringWithFormat:@"%@ threw %@", t[0], e.reason]]; continue; }
+        [said addObject:[NSString stringWithFormat:@"%@ -> %@", t[0], hold ? NSStringFromClass([hold class]) : @"nil"]];
+        if (hold) [gFocusHolds addObject:hold];
+    }
+    AtelierLog(@"keyboard: taken for %@ (%@)", NSStringFromClass([window class]), [said componentsJoinedByString:@" · "]);
+    return gFocusHolds.count > 0;
+}
+
++ (void)giveKeyboardBack {
+    NSArray *holds = gFocusHolds;
+    gFocusHolds = nil;
+    if (holds.count == 0) return;
+    NSUInteger ended = 0;
+    for (id hold in holds) if (AtelierSend(hold, @"invalidate")) ended++;
+    AtelierLog(@"keyboard: given back (%lu of %lu holds released)", (unsigned long)ended, (unsigned long)holds.count);
+}
+
+#pragma mark SporeX's hidden apps
+
+// SporeX keeps its switch and its list in its own settings: `Enabled` and `HiddenApps` (bundle
+// ids as an array, or as a dictionary of id -> YES). Only the settings are read; nothing of
+// SporeX's is called. No SporeX, or SporeX switched off: nothing is hidden.
+static NSSet<NSString *> *gHiddenApps;
+
++ (void)reloadHiddenApps {
+    NSMutableSet<NSString *> *hidden = [NSMutableSet set];
+    @try {
+        CFStringRef domain = CFSTR("com.adarsh.sporex");
+        CFPreferencesAppSynchronize(domain);
+        id enabled = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("Enabled"), domain));
+        id list = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("HiddenApps"), domain));
+        // a list without the switch counts as switched on: showing a hidden app is the worse mistake
+        BOOL on = [enabled respondsToSelector:@selector(boolValue)] ? [enabled boolValue] : (list != nil);
+        if (on && [list isKindOfClass:NSArray.class]) {
+            for (id bid in (NSArray *)list) if ([bid isKindOfClass:NSString.class] && [bid length]) [hidden addObject:bid];
+        } else if (on && [list isKindOfClass:NSDictionary.class]) {
+            [(NSDictionary *)list enumerateKeysAndObjectsUsingBlock:^(id key, id value, BOOL *stop) {
+                if (![key isKindOfClass:NSString.class] || [key length] == 0) return;
+                if (![value respondsToSelector:@selector(boolValue)] || [value boolValue]) [hidden addObject:key];
+            }];
+        }
+    } @catch (NSException *e) {
+        AtelierLog(@"SporeX settings threw %@", e.reason);
+    }
+    if (![hidden isEqualToSet:gHiddenApps ?: [NSSet set]]) AtelierLog(@"hidden apps (SporeX): %lu", (unsigned long)hidden.count);   // the count only: their names stay out of the log
+    gHiddenApps = hidden;
+}
+
++ (BOOL)isHiddenApp:(NSString *)bid {
+    if (!gHiddenApps) [self reloadHiddenApps];
+    return bid.length && [gHiddenApps containsObject:bid];
+}
+
++ (NSUInteger)hiddenAppCount {
+    if (!gHiddenApps) [self reloadHiddenApps];
+    return gHiddenApps.count;
+}
+
+#pragma mark windows
+
 static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest first (main thread)
 
 + (AtelierWindow *)windowAtLevel:(UIWindowLevel)level {
+    return [self windowAtLevel:level key:NO];
+}
+
++ (AtelierWindow *)windowAtLevel:(UIWindowLevel)level key:(BOOL)key {
     CGSize sz = [self screenSize];
     CGRect screen = CGRectMake(0, 0, sz.width, sz.height);
     UIWindowScene *scene = [self mainScene];
-    AtelierWindow *w = scene ? [[AtelierWindow alloc] initWithWindowScene:scene] : [[AtelierWindow alloc] initWithFrame:screen];
+    Class cls = key ? AtelierKeyWindow.class : AtelierWindow.class;
+    AtelierWindow *w = scene ? [[cls alloc] initWithWindowScene:scene] : [[cls alloc] initWithFrame:screen];
     w.frame = screen;
     w.windowLevel = level;
     w.backgroundColor = UIColor.clearColor;
@@ -583,6 +715,14 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
     return out;
 }
 
++ (NSArray<NSDictionary *> *)listedApps {
+    NSArray<NSDictionary *> *all = [self installedApps];
+    if ([self hiddenAppCount] == 0) return all;
+    NSMutableArray<NSDictionary *> *out = [NSMutableArray arrayWithCapacity:all.count];
+    for (NSDictionary *a in all) if (![self isHiddenApp:a[@"id"]]) [out addObject:a];
+    return out;
+}
+
 + (void)noteFront {
     NSString *bid = [self frontmostBundleID];
     if (bid.length == 0) return;
@@ -610,6 +750,11 @@ static NSMutableArray<NSString *> *gRecent;       // apps seen in front, newest 
             }
         }
     } @catch (__unused id e) {}
+    if ([self hiddenAppCount]) {
+        NSMutableArray<NSString *> *shown = [NSMutableArray array];
+        for (NSString *bid in out) if (![self isHiddenApp:bid]) [shown addObject:bid];
+        return shown;
+    }
     return out;
 }
 

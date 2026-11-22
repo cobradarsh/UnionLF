@@ -1,0 +1,6 @@
+#!/bin/sh
+# Settings keeps running in the background. One that was started before this install still has
+# the old page in memory and no AtelierPrefs library in it (the one that loads AltList for the
+# Shortcut Apps list): close it, so that its next start is a fresh one.
+killall -9 Preferences 2>/dev/null || true
+exit 0

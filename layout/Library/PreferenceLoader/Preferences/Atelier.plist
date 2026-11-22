@@ -9,7 +9,7 @@
 		<key>icon</key>
 		<string>Atelier.png</string>
 		<key>label</key>
-		<string>Atelier</string>
+		<string>HyperTrade</string>
 	</dict>
 	<key>items</key>
 	<array>
@@ -19,7 +19,7 @@
 			<key>footerText</key>
 			<string>A workbench of live apps: one big app and up to five mini tiles. Tap a mini and it changes places with the big one.
 
-To open it, slide a finger in from the edge of the screen just above the bottom corner (or up along that edge). Or hold an app's icon on the Home Screen and choose Open in Atelier.
+To open it, slide a finger in from the edge of the screen just above the bottom corner (or up along that edge). Or hold an app's icon on the Home Screen and choose Open in HyperTrade.
 
 The pill with three dots above the big app is its menu: Full Screen, Switch Layout, Replace App, Close App, Save as Set. Hold a mini for its own menu. A swipe up from the bottom of the screen puts the bench away.</string>
 		</dict>
@@ -35,7 +35,7 @@ The pill with three dots above the big app is its menu: Full Screen, Switch Layo
 			<key>key</key>
 			<string>enabled</string>
 			<key>label</key>
-			<string>Atelier</string>
+			<string>HyperTrade</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -143,7 +143,7 @@ Stills Only: only the big app runs; a mini is refreshed when it comes off the bi
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>A mini follows your finger and a small label says what letting go will do.
+			<string>A mini follows your finger and a small label says what letting go will do. A short swipe is enough, and so is a quick flick.
 
 Left closes the app. Right makes it the big app. Up locks it, or unlocks it. Down does what you choose here.
 
@@ -365,7 +365,33 @@ The other markets have no holiday list: on their holidays the flag lights up all
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>The apps you switch on here (the first six) sit as icons above the big app, each with its badge. Tap one and it opens on the bench as the big app; if it is already there it changes places with the big one. A full bench says so instead of pushing an app off.</string>
+			<string>NIFTY and SENSEX above the clock: the last price, and the change since the previous close in points and per cent, green or red.
+
+The numbers are Yahoo Finance's public feed and may lag the exchange; when the newest one is more than a minute old its age is shown beside it. The phone contacts Yahoo only while the bench is open: every 5 seconds during NSE's session (holidays as above), once for the closing numbers outside it, never when the bench is closed or the phone is locked. Nothing about you or the phone is sent.</string>
+			<key>label</key>
+			<string>Index Numbers</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>showIndices</string>
+			<key>label</key>
+			<string>Live Index Numbers</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Up to six apps sit as icons above the big app, each with its badge. Tap one and it opens on the bench as the big app; if it is already there it changes places with the big one. A full bench says so instead of pushing an app off.
+
+On the bench itself: the + at the end of the row adds an app, and holding an icon offers Remove from Shortcuts. The list here shows the same apps.</string>
 			<key>label</key>
 			<string>Shortcut Apps</string>
 		</dict>
@@ -375,7 +401,7 @@ The other markets have no holiday list: on their holidays the flag lights up all
 			<key>alphabeticIndexingEnabled</key>
 			<true/>
 			<key>cell</key>
-			<string>PSLinkCell</string>
+			<string>PSLinkListCell</string>
 			<key>defaultApplicationSwitchValue</key>
 			<false/>
 			<key>defaults</key>
@@ -402,11 +428,105 @@ The other markets have no holiday list: on their holidays the flag lights up all
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>Round buttons under the apps. A button is filled while its setting is on. Switch off the ones you do not want.
+
+Keep Screen Awake holds the screen on only while the bench is open. It switches itself off when the bench closes or the phone locks, and is off again the next time the bench opens.</string>
+			<key>label</key>
+			<string>Toggles</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>toggleWifi</string>
+			<key>label</key>
+			<string>Wi-Fi</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>toggleBluetooth</string>
+			<key>label</key>
+			<string>Bluetooth</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>toggleData</string>
+			<key>label</key>
+			<string>Mobile Data</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>toggleDND</string>
+			<key>label</key>
+			<string>Do Not Disturb</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>toggleAwake</string>
+			<key>label</key>
+			<string>Keep Screen Awake</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>toggleLowPower</string>
+			<key>label</key>
+			<string>Low Power Mode</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>The edge strip is see-through, 16 points wide. It takes touches where it lies, so keep it only as tall as you need. The same swipe closes the bench.
 
 Bring the Current App Along: the app you are in when you open the bench becomes the big app.
 
-Icon Menu: Open in Atelier, your sets, and Atelier Sets… when you hold an app's icon.</string>
+Icon Menu: Open in HyperTrade, your sets, and HyperTrade Sets… when you hold an app's icon.</string>
 			<key>label</key>
 			<string>Opening</string>
 		</dict>
@@ -542,9 +662,9 @@ Icon Menu: Open in Atelier, your sets, and Atelier Sets… when you hold an app'
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Records what Atelier does in /var/mobile/Library/Logs/Atelier.log, and lets test commands be sent to it over SSH.
+			<string>Records what HyperTrade does in /var/mobile/Library/Logs/Atelier.log, and lets test commands be sent to it over SSH.
 
-If SpringBoard restarts right after Atelier starts, three times in a row, Atelier stays out of the way. Flip any switch on this page to start it again.</string>
+If SpringBoard restarts right after HyperTrade starts, three times in a row, HyperTrade stays out of the way. Flip any switch on this page to start it again.</string>
 			<key>label</key>
 			<string>Troubleshooting</string>
 		</dict>
@@ -564,6 +684,6 @@ If SpringBoard restarts right after Atelier starts, three times in a row, Atelie
 		</dict>
 	</array>
 	<key>title</key>
-	<string>Atelier</string>
+	<string>HyperTrade</string>
 </dict>
 </plist>

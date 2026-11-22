@@ -150,6 +150,11 @@ jobs:
           echo "--- what is in the package ---"
           mkdir -p "$RUNNER_TEMP/deb"
           (cd "$RUNNER_TEMP/deb" && ar x "$GITHUB_WORKSPACE"/packages/*.deb && ls -la && tar tvf data.tar.* && tar xOf control.tar.* ./control)
+          echo "--- the postinst (it closes Settings, so the next start loads the new page and helper) ---"
+          (cd "$RUNNER_TEMP/deb" && tar tvf control.tar.* && tar xOf control.tar.* ./postinst | tee postinst.txt)
+          grep -q "killall -9 Preferences" "$RUNNER_TEMP/deb/postinst.txt"
+          (cd "$RUNNER_TEMP/deb" && tar tvf control.tar.* | grep "postinst" | grep -q "^-rwx") || { echo "postinst is not executable"; exit 1; }
+          if grep -q $'' "$RUNNER_TEMP/deb/postinst.txt"; then echo "postinst has Windows line ends"; exit 1; fi
 
       - name: Upload build log (always)
         if: always()
@@ -173,7 +178,7 @@ jobs:
       matrix:
         runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
 

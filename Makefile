@@ -1,4 +1,4 @@
-# Atelier — Theos build (macOS + roothide/theos fork, see .github/workflows/build.yml)
+# HyperTrade (in the code and the files: Atelier) — Theos build (macOS + roothide/theos fork, see .github/workflows/build.yml)
 #
 # Loads into SpringBoard, an arm64e platform process: build on macOS with Xcode's clang, which
 # tags the arm64e slice with the versioned ptrauth ABI (0x80000002). CI refuses to package
@@ -12,7 +12,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Atelier AtelierPrefs
 
-Atelier_FILES = Tweak.m AtelierCore.m AtelierScenes.m AtelierLayout.m AtelierBench.m AtelierBand.m AtelierSheets.m AtelierTrigger.m AtelierDebug.m
+Atelier_FILES = Tweak.m AtelierCore.m AtelierScenes.m AtelierLayout.m AtelierBench.m AtelierBand.m AtelierQuotes.m AtelierToggles.m AtelierSheets.m AtelierTrigger.m AtelierDebug.m
 Atelier_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 Atelier_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
 # Nothing is hooked through a hooking library (AtelierHook in AtelierCore.m uses the runtime),
@@ -24,7 +24,7 @@ Atelier_LDFLAGS = -Wl,-dead_strip_dylibs
 # AltList, so that the Shortcut Apps list on the plist-only Settings page can open. See PrefsHelper.m.
 AtelierPrefs_FILES = PrefsHelper.m
 AtelierPrefs_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
-AtelierPrefs_FRAMEWORKS = Foundation
+AtelierPrefs_FRAMEWORKS = Foundation CoreFoundation
 AtelierPrefs_USE_SUBSTRATE = 0
 AtelierPrefs_LDFLAGS = -Wl,-dead_strip_dylibs
 

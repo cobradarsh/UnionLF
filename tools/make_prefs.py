@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Build Atelier's plist-only Settings page, and its icon.
+"""Build HyperTrade's plist-only Settings page, and its icon.
+
+(HyperTrade is the tweak's name since 1.2.0. The file is still Atelier.plist and the settings
+domain still com.adarsh.atelier, so an update keeps every setting.)
 
 Plist-only, like Wingman, Dynamic Stage+ and Chakra: the page has no compiled code.
 Every control posts com.adarsh.atelier/prefs, and SpringBoard re-reads the settings
@@ -12,6 +15,8 @@ Usage:  python3 tools/make_prefs.py layout/Library/PreferenceLoader/Preferences
         python3 tools/make_prefs.py --icons layout/Library/PreferenceLoader/Preferences
         (the second form also draws Atelier.png / @2x / @3x; it needs Pillow, so it is run
          on the PC and the pictures are committed. CI only checks the plist.)
+        python3 tools/make_prefs.py --dump <folder>
+        (also prints the page as Settings will list it: the entry, the title, every row)
 """
 
 import os
@@ -68,8 +73,16 @@ def app_list(key, label):
     The row only names AltList's class, the way a compiled settings bundle's plist does, so
     AltList has to be in Settings before the page is read: AtelierPrefs.dylib (PrefsHelper.m)
     loads it when Settings starts. ("bundle = AltList" on a row does not work; Chakra tried.)
+
+    The cell must be PSLinkListCell, not PSLinkCell. In a plist-only page PreferenceLoader
+    (libprefs, -[PLCustomListController specifiers]) gives every PSLinkCell row without a
+    `bundle` its own page class as the controller, whatever `detail` says: it takes the row
+    for a sub-page made from another plist. Opened, that page finds no plist and says "There
+    appears to be an error with these preferences!", which is what 1.1.0's row did. Read in
+    the libprefs.dylib of the phone's PreferenceLoader 2.3.3 on 22 Nov 2026; a PSLinkListCell
+    is left alone (bfdecrypt's AltList entry on the same phone is one).
     """
-    return {"cell": "PSLinkCell", "detail": "ATLApplicationListMultiSelectionController",
+    return {"cell": "PSLinkListCell", "detail": "ATLApplicationListMultiSelectionController",
             "defaults": D, "key": key, "label": label, "PostNotification": NOTE,
             "sections": [{"sectionType": "Visible"}], "defaultApplicationSwitchValue": False,
             "useSearchBar": True, "hideSearchBarWhileScrolling": False, "alphabeticIndexingEnabled": True}
@@ -87,11 +100,11 @@ items = [
           "changes places with the big one.\n\n"
           "To open it, slide a finger in from the edge of the screen just above the bottom "
           "corner (or up along that edge). Or hold an app's icon on the Home Screen and choose "
-          "Open in Atelier.\n\n"
+          "Open in HyperTrade.\n\n"
           "The pill with three dots above the big app is its menu: Full Screen, Switch Layout, "
           "Replace App, Close App, Save as Set. Hold a mini for its own menu. A swipe up from "
           "the bottom of the screen puts the bench away."),
-    switch("enabled", "Atelier", True),
+    switch("enabled", "HyperTrade", True),
 
     group("Layout",
           "Side: minis in a column on the left. Top: minis in a row across the top. "
@@ -112,7 +125,8 @@ items = [
     slider("freezeAfter", 5, 60, 20),
 
     group("Swipes on a Mini",
-          "A mini follows your finger and a small label says what letting go will do.\n\n"
+          "A mini follows your finger and a small label says what letting go will do. A "
+          "short swipe is enough, and so is a quick flick.\n\n"
           "Left closes the app. Right makes it the big app. Up locks it, or unlocks it. "
           "Down does what you choose here.\n\n"
           "A locked app shows a padlock. It can't be swiped away, stays when a set is opened, "
@@ -139,19 +153,43 @@ items = [
           "the same."),
     text("extraHolidays", "Extra India Holidays", "2027-01-26, 2027-03-22"),
 
+    group("Index Numbers",
+          "NIFTY and SENSEX above the clock: the last price, and the change since the "
+          "previous close in points and per cent, green or red.\n\n"
+          "The numbers are Yahoo Finance's public feed and may lag the exchange; when the "
+          "newest one is more than a minute old its age is shown beside it. The phone "
+          "contacts Yahoo only while the bench is open: every 5 seconds during NSE's session "
+          "(holidays as above), once for the closing numbers outside it, never when the "
+          "bench is closed or the phone is locked. Nothing about you or the phone is sent."),
+    switch("showIndices", "Live Index Numbers", True),
+
     group("Shortcut Apps",
-          "The apps you switch on here (the first six) sit as icons above the big app, each "
-          "with its badge. Tap one and it opens on the bench as the big app; if it is "
-          "already there it changes places with the big one. A full bench says so instead of "
-          "pushing an app off."),
+          "Up to six apps sit as icons above the big app, each with its badge. Tap one and "
+          "it opens on the bench as the big app; if it is already there it changes places "
+          "with the big one. A full bench says so instead of pushing an app off.\n\n"
+          "On the bench itself: the + at the end of the row adds an app, and holding an icon "
+          "offers Remove from Shortcuts. The list here shows the same apps."),
     app_list("shortcutApps", "Shortcut Apps"),
+
+    group("Toggles",
+          "Round buttons under the apps. A button is filled while its setting is on. Switch "
+          "off the ones you do not want.\n\n"
+          "Keep Screen Awake holds the screen on only while the bench is open. It switches "
+          "itself off when the bench closes or the phone locks, and is off again the next "
+          "time the bench opens."),
+    switch("toggleWifi", "Wi-Fi", True),
+    switch("toggleBluetooth", "Bluetooth", True),
+    switch("toggleData", "Mobile Data", True),
+    switch("toggleDND", "Do Not Disturb", True),
+    switch("toggleAwake", "Keep Screen Awake", True),
+    switch("toggleLowPower", "Low Power Mode", True),
 
     group("Opening",
           "The edge strip is see-through, 16 points wide. It takes touches where it lies, so "
           "keep it only as tall as you need. The same swipe closes the bench.\n\n"
           "Bring the Current App Along: the app you are in when you open the bench becomes "
           "the big app.\n\n"
-          "Icon Menu: Open in Atelier, your sets, and Atelier Sets… when you hold an app's icon."),
+          "Icon Menu: Open in HyperTrade, your sets, and HyperTrade Sets… when you hold an app's icon."),
     switch("trigger", "Edge Swipe", True),
     segments("triggerSide", 1, [(0, "Left Edge"), (1, "Right Edge")]),
     group("Height of the Strip"),
@@ -164,16 +202,18 @@ items = [
     choice("haptics", "Haptics", 1, [(0, "Off"), (1, "Light"), (2, "Medium"), (3, "Firm")]),
 
     group("Troubleshooting",
-          "Records what Atelier does in /var/mobile/Library/Logs/Atelier.log, and lets test "
-          "commands be sent to it over SSH.\n\n"
-          "If SpringBoard restarts right after Atelier starts, three times in a row, Atelier "
-          "stays out of the way. Flip any switch on this page to start it again."),
+          "Records what HyperTrade does in /var/mobile/Library/Logs/Atelier.log, and lets "
+          "test commands be sent to it over SSH.\n\n"
+          "If SpringBoard restarts right after HyperTrade starts, three times in a row, "
+          "HyperTrade stays out of the way. Flip any switch on this page to start it again."),
     switch("debugLog", "Debug Log", True),
 ]
 
+# The entry's label is no longer the file's name. PreferenceLoader copes: it then notes the file's
+# name on the entry (pl_alt_plist_name) and loads the page from that.
 page = {
-    "entry": {"cell": "PSLinkCell", "label": "Atelier", "icon": "Atelier.png"},
-    "title": "Atelier",
+    "entry": {"cell": "PSLinkCell", "label": "HyperTrade", "icon": "Atelier.png"},
+    "title": "HyperTrade",
     "items": items,
 }
 
@@ -184,6 +224,24 @@ with open(path, "wb") as f:
 with open(path, "rb") as f:
     plistlib.load(f)                               # prove it parses
 print(f"  Atelier.plist      {os.path.getsize(path):6d} bytes  OK  ({len(items)} rows)")
+
+if "--dump" in sys.argv:
+    with open(path, "rb") as f:
+        made = plistlib.load(f)
+    print(f"entry in Settings: \"{made['entry']['label']}\" (cell {made['entry']['cell']}, icon {made['entry']['icon']})")
+    print(f"page title: \"{made['title']}\"")
+    for row in made["items"]:
+        kind = row["cell"]
+        if kind == "PSGroupCell":
+            print(f"  -- {row.get('label', '')}")
+            continue
+        extra = ""
+        if "detail" in row:
+            extra += f" -> {row['detail']}"
+        if "validTitles" in row:
+            extra += " [" + " | ".join(str(t) for t in row["validTitles"]) + "]"
+        default = row.get("default", "")
+        print(f"     {kind:15s} {row.get('label', '(no label)'):28s} key {row.get('key', '-'):16s} default {default!r}{extra}")
 
 if "--icons" in sys.argv:
     from PIL import Image, ImageDraw               # only needed for the pictures
