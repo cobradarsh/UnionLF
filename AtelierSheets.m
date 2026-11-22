@@ -89,6 +89,7 @@ static NSArray<NSString *> *AtelierShownApps(id raw) {          // a set's apps 
     NSArray<NSArray<NSDictionary *> *> *_rows;         // what is shown while the field is empty
     NSArray<NSDictionary *> *_all;                     // every app that may be listed: @{ id, name, fold }
     NSArray<NSDictionary *> *_found;                   // the matches, best first; nil while the field is empty
+    NSString *_asked;                                  // what the list was last searched for
     UIView *_bar;
     UISearchTextField *_field;
     CGRect _keyboard;                                  // on the screen; empty while it is down
@@ -204,10 +205,24 @@ static const CGFloat kSearchBar = 52;
 
 // The keyboard covers the lower part of the sheet: the list gets that much room at its end.
 - (void)_keyboardMoved:(NSNotification *)n {
-    if (!_field.isFirstResponder && ![n.name isEqualToString:UIKeyboardWillHideNotification]) return;       // somebody else's keyboard
+    // Notices about other keyboards arrive here as well (an app's keyboard leaving as SpringBoard
+    // takes the keyboard): while the field has the focus only "a keyboard is up, here" counts,
+    // and a notice that one is hiding is somebody else's. Its own going is -textFieldDidEndEditing:.
+    BOOL hiding = [n.name isEqualToString:UIKeyboardWillHideNotification];
     CGSize screen = [AtelierHost screenSize];
     CGRect end = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-    BOOL up = ![n.name isEqualToString:UIKeyboardWillHideNotification] && end.size.height > 60 && end.origin.y < screen.height - 60;
+    BOOL up = !hiding && end.size.height > 60 && end.origin.y < screen.height - 60;
+    if (_field.isFirstResponder ? !up : up) return;
+    [self _keyboardIs:(up ? end : CGRectZero)];
+}
+
+- (void)textFieldDidEndEditing:(UITextField *)field {
+    [self _keyboardIs:CGRectZero];
+}
+
+- (void)_keyboardIs:(CGRect)end {
+    CGSize screen = [AtelierHost screenSize];
+    BOOL up = !CGRectIsEmpty(end);
     CGRect was = _keyboard;
     _keyboard = up ? end : CGRectZero;
     CGFloat cover = up ? MAX(0, screen.height - end.origin.y) : 0;
@@ -227,6 +242,8 @@ static const CGFloat kSearchBar = 52;
 // that have it anywhere; each group A to Z. Case, accents and width are not told apart.
 - (void)_search:(NSString *)text {
     NSString *q = AtelierFold([text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]);
+    if ([q isEqualToString:_asked ?: @""] && (_found != nil) == (q.length > 0)) return;      // told twice (the clear button says it two ways)
+    _asked = q;
     if (q.length == 0) {
         _found = nil;
     } else {

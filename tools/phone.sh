@@ -9,8 +9,8 @@
 #                        they work while Settings → Atelier → Debug Log is on (it is by default)
 #   fetch <name> <dir>   copy the screenshot made by "shot <name>" into <dir>, then delete it on the phone
 #   clearlog             empty Atelier.log
-#   settings             start Settings in the background and show whether AltList got into it
-#                        (the Shortcut Apps list needs it; see PrefsHelper.m)
+#   settings             open Settings, let it test its HyperTrade page and the Shortcut Apps row
+#                        (see PrefsHelper.m), print the report, and go back to the Home Screen
 #
 # The SSH shell sees the jailbreak root as /; the real file system, where SpringBoard writes, is
 # under /rootfs. Its login shell is zsh, so nothing here relies on a wildcard that may match nothing.
@@ -33,12 +33,15 @@ case "${1:-}" in
     ;;
   settings)
     $SSH "rm -f $LOGS/AtelierSettings.log; touch $LOGS/atelier_prefs_test; chown mobile:mobile $LOGS/atelier_prefs_test; killall -9 Preferences 2>/dev/null; true"
-    printf 'spawn com.apple.Preferences\n' | $SSH "cat > $LOGS/atelier_cmd.tmp && chown mobile:mobile $LOGS/atelier_cmd.tmp && mv $LOGS/atelier_cmd.tmp $LOGS/atelier_cmd.txt"
-    for i in 1 2 3 4 5 6 7 8; do
-      $SSH "test -f $LOGS/AtelierSettings.log" && break
+    # Settings has to come to the front: started in the background it is suspended at once, and the
+    # report, which waits a moment on Settings' main queue, is never written. (The phone must be unlocked.)
+    printf 'launch com.apple.Preferences\n' | $SSH "cat > $LOGS/atelier_cmd.tmp && chown mobile:mobile $LOGS/atelier_cmd.tmp && mv $LOGS/atelier_cmd.tmp $LOGS/atelier_cmd.txt"
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      $SSH "grep -q '^done' $LOGS/AtelierSettings.log 2>/dev/null" && break
       sleep 2
     done
-    $SSH "cat $LOGS/AtelierSettings.log 2>/dev/null || echo 'no report: Settings did not start, or the helper is not in it'; rm -f $LOGS/atelier_prefs_test" ;;
+    $SSH "cat $LOGS/AtelierSettings.log 2>/dev/null || echo 'no report: Settings did not come to the front (is the phone unlocked?), or the helper is not in it'; rm -f $LOGS/atelier_prefs_test"
+    printf 'home\n' | $SSH "cat > $LOGS/atelier_cmd.tmp && chown mobile:mobile $LOGS/atelier_cmd.tmp && mv $LOGS/atelier_cmd.tmp $LOGS/atelier_cmd.txt" ;;
   remove)
     $SSH 'dpkg -r com.adarsh.atelier; sbreload' ;;
   log)

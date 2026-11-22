@@ -217,9 +217,16 @@ head -4 "$OUT/settings-page.txt"
 rm -rf "$OUT/prefs-check"
 
 echo "== what this SpringBoard has"
-cmd "windows" "scenes" "iconmenu $MAPS" "state"
+cmd "windows" "scenes" "iconmenu $MAPS" "hooks" "state" "where"
 sleep 5
 shot 01-home
+crop 01-home 01b-edge-handle-shown 0.78 0.80 0.22 0.17          # the faint pill on the right edge, above the Home bar
+step 01c-edge-handle-hidden 4 "set showHandle false" "wait 1" "state"
+crop 01c-edge-handle-hidden 01d-edge-handle-hidden-close-up 0.78 0.80 0.22 0.17
+cmd "set showHandle true" "wait 0.5"
+echo "-- the Home gesture: what is watched and what is in place"
+grep -E "Home: |Home gesture: |hook skipped" "$RUN/Atelier.log" | cut -c21- | head -20
+awk '/cmd> hooks/{f=1;next} /cmd> /{f=0} f' "$RUN/Atelier.log" | head -14
 
 echo "== the bench: the band, the dock and six apps"
 # the index numbers are test numbers from the start, so that nothing is fetched until the step that says so
@@ -266,7 +273,7 @@ cmd "set showIndices true" "clock $INDIA_OPEN" "wait 2"
 echo "== toggles"
 step 70-toggles-all-off 4 "togglefake wifi off" "togglefake bluetooth off" "togglefake data off" "togglefake dnd off" "togglefake lowpower off" "wait 1.5" "state" "where"
 crop 70-toggles-all-off 70b-toggles-all-off-dock 0 0.925 1 0.045
-step 71-toggles-all-on 5 "togglefake wifi on" "togglefake bluetooth on" "togglefake data on" "togglefake dnd on" "togglefake lowpower on" "toggle awake" "wait 2.5" "state"
+step 71-toggles-all-on 5 "togglefake wifi on" "togglefake bluetooth on" "togglefake data on" "togglefake dnd on" "togglefake lowpower on" "switch awake" "wait 2.5" "state"
 crop 71-toggles-all-on 71b-toggles-all-on-dock 0 0.925 1 0.045
 step 72-toggles-some 4 "togglefake bluetooth off" "togglefake dnd off" "togglefake lowpower off" "wait 1.5" "state"
 crop 72-toggles-some 72b-toggles-some-dock 0 0.925 1 0.045
@@ -275,7 +282,7 @@ cmd "wait 12" "state" "close" "wait 2" "state" "open" "wait 6" "state"
 echo "-- Keep Awake:"; grep -E "Keep Awake|idle timer" "$RUN/Atelier.log" | tail -5 | cut -c21-
 # what the simulator's own switches say, and each one flipped for real and back (logged before and after)
 cmd "togglefake clear" "wait 2" "state"
-for t in wifi bluetooth lowpower dnd data; do cmd "toggle $t" "wait 3" "toggle $t" "wait 3"; done
+for t in wifi bluetooth lowpower dnd data; do cmd "switch $t" "wait 3" "switch $t" "wait 3"; done
 step 73-toggles-real 4 "state"
 echo "-- toggles flipped for real in the simulator:"; grep "toggle " "$RUN/Atelier.log" | grep -v "cmd>" | tail -14 | cut -c21-
 step 74-toggles-three-off-in-settings 5 "set toggleData false" "set toggleDND false" "set toggleLowPower false" "wait 2" "state" "where"
@@ -335,7 +342,28 @@ step 87-spore-off 6 "spore off" "wait 1" "plus" "wait 2.5" "type map" "wait 1" "
 cmd "sheetclose" "wait 1" "state"
 echo "-- what the log says about hidden apps:"; grep -E "hidden apps|leave the bench|spore:" "$RUN/Atelier.log" | tail -12 | cut -c21-
 
+echo "== coming and going, held part-way (by command: a hand that holds the bench a part of the way in)"
+cmd "close" "wait 2" "state"
+step 90-open-held-a-third-in 3 "drag open 0.33" "wait 0.8" "state"
+step 91-open-held-two-thirds-in 3 "drag open 0.66" "wait 0.8" "state"
+step 92-open-let-go-early-sprang-back 4 "drag open 0.2" "wait 0.3" "drag end 0" "wait 1.5" "state"       # gone again
+step 93-open-held-half-in 3 "drag open 0.5" "wait 0.8"
+step 94-open-let-go-opened 4 "drag end 1" "wait 1.5" "state"
+step 95-close-held-half-up 3 "drag close 0.5" "wait 0.8" "state"
+step 96-close-let-go-early-sprang-back 4 "drag end 0" "wait 1.5" "state"                                 # still there
+step 97-close-held-mostly-gone 3 "drag close 0.25" "wait 0.8"
+step 98-close-let-go-closed 4 "drag end 1" "wait 1.5" "state"
+echo "-- the bench coming and going:"; grep -E "bench open|bench close|drag: " "$RUN/Atelier.log" | tail -8 | cut -c21-150
+
+echo "== a Home action puts the bench away"
+step 99-bench-up-on-the-home-screen 8 "open" "wait 6" "state"
+step 99b-home-closed-the-bench 6 "home" "wait 3" "state"
+cmd "launch $SET" "wait 5" "open" "wait 6" "state"                         # and with an app in front
+step 99c-home-closed-the-bench-over-an-app 7 "home" "wait 4" "state"
+echo "-- what the log says:"; grep -E "Home: |Home gesture: |bench close \(Home" "$RUN/Atelier.log" | tail -10 | cut -c21-
+
 echo "== leaving and coming back"
+cmd "open" "wait 6"
 step 31-full-screen 8 "full 0" "wait 5" "state" "scenes"
 step 32-open-over-app 10 "open" "wait 7" "state"
 step 33-closed 6 "close" "wait 3" "state" "scenes"
@@ -471,7 +499,8 @@ touch_test() {
   shot 50-short-swipe-left-closed
   where                                                 # main Maps · mini0 Settings (locked), mini1 the probe, mini2 Safari, mini3 Calendar
   phone_drag "$(calc "$(lx mini2) + 30")" "$(cy mini2)" "$(calc "$(lx mini2) + 19")" "$(cy mini2)" 0.6; sleep 2
-  echo "T6b too short (11 pt, slowly) on Safari: $(last 'did not arm')"
+  echo "T6b 11 pt, slowly, on Safari: $(last 'swipe left on com.apple.mobilesafari')"
+  shot 50a-after-11pt
   phone_flick "$(calc "$(lx mini3) + 55")" "$(cy mini3)" "$(calc "$(lx mini3) + 37")" "$(cy mini3)" 0.04; sleep 3
   echo "T6c a flick left (18 pt in 0.04 s, 65 pt from the edge) on Calendar: $(last 'swipe left on com.apple.mobilecal')"
   shot 50b-after-flick
@@ -574,14 +603,62 @@ touch_test() {
   echo "T18 swipe up that starts on the Wi-Fi switch: $(last 'bench close') · $(last 'Keep Awake: off') · Wi-Fi flipped $(( $(count 'toggle Wi-Fi') - before )) time(s)"
   shot 69-swipe-up-from-switch
 
-  # 8. out and in again
+  # 8. coming and going with a finger: the edge strip, the swipe up, the Home gesture
+  cmd "close" "wait 2"; sleep 2
+  where
+  EX=$(awk '$1 == "edge" { printf "%.1f", $2 + $4 - 4 }' "$WHERE"); EY=$(cy edge)
+  echo "   the edge strip, bench closed: $(grep '^edge ' "$WHERE") · the handle: $(grep '^handle ' "$WHERE" || echo none)"
+  drag_shot "$EX" "$EY" "$(calc "$EX - 70")" "$EY" g01-edge-open-held-70pt        # 70 pt in from the edge, finger still down
+  sleep 3
+  echo "T20 edge strip, 70 pt in, then let go: $(last 'strip touch') · $(last 'bench open' | cut -c1-40)"
+  shot g02-edge-open-let-go-opened
+  cmd "close" "wait 2"; sleep 2
+  drag_shot "$EX" "$EY" "$(calc "$EX - 9")" "$EY" g03-edge-open-held-9pt          # too little: it springs back
+  sleep 3
+  echo "T21 edge strip, 9 pt in, then let go: $(last 'strip touch') · $(last 'bench close')"
+  shot g04-edge-open-sprang-back
+  cmd "close" "wait 2"; sleep 2
+  phone_flick "$EX" "$EY" "$(calc "$EX - 12")" "$EY" 0.04; sleep 5
+  echo "T22 edge strip, a flick of 12 pt: $(last 'strip touch')"
+  shot g05-edge-flick
+  cmd "open" "wait 6" "state"; sleep 3
+  where
+  EX=$(awk '$1 == "edge" { printf "%.1f", $2 + $4 - 3 }' "$WHERE"); EY=$(cy edge)
+  echo "   the edge strip, bench up: $(grep '^edge ' "$WHERE")"
+  drag_shot "$EX" "$EY" "$(calc "$EX - 80")" "$EY" g06-edge-close-held-80pt
+  sleep 3
+  echo "T23 edge strip with the bench up, 80 pt in: $(last 'strip touch') · $(last 'bench close')"
+  shot g07-edge-close-let-go-closed
+  cmd "open" "wait 6"; sleep 3
+  drag_shot 215 915 215 765 g08-swipe-up-held-150pt                                 # from under the dock, 150 pt up, finger still down
+  sleep 3
+  echo "T24 swipe up from the bottom, 150 pt, then let go: $(last 'bottom swipe') · $(last 'bench close')"
+  shot g09-swipe-up-let-go-closed
+  cmd "open" "wait 6"; sleep 3
+  drag_shot 215 915 215 890 g10-swipe-up-held-25pt                                  # too little: it springs back
+  sleep 3
+  echo "T25 swipe up, 25 pt, then let go: $(last 'bottom swipe')"
+  shot g11-swipe-up-sprang-back
+  cmd "open" "wait 5"; sleep 2
+  phone_flick 215 915 215 895 0.04; sleep 4
+  echo "T26 a flick up of 20 pt: $(last 'bottom swipe') · $(last 'bench close')"
+  shot g12-flick-up
+  cmd "open" "wait 6"; sleep 3
+  before=$(count 'Home')
+  phone_drag 215 931.5 215 520 0.35; sleep 5          # from the very bottom edge: where SpringBoard's Home gesture lives
+  echo "T27 from the very bottom edge: $(( $(count 'Home') - before )) Home line(s) · $(last 'Home gesture') · $(last 'Home: ') · $(last 'bottom swipe') · $(last 'bench close')"
+  shot g13-from-the-bottom-edge
+  echo "   every strip touch and bottom swipe, as the log has it:"
+  tail -n +"$((SKIP + 1))" "$RUN/Atelier.log" | grep -E "strip touch|bottom swipe|Home gesture|Home: " | cut -c21- | sed 's/^/     /'
+
+  # 9. out and in again, as before
   cmd "open" "wait 6"; sleep 3
   phone_drag 215 921 215 560; sleep 4                 # up from the bottom of the screen
   echo "T11 swipe up from the bottom: $(last 'bench close')"
   shot 57-swipe-up-closed
   cmd "close" "wait 1"; sleep 3
   phone_drag 426 840 300 815; sleep 5                 # in from the right edge, on the strip
-  echo "T12 edge strip: $(last 'trigger:') · $(last 'bench open' | cut -c1-60)"
+  echo "T12 edge strip: $(last 'strip touch') · $(last 'bench open' | cut -c1-60)"
   shot 58-edge-swipe-opened
   cmd "state" "set miniMode 0" "clock off" "quotes off" "close" "wait 2" "state"
   sleep 6

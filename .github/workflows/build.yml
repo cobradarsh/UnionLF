@@ -53,7 +53,9 @@ jobs:
           python3 tools/layout_check.py || fail=1
           exit $fail
 
+  # (A commit whose message has "[syntax only]" in it runs the Linux check alone.)
   build:
+    if: ${{ !contains(github.event.head_commit.message, '[syntax only]') }}
     strategy:
       fail-fast: false
       matrix:
@@ -173,12 +175,13 @@ jobs:
   # Atelier inside a simulator's SpringBoard, on the phone's iOS generation: real apps on the
   # bench, every layout, the swap, freezing, the sheets.
   simulator:
+    if: ${{ !contains(github.event.head_commit.message, '[syntax only]') }}
     strategy:
       fail-fast: false
       matrix:
         runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 80
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 

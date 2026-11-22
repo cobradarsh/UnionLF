@@ -21,7 +21,7 @@
 
 To open it, slide a finger in from the edge of the screen just above the bottom corner (or up along that edge). Or hold an app's icon on the Home Screen and choose Open in HyperTrade.
 
-The pill with three dots above the big app is its menu: Full Screen, Switch Layout, Replace App, Close App, Save as Set. Hold a mini for its own menu. A swipe up from the bottom of the screen puts the bench away.</string>
+The pill with three dots above the big app is its menu: Full Screen, Switch Layout, Replace App, Close App, Save as Set. Hold a mini for its own menu. A swipe up from the bottom of the screen, the Home gesture, puts the bench away.</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -522,7 +522,9 @@ Keep Screen Awake holds the screen on only while the bench is open. It switches 
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>The edge strip is see-through, 16 points wide. It takes touches where it lies, so keep it only as tall as you need. The same swipe closes the bench.
+			<string>Slide a finger in from the edge, or up along it: the bench comes in with your finger and opens when you let go. A short swipe or a flick is enough. With the bench open, the same swipe inward sends it away again.
+
+The strip is see-through and 22 points wide; the faint pill on the edge shows where it is. It takes touches where it lies, so keep it only as tall as you need.
 
 Bring the Current App Along: the app you are in when you open the bench becomes the big app.
 
@@ -543,6 +545,20 @@ Icon Menu: Open in HyperTrade, your sets, and HyperTrade Sets… when you hold a
 			<string>trigger</string>
 			<key>label</key>
 			<string>Edge Swipe</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>showHandle</string>
+			<key>label</key>
+			<string>Show Edge Handle</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>

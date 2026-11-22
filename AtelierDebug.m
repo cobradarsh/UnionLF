@@ -27,7 +27,11 @@
         quotes rise|fall|mixed|stale|error|none     test numbers for NIFTY and SENSEX (nothing is fetched)
         quotes off                      real numbers again
         quotes fetch                    one real fetch, logged with what was parsed
-        toggle <wifi|bluetooth|data|dnd|awake|lowpower>          what a tap on that switch does
+        switch <wifi|bluetooth|data|dnd|awake|lowpower>          what a tap on that switch does
+        drag open <0…1> | drag close <0…1>     hold the bench that far in, as a finger on the edge strip
+                                        (open) or going up from the bottom (close) would
+        drag end <1|0>                  let go: 1 = what was begun is done, 0 = it springs back
+        hooks                           log what watches for the Home gesture, and what is in place
         togglefake <key> on|off|real    show that switch as on or off without touching the phone; "togglefake clear"
         spore <bundle id> … | spore dict <bundle id> … | spore off
                                         (simulator only) write a SporeX hidden-apps list, as an array or as a
@@ -243,10 +247,25 @@ static double AtelierRunLine(NSString *raw) {
         } else if ([cmd isEqualToString:@"quotes"] && a1) {
             if ([a1 isEqualToString:@"fetch"]) [[AtelierQuotes shared] fetchOnce];
             else [[AtelierQuotes shared] inject:a1];
-        } else if ([cmd isEqualToString:@"toggle"] && a1) {
+        } else if ([cmd isEqualToString:@"switch"] && a1) {
             AtelierDock *dock = [bench debugDock];
             if (dock && bench.visible) [dock debugTap:a1];
-            else AtelierLog(@"toggle %@: the bench is not up", a1);
+            else AtelierLog(@"switch %@: the bench is not up", a1);
+        } else if ([cmd isEqualToString:@"drag"] && a2) {
+            static NSObject *hand;                       // stands in for a finger
+            if (!hand) hand = [NSObject new];
+            if ([a1 isEqualToString:@"end"]) {
+                [bench endDrag:(a2.integerValue != 0) velocity:0 reason:@"test drag" owner:hand];
+            } else {
+                BOOL opening = [a1 isEqualToString:@"open"];
+                if (![bench dragging]) {
+                    AtelierMotion motion = opening ? ([AtelierSettings shared].triggerSide != 0 ? AtelierMotionFromRight : AtelierMotionFromLeft) : AtelierMotionLift;
+                    AtelierLog(@"drag: begin %@ -> %d", a1, (int)[bench beginDragOpening:opening motion:motion owner:hand]);
+                }
+                [bench dragTo:a2.doubleValue owner:hand];
+            }
+        } else if ([cmd isEqualToString:@"hooks"]) {
+            AtelierLog(@"%@", [AtelierHome debugState]);
         } else if ([cmd isEqualToString:@"togglefake"] && a1) {
             if ([a1 isEqualToString:@"clear"]) {
                 [AtelierToggles debugFake:AtelierToggleCount look:-1];

@@ -11,8 +11,9 @@ without the index lines, for each height the dock can have, with and without "re
     band's lowest row: there the rows above it and the flags zone must stay clear of it);
   - the strip where a swipe up closes the bench starts at the dock and reaches the bottom of the
     screen, is at least as tall as the Home indicator's area plus the dock, and no tile is in it;
-  - the edge strip that opens and closes the bench (16 pt wide, on either side, 60 to 220 pt
-    tall) ends above the dock while the bench is up, so it never lies over a switch;
+  - the edge strip that opens and closes the bench (22 pt wide, on either side, 60 to 220 pt
+    tall) ends above the dock while the bench is up and is then no wider than the margin beside
+    the tiles (at least 8 pt), so it never lies over a switch or an app;
   - Side: the column of five places is exactly as tall as the main (same top, same bottom,
     equal gaps), and a mini is at least as wide as its whole app needs; Top: the row of five is
     exactly as wide as the main;
@@ -27,12 +28,23 @@ SIDE, TOP, SPLIT = 0, 1, 2
 DOCKS = {"switches, the credit between them": 28.0, "credit only": 12.0}     # AtelierDock +heightForWidth:compact:
 
 
-def edge_strip(W, H, safe_bottom, dock, side, height):
+def margin(g, W, right):
+    """AtelierBench -marginOnRight: the room between the tiles and one side of the screen."""
+    m = 44.0
+    for r in [g["main"], g["second"], g["plus"]] + list(g["minis"]):
+        if not empty(r):
+            m = min(m, (W - (r[0] + r[2])) if right else r[0])
+    return max(0.0, m)
+
+
+def edge_strip(g, W, H, safe_bottom, side, height, width=22.0):
     """AtelierTrigger -_zone while the bench is up."""
     bottom = H - max(safe_bottom, 12) - 6
-    if not empty(dock):
-        bottom = min(bottom, dock[1] - 4)
-    return R(0 if side == 0 else W - 16, bottom - height, 16, height)
+    w = max(16.0, min(44.0, width))
+    if not empty(g["dock"]):
+        bottom = min(bottom, g["dock"][1] - 4)
+        w = max(8.0, min(w, margin(g, W, side == 1)))
+    return R(0 if side == 0 else W - w, bottom - height, w, height)
 
 
 def rnd(x):                       # C's round(): halves away from zero
@@ -223,9 +235,14 @@ def main():
                                 bad("STRIP", where, "the swipe-up strip %s" % (g["strip"],))
                             for side in (0, 1):
                                 for height in (60.0, 110.0, 220.0):
-                                    z = edge_strip(W, H, sb, g["dock"], side, height)
+                                    z = edge_strip(g, W, H, sb, side, height)
                                     if overlap(z, g["dock"]) or z[1] + z[3] > g["dock"][1] + 0.01:
                                         bad("EDGE STRIP", where, "the edge strip %s lies on the dock %s" % (z, g["dock"]))
+                                    for n, r in tiles:
+                                        if overlap(z, r):
+                                            bad("EDGE STRIP", where, "the edge strip %s lies on %s %s" % (z, n, r))
+                                    if z[2] < 8 - 0.01:
+                                        bad("EDGE STRIP", where, "the edge strip is only %.1f pt wide" % z[2])
                             for pill in ("grabber", "grabber2"):
                                 if empty(g[pill]):
                                     continue

@@ -6,11 +6,17 @@
     has the size of the app's scene and is scaled down to the tile's width.
 
       main tile     nothing of SpringBoard's lies over it, so touches go straight to the app
-      mini tile     a shield on top takes the touches: a tap makes it the main, a hold opens
-                    its menu, a swipe acts on it (left closes, right makes it the main, up locks
-                    or unlocks, down is the Settings choice). A frozen mini also shows a still,
-                    and its app is in the background. A locked app is never frozen and can't be
-                    swiped away.
+      mini tile     a shield on top takes the touches (AtelierShield, AtelierGestures.m): a tap
+                    makes it the main, a hold opens its menu, a swipe acts on it (left closes,
+                    right makes it the main, up locks or unlocks, down is the Settings choice).
+                    A frozen mini also shows a still, and its app is in the background. A locked
+                    app is never frozen and can't be swiped away.
+
+    Coming and going. How far in the bench is, is one number: 0 gone, 1 fully there (-_show:).
+    The backdrop's blur and dim follow it, and everything else (one container view) is moved and
+    scaled as a whole; nothing is laid out again on the way. A finger can hold that number (the
+    edge strip, the swipe up, SpringBoard's Home gesture: -beginDragOpening:…, -dragTo:,
+    -endDrag:…), and when nobody holds it, it settles to 0 or 1 on a short spring.
 
     Above the tiles is the band (AtelierBand.m): index numbers, clock, market flags, shortcut
     apps. Under them the dock (AtelierToggles.m): six switches and the credit line. A swipe up
@@ -30,7 +36,7 @@
 @property (nonatomic, strong) AtelierPane *pane;
 @property (nonatomic, strong) UIView *clip;
 @property (nonatomic, strong) UIImageView *still;
-@property (nonatomic, strong) UIControl *shield;
+@property (nonatomic, strong) AtelierShield *shield;
 @property (nonatomic, strong) UIImageView *badge;
 @property (nonatomic, strong) UIImageView *lockBadge;
 @property (nonatomic) BOOL locked;                  // stays on the bench, never frozen, can't be swiped away
@@ -69,7 +75,7 @@
 
     // The shield takes every touch on a mini. Its layer is marked so that the window server
     // gives the touch to SpringBoard and not to the app whose picture lies underneath.
-    _shield = [[UIControl alloc] initWithFrame:self.bounds];
+    _shield = [[AtelierShield alloc] initWithFrame:self.bounds];
     _shield.backgroundColor = [UIColor colorWithWhite:0 alpha:0.02];
     AtelierSendBool(_shield.layer, @"setHitTestsAsOpaque:", YES);
     _shield.hidden = YES;
@@ -250,7 +256,7 @@ static void AtelierHIDStop(void) {
 
 #pragma mark - the bench
 
-@interface AtelierBench () <UIGestureRecognizerDelegate>
+@interface AtelierBench () <UIGestureRecognizerDelegate, AtelierShieldDelegate>
 - (void)_touchFromScreen;
 @end
 
@@ -269,9 +275,27 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierWindow *_window;
     UIView *_root;
     UIVisualEffectView *_blur;
+    UIBlurEffect *_blurEffect;
+    UIViewPropertyAnimator *_blurScrub;      // holds the blur part-way while the bench is part-way in
     UIView *_dim;
+    AtelierCloseStrip *_closeStrip;          // along the bottom: a finger that goes up from it closes the bench
+    UIView *_content;                        // everything but the backdrop: what moves when the bench comes and goes
     UIView *_stage;                          // holds the tiles
     NSMutableArray<AtelierTile *> *_tiles;   // index 0 is the main
+    NSMutableArray<AtelierTile *> *_leaving; // tiles on their way out; their apps are let go once they are out of sight
+    // coming and going
+    CGFloat _progress;                       // 0 gone … 1 fully there
+    AtelierMotion _motion;                   // how it moves between the two
+    __weak id _dragOwner;                    // who is moving it by hand right now
+    BOOL _dragOpening;                       // … and whether that began as an opening
+    CADisplayLink *_settle;                  // runs while the bench settles to 0 or 1 by itself
+    CGFloat _settleTo, _settleSpeed, _settleDamping;
+    CFTimeInterval _settleBegan, _settleLast;
+    void (^_settleThen)(void);
+    BOOL _dockDragging;                      // a finger that came down on a switch is carrying the bench up
+    BOOL _bounce;                            // the next layout springs back with a bounce (a lock)
+    BOOL _flies;                             // the next app to leave flies out …
+    AtelierSwipe _flyWay;                    // … this way
     UIButton *_grabber, *_grabber2;
     UIControl *_plus;
     UIView *_divider;
@@ -281,9 +305,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     NSString *_frontAtOpen;
     double _split;
     BOOL _closing;
-    BOOL _swipeFromBottom;
-    CGPoint _bottomDown;                     // where the finger of a swipe up from the bottom came down
-    UIPanGestureRecognizer *_bottomPan, *_dockPan;
+    CGPoint _bottomDown;                     // where a finger on the dock came down
+    UIPanGestureRecognizer *_dockPan;
     AtelierGeometry _geometry;
     AtelierBand *_band;                      // index numbers, clock, flags, shortcut apps
     AtelierDock *_dock;                      // toggles and the credit line
@@ -294,7 +317,6 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierTile *_swipeTile;
     NSInteger _swipeAxis;                    // 1 sideways, 2 up and down
     BOOL _swipeArmed;
-    CGPoint _swipeDown;                      // where the finger on a mini came down
     NSMutableSet<NSString *> *_locked;       // bundle ids
 }
 
@@ -339,35 +361,35 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     __weak typeof(self) weak = self;
     _window.onTouch = ^{ [weak touched]; };
     _root = _window.rootViewController.view;
+    UIViewAutoresizing fill = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-    _blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+    // The backdrop: a blur of what was on the screen and a dim over it. Both follow -_show:.
+    _blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+    _blur = [[UIVisualEffectView alloc] initWithEffect:nil];
     _blur.frame = _root.bounds;
-    _blur.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _blur.autoresizingMask = fill;
+    _blur.userInteractionEnabled = NO;
     [_root addSubview:_blur];
     _dim = [[UIView alloc] initWithFrame:_root.bounds];
-    _dim.autoresizingMask = _blur.autoresizingMask;
+    _dim.autoresizingMask = fill;
     _dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.32];
+    _dim.alpha = 0;
     [_root addSubview:_dim];
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_backdropTapped)];
-    [_dim addGestureRecognizer:tap];
-    // A swipe up from the bottom edge is the Home gesture: SpringBoard acts on it underneath,
-    // and the bench gets out of the way at once.
-    UIScreenEdgePanGestureRecognizer *home = [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:self action:@selector(_homeSwipe:)];
-    home.edges = UIRectEdgeBottom;
-    home.delegate = self;
-    [_root addGestureRecognizer:home];
-    // The same wish without the edge: a finger that starts on the backdrop in the lowest strip of
-    // the screen and slides up. (In the simulator a mouse drag from the bottom never reached the
-    // edge recogniser; this one does not depend on where iOS thinks the edge is.)
-    UIPanGestureRecognizer *up = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_bottomSwipe:)];
-    up.maximumNumberOfTouches = 1;
-    up.delegate = self;
-    [_dim addGestureRecognizer:up];
-    _bottomPan = up;
+    [_dim addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(backdropTapped)]];
 
-    _stage = [[AtelierPassView alloc] initWithFrame:_root.bounds];
-    _stage.autoresizingMask = _blur.autoresizingMask;
-    [_root addSubview:_stage];
+    // Under everything else: the strip a swipe up closes the bench from. The dock's switches lie
+    // over it and take their own touches.
+    _closeStrip = [[AtelierCloseStrip alloc] initWithFrame:CGRectZero];
+    [_root addSubview:_closeStrip];
+
+    // What moves as one when the bench comes and goes.
+    _content = [[AtelierPassView alloc] initWithFrame:_root.bounds];
+    _content.autoresizingMask = fill;
+    [_root addSubview:_content];
+
+    _stage = [[AtelierPassView alloc] initWithFrame:_content.bounds];
+    _stage.autoresizingMask = fill;
+    [_content addSubview:_stage];
 
     _plus = [[UIControl alloc] initWithFrame:CGRectMake(0, 0, 60, 60)];
     _plus.backgroundColor = [UIColor colorWithWhite:1 alpha:0.10];
@@ -381,12 +403,12 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     cross.tintColor = [UIColor colorWithWhite:1 alpha:0.85];
     cross.contentMode = UIViewContentModeCenter;
     cross.frame = _plus.bounds;
-    cross.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    cross.autoresizingMask = fill;
     cross.userInteractionEnabled = NO;
     [_plus addSubview:cross];
     [_plus addTarget:self action:@selector(_plusTapped) forControlEvents:UIControlEventTouchUpInside];
     _plus.hidden = YES;
-    [_root addSubview:_plus];
+    [_content addSubview:_plus];
 
     _outlines = [NSMutableArray array];
     for (int i = 0; i < 5; i++) {
@@ -398,7 +420,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         o.layer.cornerRadius = 9;
         o.layer.cornerCurve = kCACornerCurveContinuous;
         o.alpha = 0;
-        [_root insertSubview:o belowSubview:_stage];
+        [_content insertSubview:o belowSubview:_stage];
         [_outlines addObject:o];
     }
 
@@ -407,17 +429,17 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _band.onShortcut = ^(NSString *bid) { [weak openShortcut:bid]; };
     _band.onShortcutHeld = ^(NSString *bid, CGRect frame) { [weak _showShortcutMenu:bid frame:frame]; };
     _band.onAddShortcut = ^{ [weak _addShortcut]; };
-    [_root addSubview:_band];
+    [_content addSubview:_band];
 
     _dock = [[AtelierDock alloc] initWithFrame:CGRectZero];
     _dock.alpha = 0;
-    // a swipe up that starts on one of the switches closes the bench too (and does not flip the switch)
-    UIPanGestureRecognizer *dockUp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_bottomSwipe:)];
+    // a swipe up that starts on one of the switches carries the bench away too (and does not flip the switch)
+    UIPanGestureRecognizer *dockUp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_dockSwiped:)];
     dockUp.maximumNumberOfTouches = 1;
     dockUp.delegate = self;
     [_dock addGestureRecognizer:dockUp];
     _dockPan = dockUp;
-    [_root addSubview:_dock];
+    [_content addSubview:_dock];
 
     _swipePill = [UILabel new];
     _swipePill.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
@@ -431,8 +453,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
     _grabber = [self _makeGrabber:0];
     _grabber2 = [self _makeGrabber:1];
-    [_root addSubview:_grabber];
-    [_root addSubview:_grabber2];
+    [_content addSubview:_grabber];
+    [_content addSubview:_grabber2];
 
     _divider = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 28, 88)];
     UIView *bar = [[UIView alloc] initWithFrame:CGRectZero];
@@ -443,13 +465,11 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [_divider addSubview:bar];
     [_divider addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_dividerDragged:)]];
     _divider.hidden = YES;
-    [_root addSubview:_divider];
-    [_root addSubview:_swipePill];
+    [_content addSubview:_divider];
+    [_content addSubview:_swipePill];
 }
 
-// Recognisers on different views never end one another: nothing on the backdrop, the dock or the
-// screen's edge can cut a mini's swipe short. On one and the same view they stay rivals, so a
-// mini's hold (its menu) and its swipe are still one or the other, whichever comes first.
+// (The dock's swipe is the only recogniser with this delegate.)
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
     return g.view != other.view;
 }
@@ -457,14 +477,169 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 // Where the finger came down is noted here: by the time a pan begins it has already travelled
 // ten points or so, and its own figure for how far it has gone leaves those out.
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
-    CGPoint p = [touch locationInView:_root];
-    if (g == _bottomPan || g == _dockPan) {
-        _bottomDown = p;
-        _swipeFromBottom = CGRectContainsPoint(_geometry.closeStrip, p);
-    } else if ([g isKindOfClass:UIPanGestureRecognizer.class] && [self _slotOfTileWithShield:g.view] != NSNotFound) {
-        _swipeDown = p;
-    }
+    if (g == _dockPan) _bottomDown = [touch locationInView:nil];
     return YES;
+}
+
+#pragma mark coming and going
+
+// The blur at `q` of its full strength. A blur view is not to be faded with its alpha; it is
+// scrubbed with a paused animator from "no effect" to the effect. The animator is made anew for
+// every time the bench comes up and stopped when it has gone (one that is still paused when it
+// is let go of makes UIKit throw). `set blurScrub 0` is the plain way, should this misbehave.
+- (void)_blurTo:(CGFloat)q {
+    q = MAX(0, MIN(1, q));
+    if ([[AtelierSettings shared] tune:@"blurScrub" fallback:1] < 1) {
+        [self _endBlurScrub];
+        if (_blur.effect != _blurEffect) _blur.effect = _blurEffect;
+        _blur.alpha = q;
+        return;
+    }
+    if (!_blurScrub) {
+        UIVisualEffectView *blur = _blur;
+        UIBlurEffect *effect = _blurEffect;
+        blur.alpha = 1;
+        blur.effect = nil;
+        _blurScrub = [[UIViewPropertyAnimator alloc] initWithDuration:1.0 curve:UIViewAnimationCurveLinear animations:^{ blur.effect = effect; }];
+        _blurScrub.pausesOnCompletion = YES;
+        [_blurScrub pauseAnimation];
+    }
+    _blurScrub.fractionComplete = q;
+}
+
+- (void)_endBlurScrub {
+    if (!_blurScrub) return;
+    @try { [_blurScrub stopAnimation:YES]; } @catch (__unused id e) {}
+    _blurScrub = nil;
+}
+
+// How far in the bench is: 0 gone, 1 fully there. Everything about that is here, and nothing is
+// laid out: the backdrop fades and one container is moved and scaled.
+- (void)_show:(CGFloat)p {
+    p = MAX(-0.05, MIN(1.05, p));                        // the spring may go a hair past either end
+    _progress = p;
+    CGFloat q = MAX(0, MIN(1, p)), away = 1 - p;
+    [self _blurTo:q];
+    _dim.alpha = q;
+    CGSize screen = [AtelierHost screenSize];
+    CGFloat tx = 0, ty = 0, scale = 1, fade = q;
+    switch (_motion) {
+        case AtelierMotionFromRight: tx = away * screen.width * 0.36;  scale = 1 - 0.08 * away; fade = MIN(1, q * 2.2); break;
+        case AtelierMotionFromLeft:  tx = -away * screen.width * 0.36; scale = 1 - 0.08 * away; fade = MIN(1, q * 2.2); break;
+        case AtelierMotionLift:      ty = -away * screen.height * 0.07; scale = 1 - 0.14 * away; fade = MIN(1, q * 1.5); break;
+        default:                     scale = 1 - 0.07 * away; break;
+    }
+    _content.alpha = fade;
+    _content.transform = CGAffineTransformScale(CGAffineTransformMakeTranslation(tx, ty), scale, scale);
+}
+
+// From where it is to `target` (0 or 1) on a spring, starting at `speed` (progress per second,
+// towards the target) and with `damping` (1 = no bounce). A quarter of a second, never more
+// than 0.4 s. `then` runs when it is there.
+- (void)_settleTo:(CGFloat)target speed:(CGFloat)speed damping:(CGFloat)damping then:(void (^)(void))then {
+    [_settle invalidate];
+    _settleTo = target;
+    _settleSpeed = (target >= _progress ? 1 : -1) * MIN(12.0, MAX(0, speed));
+    _settleDamping = damping;
+    _settleThen = [then copy];
+    _settleBegan = _settleLast = CACurrentMediaTime();
+    _settle = [CADisplayLink displayLinkWithTarget:self selector:@selector(_settleStep:)];
+    if (@available(iOS 15.0, *)) _settle.preferredFrameRateRange = CAFrameRateRangeMake(60, 120, 120);
+    [_settle addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+}
+
+- (void)_settleStep:(CADisplayLink *)link {
+    CFTimeInterval now = CACurrentMediaTime();
+    CGFloat dt = MAX(0.001, MIN(1.0 / 30.0, now - _settleLast));
+    _settleLast = now;
+    const CGFloat stiffness = 26.0;                      // rad/s
+    CGFloat x = _progress - _settleTo;
+    for (int i = 0; i < 2; i++) {                        // two half steps: a long frame cannot make it jump
+        CGFloat h = dt / 2.0;
+        CGFloat pull = -2.0 * _settleDamping * stiffness * _settleSpeed - stiffness * stiffness * x;
+        _settleSpeed += pull * h;
+        x += _settleSpeed * h;
+    }
+    BOOL there = (fabs(x) < 0.004 && fabs(_settleSpeed) < 0.1) || now - _settleBegan > 0.40;
+    [self _show:(there ? _settleTo : _settleTo + x)];
+    if (there) [self _settled];
+}
+
+- (void)_settled {
+    [_settle invalidate];
+    _settle = nil;
+    void (^then)(void) = _settleThen;
+    _settleThen = nil;
+    if (then) then();
+}
+
+// Whatever was settling is there this instant (its `then` runs now).
+- (void)_settleNow {
+    if (!_settle) return;
+    [self _show:_settleTo];
+    [self _settled];
+}
+
+- (BOOL)dragging { return _dragOwner != nil; }
+- (CGFloat)progress { return _progress; }
+
+- (BOOL)beginDragOpening:(BOOL)opening motion:(AtelierMotion)motion owner:(id)owner {
+    if (!owner) return NO;
+    // one hand at a time; only SpringBoard's own Home gesture takes over from another
+    id holder = _dragOwner;
+    if (holder && holder != owner && ![owner isKindOfClass:AtelierHome.class]) return NO;
+    if (opening) {
+        if (_closing) [self _settleNow];                 // still on its way out from the last time: it is out now
+        if (_visible) return NO;
+        if (![self _presentApps:[self _appsToOpen] layout:[[AtelierSettings shared] layout] motion:motion byHand:YES]) return NO;
+    } else {
+        if (!_visible || _closing) return NO;
+        [_settle invalidate];                            // if it was still settling in, the finger has it now
+        _settle = nil;
+        _settleThen = nil;
+        if (_progress > 0.995) _motion = motion;         // fully in, every motion looks the same: no jump
+        [self hideMenu];
+    }
+    _dragOpening = opening;
+    _dragOwner = owner;
+    return YES;
+}
+
+- (void)dragTo:(CGFloat)progress owner:(id)owner {
+    if (!owner || owner != _dragOwner || !_visible || _closing) return;
+    [self _show:MAX(0, MIN(1, progress))];
+}
+
+- (void)endDrag:(BOOL)complete velocity:(CGFloat)velocity reason:(NSString *)why owner:(id)owner {
+    if (!owner || owner != _dragOwner) return;
+    _dragOwner = nil;
+    if (!_visible || _closing) return;
+    BOOL stays = _dragOpening ? complete : !complete;
+    if (stays) {
+        if (_dragOpening) AtelierHapticPlay(AtelierHapticOpen);
+        [self _settleTo:1 speed:(_dragOpening ? velocity : 0) damping:0.82 then:nil];
+    } else {
+        [self _closeAnimated:YES reason:why motion:_motion speed:(_dragOpening ? 0 : velocity) keeping:nil then:nil];
+    }
+}
+
+// "Go home" happened somewhere in SpringBoard: the bench goes, as an app would.
+- (void)homeAction:(NSString *)what {
+    if (!_visible || _closing) return;
+    [self _closeAnimated:YES reason:what motion:AtelierMotionLift speed:0 keeping:nil then:nil];
+}
+
+// The room between the tiles and one side of the screen: the edge strip is no wider while the bench is up.
+- (CGFloat)marginOnRight:(BOOL)right {
+    CGSize screen = [AtelierHost screenSize];
+    CGFloat margin = 44;
+    CGRect rects[8] = { _geometry.main, _geometry.second, _geometry.plus,
+                        _geometry.minis[0], _geometry.minis[1], _geometry.minis[2], _geometry.minis[3], _geometry.minis[4] };
+    for (int i = 0; i < 8; i++) {
+        if (CGRectIsEmpty(rects[i])) continue;
+        margin = MIN(margin, right ? screen.width - CGRectGetMaxX(rects[i]) : rects[i].origin.x);
+    }
+    return MAX(0, margin);
 }
 
 #pragma mark open and close
@@ -507,20 +682,31 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     return out;
 }
 
-- (void)open {
-    if (_visible) return;
+// What the bench opens with: what was on it last time, and the app in front first.
+- (NSArray<NSString *> *)_appsToOpen {
     AtelierSettings *s = [AtelierSettings shared];
     [AtelierHost reloadHiddenApps];
     [self _loadLocks];
     NSArray<NSString *> *apps = [s slots];
     NSString *front = [AtelierHost frontmostBundleID];
     if (front && s.addFront) apps = [self _list:apps withFirst:front] ?: apps;
-    [self _presentApps:apps layout:[s layout]];
+    return apps;
+}
+
+- (void)open {
+    [self openWithMotion:AtelierMotionZoom];
+}
+
+- (void)openWithMotion:(AtelierMotion)motion {
+    if (_closing) [self _settleNow];
+    if (_visible) return;
+    [self _presentApps:[self _appsToOpen] layout:[[AtelierSettings shared] layout] motion:motion byHand:NO];
 }
 
 - (void)openWithApps:(NSArray<NSString *> *)bids layout:(NSInteger)layout {
     AtelierLayoutKind kind = (layout >= 0 && layout <= 2) ? (AtelierLayoutKind)layout : (_visible ? _layout : [[AtelierSettings shared] layout]);
-    if (!_visible) { [self _presentApps:bids layout:kind]; return; }
+    if (_closing) [self _settleNow];
+    if (!_visible) { [self _presentApps:bids layout:kind motion:AtelierMotionZoom byHand:NO]; return; }
     _layout = kind;
     [self _setApps:[self _usable:bids] animated:YES];
     [self touched];
@@ -562,11 +748,13 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     else [self open];
 }
 
-- (void)_presentApps:(NSArray<NSString *> *)bids layout:(AtelierLayoutKind)layout {
+// byHand: the bench comes up all the way out and waits for a finger (-dragTo:); otherwise it
+// settles in by itself, at once.
+- (BOOL)_presentApps:(NSArray<NSString *> *)bids layout:(AtelierLayoutKind)layout motion:(AtelierMotion)motion byHand:(BOOL)byHand {
     AtelierSettings *s = [AtelierSettings shared];
-    if (!s.enabled) { AtelierLog(@"open: %@ is switched off", ATELIER_NAME); return; }
-    if ([AtelierHost isLocked]) { AtelierLog(@"open: the phone is locked"); return; }
-    if (_closing) return;
+    if (!s.enabled) { AtelierLog(@"open: %@ is switched off", ATELIER_NAME); return NO; }
+    if ([AtelierHost isLocked]) { AtelierLog(@"open: the phone is locked"); return NO; }
+    if (_closing || _visible) return NO;
     [AtelierHost reloadHiddenApps];                      // SporeX's list, as it is now
     [self _ensureWindow];
     [self _loadLocks];
@@ -578,16 +766,12 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _split = MAX(0.3, MIN(0.7, [s tune:@"split" fallback:0.5]));
     _frontAtOpen = [AtelierHost frontmostBundleID];
     _visible = YES;
+    _dragOwner = nil;
+    _motion = motion;
     _lastTouch = CFAbsoluteTimeGetCurrent();
     [self _setApps:[self _usable:bids] animated:NO];
+    [self _show:0];
     _window.hidden = NO;
-    _root.alpha = 0;
-    _stage.transform = CGAffineTransformMakeScale(0.96, 0.96);
-    [UIView animateWithDuration:0.24 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        self->_root.alpha = 1;
-        self->_stage.transform = CGAffineTransformIdentity;
-    } completion:nil];
-    AtelierHapticPlay(AtelierHapticOpen);
     __weak typeof(self) weak = self;
     _watch = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *t) {
         @try { [weak _tick]; } @catch (NSException *e) { AtelierLog(@"bench clock threw %@", e.reason); }
@@ -599,18 +783,33 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     quotes.onChange = ^{ [weak _quotesChanged]; };
     [quotes start];
     AtelierHIDStart();
+    [AtelierHome benchCameUp];                           // SpringBoard's Home gesture is watched from here to the close
     [[AtelierTrigger shared] refresh];
-    AtelierLog(@"bench open: %@ · layout %ld · front %@ · level %.0f", [[self apps] componentsJoinedByString:@" "],
-               (long)_layout, _frontAtOpen ?: @"home", _window.windowLevel);
+    AtelierLog(@"bench open%@: %@ · layout %ld · front %@ · level %.0f", byHand ? @" (following a finger)" : @"",
+               [[self apps] componentsJoinedByString:@" "], (long)_layout, _frontAtOpen ?: @"home", _window.windowLevel);
+    if (!byHand) {
+        AtelierHapticPlay(AtelierHapticOpen);
+        [self _settleTo:1 speed:0 damping:0.82 then:nil];
+    }
+    return YES;
 }
 
 - (void)closeAnimated:(BOOL)animated reason:(NSString *)why {
-    [self _closeAnimated:animated reason:why keeping:nil then:nil];
+    [self _closeAnimated:animated reason:why motion:AtelierMotionZoom speed:0 keeping:nil then:nil];
 }
 
-- (void)_closeAnimated:(BOOL)animated reason:(NSString *)why keeping:(NSString *)keep then:(void (^)(void))then {
+- (void)closeAnimated:(BOOL)animated reason:(NSString *)why motion:(AtelierMotion)motion {
+    [self _closeAnimated:animated reason:why motion:motion speed:0 keeping:nil then:nil];
+}
+
+// The bench goes: everything that runs is stopped at once, then it leaves from wherever it is
+// (a finger may have carried it part of the way) and the apps are given back.
+- (void)_closeAnimated:(BOOL)animated reason:(NSString *)why motion:(AtelierMotion)motion speed:(CGFloat)speed
+               keeping:(NSString *)keep then:(void (^)(void))then {
     if (!_visible || _closing) { if (then) then(); return; }
     _closing = YES;
+    _dragOwner = nil;
+    _dockDragging = NO;
     AtelierLog(@"bench close (%@)", why ?: @"?");
     [self _persist];
     [_watch invalidate];
@@ -618,20 +817,29 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [_band stop];
     [[AtelierQuotes shared] stop];                       // nothing is fetched once the bench is on its way out
     [AtelierToggles benchWentAway];                      // Keep Awake ends here, whatever closed the bench
+    [AtelierHome benchWentAway];
     AtelierHIDStop();
     [self hideMenu];
     [self _hideSwipePill];
     _swipeTile = nil;
     [AtelierSheets dismiss];
+    [_settle invalidate];
+    _settle = nil;
+    _settleThen = nil;
+    if (_progress > 0.995) _motion = motion;             // part-way out already: it goes on the way it was going
     void (^finish)(void) = ^{
         NSString *front = [AtelierHost frontmostBundleID];
+        for (AtelierTile *l in [self->_leaving copy]) [self _gone:l];
         for (AtelierTile *t in self->_tiles) {
             NSString *bid = t.pane.bundleID;
             [t.pane detachKeepingForeground:([bid isEqualToString:front] || [bid isEqualToString:keep])];
             [t removeFromSuperview];
         }
         [self->_tiles removeAllObjects];
+        [self _show:0];
         self->_window.hidden = YES;
+        [self _endBlurScrub];
+        self->_blur.effect = nil;
         self->_visible = NO;
         self->_closing = NO;
         self->_stripFloor = 0;
@@ -639,10 +847,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         if (then) then();
     };
     if (!animated) { finish(); return; }
-    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
-        self->_root.alpha = 0;
-        self->_stage.transform = CGAffineTransformMakeScale(0.97, 0.97);
-    } completion:^(BOOL done) { finish(); }];
+    [self _settleTo:0 speed:speed damping:1.0 then:finish];
 }
 
 - (void)_persist {
@@ -707,29 +912,51 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         if (tile) {
             [old removeObject:tile];
         } else {
+            // back before it had quite left: the old tile is gone this instant
+            for (AtelierTile *l in [_leaving copy]) if ([l.pane.bundleID isEqualToString:bid]) [self _gone:l];
             tile = [[AtelierTile alloc] initWithPane:[AtelierPane paneWithBundleID:bid]];
-            [tile.shield addTarget:self action:@selector(_miniTapped:) forControlEvents:UIControlEventTouchUpInside];
-            UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_miniHeld:)];
-            hold.minimumPressDuration = 0.4;
-            [tile.shield addGestureRecognizer:hold];
-            UIPanGestureRecognizer *swipe = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_miniPanned:)];
-            swipe.maximumNumberOfTouches = 1;
-            swipe.delegate = self;                       // notes where the finger came down
-            [tile.shield addGestureRecognizer:swipe];
+            tile.shield.delegate = self;
             tile.alpha = 0;
             tile.liveSince = CFAbsoluteTimeGetCurrent();
             [_stage addSubview:tile];
         }
         [next addObject:tile];
     }
-    NSString *front = [AtelierHost frontmostBundleID];
+    BOOL flies = _flies;
+    AtelierSwipe way = _flyWay;
+    _flies = NO;
+    CGSize screen = [AtelierHost screenSize];
     for (AtelierTile *gone in old) {
-        [gone.pane detachKeepingForeground:[gone.pane.bundleID isEqualToString:front]];
-        [gone removeFromSuperview];
+        if (!animated || !_visible || _closing || gone.parked || gone.alpha < 0.05) { [self _gone:gone]; continue; }
+        // It leaves the way it was swiped (or shrinks away), and lets go of its app when it is
+        // out of sight: the picture stays whole while it flies.
+        if (!_leaving) _leaving = [NSMutableArray array];
+        [_leaving addObject:gone];
+        gone.shield.delegate = nil;
+        gone.userInteractionEnabled = NO;
+        CGRect f = gone.frame;
+        CGAffineTransform to = gone.transform;
+        if (!flies) to = CGAffineTransformScale(to, 0.8, 0.8);
+        else if (way == AtelierSwipeLeft) to = CGAffineTransformTranslate(to, -(CGRectGetMaxX(f) + 30), 0);
+        else if (way == AtelierSwipeRight) to = CGAffineTransformTranslate(to, screen.width - f.origin.x + 30, 0);
+        else if (way == AtelierSwipeUp) to = CGAffineTransformTranslate(to, 0, -(CGRectGetMaxY(f) + 30));
+        else to = CGAffineTransformTranslate(to, 0, screen.height - f.origin.y + 30);
+        [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseIn | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            gone.transform = to;
+            gone.alpha = flies ? 0.35 : 0;
+        } completion:^(BOOL done) { [self _gone:gone]; }];
     }
     _tiles = next;
     [self _layoutAnimated:animated];
     if (_visible) [self _persist];
+}
+
+// A tile that has left the bench: its app is given back. (Safe to call twice.)
+- (void)_gone:(AtelierTile *)tile {
+    if (!tile.superview && ![_leaving containsObject:tile]) return;
+    [_leaving removeObject:tile];
+    [tile.pane detachKeepingForeground:[tile.pane.bundleID isEqualToString:[AtelierHost frontmostBundleID]]];
+    [tile removeFromSuperview];
 }
 
 - (CGRect)_rectForSlot:(NSUInteger)slot geometry:(AtelierGeometry)g {
@@ -801,6 +1028,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
             [self->_band layoutIfNeeded];
         }
         self->_band.alpha = band ? 1 : 0;
+        self->_closeStrip.frame = g.closeStrip;
         self->_dock.frame = g.dock;
         [self->_dock setCompact:g.bandCompact];
         [self->_dock layoutIfNeeded];
@@ -832,9 +1060,11 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     }
     if (_plus.alpha == 0 && !CGRectIsEmpty(g.plus)) [UIView performWithoutAnimation:^{ self->_plus.frame = g.plus; }];
     if (_tiles.count) [_stage bringSubviewToFront:_tiles[0]];
+    BOOL bounce = _bounce;
+    _bounce = NO;
     if (animated) {
         _busyUntil = now + 0.5;
-        [UIView animateWithDuration:0.36 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0.2
+        [UIView animateWithDuration:(bounce ? 0.34 : 0.32) delay:0 usingSpringWithDamping:(bounce ? 0.58 : 0.84) initialSpringVelocity:(bounce ? 0.8 : 0.3)
                             options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState
                          animations:apply completion:nil];
     } else {
@@ -901,7 +1131,14 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierHapticPlay(AtelierHapticSwap);
     AtelierLog(@"%@ %@", lock ? @"lock" : @"unlock", bid);
     _lastTouch = CFAbsoluteTimeGetCurrent();
+    _bounce = YES;                                       // it springs back into place with a short bounce
     [self _layoutAnimated:YES];                          // shows or hides the padlock, wakes it if it was a still
+    if (lock) {                                          // and the padlock pops in
+        t.lockBadge.transform = CGAffineTransformMakeScale(0.2, 0.2);
+        [UIView animateWithDuration:0.30 delay:0.04 usingSpringWithDamping:0.5 initialSpringVelocity:0.6
+                            options:UIViewAnimationOptionAllowUserInteraction
+                         animations:^{ t.lockBadge.transform = CGAffineTransformIdentity; } completion:nil];
+    }
 }
 
 - (void)pairSlot:(NSUInteger)slot {
@@ -939,7 +1176,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     // The very scene that was on the bench is opened full screen (see +activateScene:); only if
     // this iOS has no way to do that is the app opened by its bundle id.
     id scene = [_tiles[0].pane scene];
-    [self _closeAnimated:YES reason:@"full screen" keeping:bid then:^{
+    [self _closeAnimated:YES reason:@"full screen" motion:AtelierMotionZoom speed:0 keeping:bid then:^{
         BOOL same = [AtelierScenes activateScene:scene];
         BOOL ok = same || [AtelierHost launchApp:bid suspended:NO];
         AtelierLog(@"full screen %@ -> %d (%@)", bid, (int)ok, same ? @"its own scene" : @"by bundle id");
@@ -1109,7 +1346,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     return NSNotFound;
 }
 
-- (void)_miniTapped:(UIControl *)shield {
+// A tap: at once, the mini is the main.
+- (void)shieldTapped:(AtelierShield *)shield {
     NSUInteger slot = [self _slotOfTileWithShield:shield];
     if (slot == NSNotFound) return;
     if (_menu) { [self hideMenu]; return; }
@@ -1118,9 +1356,9 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [self makeMain:slot];
 }
 
-- (void)_miniHeld:(UILongPressGestureRecognizer *)g {
-    if (g.state != UIGestureRecognizerStateBegan) return;
-    NSUInteger slot = [self _slotOfTileWithShield:g.view];
+// A hold: its menu. (The shield never calls this once a swipe has begun.)
+- (void)shieldHeld:(AtelierShield *)shield {
+    NSUInteger slot = [self _slotOfTileWithShield:shield];
     if (slot != NSNotFound) { AtelierHapticPlay(AtelierHapticSwap); [self showMenuForSlot:slot]; }
 }
 
@@ -1169,7 +1407,12 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     }
     AtelierLog(@"swipe %@ on %@: %@", names[(NSUInteger)swipe], bid, title);
     switch (swipe) {
-        case AtelierSwipeLeft:  [self closeSlot:slot]; break;
+        case AtelierSwipeLeft:
+            _flies = YES;                                // it flies out the way it was swiped; the others close up
+            _flyWay = AtelierSwipeLeft;
+            [self closeSlot:slot];
+            _flies = NO;
+            break;
         case AtelierSwipeRight: [self makeMain:slot]; break;
         case AtelierSwipeUp:    [self toggleLockSlot:slot]; break;
         case AtelierSwipeDownward: {
@@ -1209,60 +1452,52 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     _swipePill.alpha = 1;
 }
 
-// The mini follows the finger along the way the swipe set out, past the screen's edge if the
-// finger goes there, and its label goes with it. Letting go acts when the swipe is armed:
+// A swipe on a mini (the shield calls from 8 points of movement on). The mini follows the finger
+// one to one along the way the swipe set out, and its label goes with it. Letting go acts when
+// the swipe is armed:
 //
 //   far enough   55% of the way from where the finger came down to the edge of the screen it is
 //                heading for, never more than 40 points and never less than 14. (A mini in the
 //                column lies against the left edge: a finger that comes down 30 points from it
-//                can't travel 40.) A finger that has reached the edge counts as well.
+//                can't travel 40.) A finger that has reached the edge counts as well. Past that
+//                point the mini gives only half of what the finger does, so the point is felt.
 //   or a flick   350 points a second or more along the swipe at the lift, after 10 points.
 //
-// The travel is measured from where the finger came down (the recogniser's own figure leaves
-// out the first ten points or so, which it spends making up its mind). A swipe that ends
-// without acting says why in the log: direction, travel, speed and room.
-- (void)_miniPanned:(UIPanGestureRecognizer *)g {
-    NSUInteger slot = [self _slotOfTileWithShield:g.view];
+// Every swipe leaves one line in the log, armed or not: direction, travel, the travel it needed,
+// the speed at the lift, the room, and why it did nothing if it did nothing.
+- (void)shield:(AtelierShield *)shield swipe:(AtelierTouchPhase)phase track:(AtelierTrack *)track {
+    NSUInteger slot = [self _slotOfTileWithShield:shield];
     if (slot == NSNotFound || slot == 0) return;
     AtelierTile *t = _tiles[slot];
-    CGPoint at = [g locationInView:_root];
-    CGPoint d = CGPointMake(at.x - _swipeDown.x, at.y - _swipeDown.y);
-    if (g.state == UIGestureRecognizerStateBegan) {
+    CGPoint d = track.travel, down = track.down, at = track.now;
+    if (phase == AtelierTouchBegan) {
         [self hideMenu];
         _swipeTile = t;
-        _swipeAxis = 0;
+        _swipeAxis = fabs(d.x) > fabs(d.y) ? 1 : 2;      // eight points in: the way it is going is plain
         _swipeArmed = NO;
         _lastTouch = CFAbsoluteTimeGetCurrent();
         [_stage bringSubviewToFront:t];
-    }
-    if (t != _swipeTile) return;
-    BOOL moving = g.state == UIGestureRecognizerStateBegan || g.state == UIGestureRecognizerStateChanged;
-    // Which way it is going is settled once the finger has moved six points.
-    if (_swipeAxis == 0 && MAX(fabs(d.x), fabs(d.y)) >= 6) _swipeAxis = fabs(d.x) > fabs(d.y) ? 1 : 2;
-    if (_swipeAxis == 0) {
-        if (!moving) {
-            AtelierLog(@"swipe on %@ did not arm: the finger moved %.0f pt, too little to tell a direction", t.pane.bundleID, MAX(fabs(d.x), fabs(d.y)));
-            _swipeTile = nil;
-            [self _hideSwipePill];
-        }
         return;
     }
+    if (t != _swipeTile) return;
     static NSArray<NSString *> *names;
     if (!names) names = @[ @"left", @"right", @"up", @"down" ];
-    CGFloat v = _swipeAxis == 1 ? d.x : d.y;
+    CGFloat v = _swipeAxis == 1 ? d.x : d.y, mag = fabs(v), sign = v < 0 ? -1 : 1;
     AtelierSwipe swipe = _swipeAxis == 1 ? (v < 0 ? AtelierSwipeLeft : AtelierSwipeRight) : (v < 0 ? AtelierSwipeUp : AtelierSwipeDownward);
     BOOL allowed = NO;
     NSString *title = [self _swipeTitle:swipe tile:t allowed:&allowed];
     CGSize screen = [AtelierHost screenSize];
     // the room the finger had that way when it came down, and what is left of it now
-    CGFloat room = swipe == AtelierSwipeLeft ? _swipeDown.x : (swipe == AtelierSwipeRight ? screen.width - _swipeDown.x
-                 : (swipe == AtelierSwipeUp ? _swipeDown.y : screen.height - _swipeDown.y));
+    CGFloat room = swipe == AtelierSwipeLeft ? down.x : (swipe == AtelierSwipeRight ? screen.width - down.x
+                 : (swipe == AtelierSwipeUp ? down.y : screen.height - down.y));
     CGFloat left = swipe == AtelierSwipeLeft ? at.x : (swipe == AtelierSwipeRight ? screen.width - at.x
                  : (swipe == AtelierSwipeUp ? at.y : screen.height - at.y));
     CGFloat threshold = MIN(40.0, MAX(14.0, 0.55 * room));
-    BOOL far = fabs(v) >= threshold || (fabs(v) >= 10 && left <= 3);
-    if (moving) {
-        CGFloat shown = allowed ? MAX(-180, MIN(180, v)) : MAX(-20, MIN(20, v * 0.22));     // a refused swipe barely gives
+    BOOL far = mag >= threshold || (mag >= 10 && left <= 3);
+    if (phase == AtelierTouchMoved) {
+        // one to one up to the point where letting go acts, half as much past it; a refused swipe barely gives
+        CGFloat shown = allowed ? (mag <= threshold ? mag : threshold + (mag - threshold) * 0.5) : MIN(18, mag * 0.22);
+        shown *= sign;
         t.transform = _swipeAxis == 1 ? CGAffineTransformMakeTranslation(shown, 0) : CGAffineTransformMakeTranslation(0, shown);
         BOOL armed = allowed && far;
         if (armed != _swipeArmed) {
@@ -1274,14 +1509,15 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         [self _showSwipePill:title armed:armed refused:(!allowed && title.length) beside:rect];
         return;
     }
-    CGPoint velocity = [g velocityInView:_root];
-    CGFloat speed = (_swipeAxis == 1 ? velocity.x : velocity.y) * (v < 0 ? -1 : 1);      // along the swipe; negative = going back
-    BOOL ended = g.state == UIGestureRecognizerStateEnded;
-    BOOL flick = fabs(v) >= 10 && speed >= 350;
+    // lifted, or taken away
+    CGPoint velocity = track.velocity;
+    CGFloat speed = (_swipeAxis == 1 ? velocity.x : velocity.y) * sign;      // along the swipe; negative = going back
+    BOOL ended = phase == AtelierTouchEnded;
+    BOOL flick = mag >= 10 && speed >= 350;
     BOOL fire = ended && allowed && (far || flick);
     BOOL refused = ended && !allowed && title.length && (far || flick);
     NSString *numbers = [NSString stringWithFormat:@"travel %.0f pt (it needed %.0f), %.0f pt/s at the lift, room %.0f pt",
-                         fabs(v), threshold, speed, room];
+                         mag, threshold, speed, room];
     _swipeTile = nil;
     _swipeArmed = NO;
     [self _hideSwipePill];
@@ -1296,10 +1532,11 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         return;
     }
     AtelierLog(@"swipe %@ on %@ did not arm: %@%@", names[(NSUInteger)swipe], t.pane.bundleID, numbers,
-               !ended ? @" (the touch was cancelled)" : (refused ? @" (refused)" : (!allowed ? @" (nothing is set for that way)" : @"")));
+               !ended ? @" (the touch was taken away)" : (refused ? @" (refused)" : (!allowed ? @" (nothing is set for that way)" : @" (too short, and no flick)")));
     if (refused) [self performSwipe:swipe onSlot:slot];                     // logs it and taps the finger
-    [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.3
-                        options:UIViewAnimationOptionAllowUserInteraction animations:^{ t.transform = CGAffineTransformIdentity; } completion:nil];
+    [UIView animateWithDuration:0.30 delay:0 usingSpringWithDamping:0.72 initialSpringVelocity:0.4
+                        options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState
+                     animations:^{ t.transform = CGAffineTransformIdentity; } completion:nil];
 }
 
 - (void)_grabberTapped:(UIButton *)b {
@@ -1307,26 +1544,38 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     [self showMenuForSlot:(NSUInteger)b.tag];
 }
 
-- (void)_backdropTapped {
+- (void)backdropTapped {
     if (_menu) [self hideMenu];
 }
 
-- (void)_homeSwipe:(UIScreenEdgePanGestureRecognizer *)g {
-    if (g.state == UIGestureRecognizerStateBegan) [self closeAnimated:YES reason:@"Home gesture"];
-}
-
-// A finger that came down on the dock or below it and goes up: 48 points of travel (from where it
-// came down), or a quick flick up after 20.
-- (void)_bottomSwipe:(UIPanGestureRecognizer *)g {
-    if (!_swipeFromBottom || g.state == UIGestureRecognizerStateCancelled || g.state == UIGestureRecognizerStateFailed) return;
-    CGPoint at = [g locationInView:_root];
-    CGPoint moved = CGPointMake(at.x - _bottomDown.x, at.y - _bottomDown.y);
-    BOOL up = moved.y < 0 && fabs(moved.x) < fabs(moved.y);
-    BOOL far = up && moved.y <= -48;
-    BOOL flick = g.state == UIGestureRecognizerStateEnded && up && moved.y <= -20 && [g velocityInView:_root].y <= -350;
-    if (far || flick) {
-        _swipeFromBottom = NO;
-        [self closeAnimated:YES reason:(far ? @"swipe up from the bottom" : @"flick up from the bottom")];
+// A finger that came down on one of the dock's switches and goes up: the bench goes with it, as
+// from the strip under the dock (AtelierCloseStrip). 40 points, or a flick, and it is closed.
+- (void)_dockSwiped:(UIPanGestureRecognizer *)g {
+    CGPoint at = [g locationInView:nil];
+    CGFloat up = _bottomDown.y - at.y, side = fabs(at.x - _bottomDown.x);
+    switch (g.state) {
+        case UIGestureRecognizerStateBegan:
+            _dockDragging = up > side && [self beginDragOpening:NO motion:AtelierMotionLift owner:g];
+            if (_dockDragging) [self dragTo:1.0 - MIN(0.9, MAX(0, up) / 280.0) owner:g];
+            break;
+        case UIGestureRecognizerStateChanged:
+            if (_dockDragging) [self dragTo:1.0 - MIN(0.9, MAX(0, up) / 280.0) owner:g];
+            break;
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed: {
+            if (!_dockDragging) break;
+            _dockDragging = NO;
+            CGFloat speed = -[g velocityInView:nil].y;
+            BOOL ended = g.state == UIGestureRecognizerStateEnded;
+            BOOL close = ended ? (up >= 40 || (up >= 12 && speed >= 350)) : up >= 10;
+            AtelierLog(@"bottom swipe: began on a switch at %.0f,%.0f · %.0f pt up · %.0f pt/s at the lift · %@", _bottomDown.x, _bottomDown.y, up, speed,
+                       close ? (ended ? @"closed" : @"closed: the system took the touch as it went up") : @"not closed: under 40 pt and no flick");
+            [self endDrag:close velocity:MAX(0, speed) / 280.0 reason:@"swipe up from the bottom" owner:g];
+            break;
+        }
+        default:
+            break;
     }
 }
 
@@ -1479,7 +1728,7 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
     menu.frame = CGRectMake(x, y, menu.bounds.size.width, menu.bounds.size.height);
     menu.alpha = 0;
     menu.transform = CGAffineTransformMakeScale(0.92, 0.92);
-    [_root addSubview:menu];
+    [_content addSubview:menu];
     _menu = menu;
     [UIView animateWithDuration:0.18 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.3 options:0 animations:^{
         menu.alpha = 1;
@@ -1500,8 +1749,12 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
     }
     NSMutableArray<NSString *> *menu = [NSMutableArray array];
     for (NSDictionary *item in _menu.items) [menu addObject:item[@"title"]];
-    return [NSString stringWithFormat:@"bench %@ layout %ld split %.2f front-at-open %@ idle %.1fs menu [%@] %@ · %@ · %@ · %@ · hidden apps %lu",
-            _visible ? @"up" : @"hidden", (long)_layout, _split, _frontAtOpen ?: @"home",
+    static NSArray<NSString *> *motions;
+    if (!motions) motions = @[ @"zoom", @"from the right", @"from the left", @"lift" ];
+    NSString *coming = [NSString stringWithFormat:@"%.2f in (%@)%@%@%@", _progress, motions[(NSUInteger)_motion % 4], _dragOwner ? @" HELD by " : @"",
+                        _dragOwner ? NSStringFromClass([_dragOwner class]) : @"", _settle ? @" settling" : @""];
+    return [NSString stringWithFormat:@"bench %@ %@ layout %ld split %.2f front-at-open %@ idle %.1fs menu [%@] %@ · %@ · %@ · %@ · hidden apps %lu",
+            _visible ? (_closing ? @"closing" : @"up") : @"hidden", coming, (long)_layout, _split, _frontAtOpen ?: @"home",
             _visible ? CFAbsoluteTimeGetCurrent() - _lastTouch : 0.0, [menu componentsJoinedByString:@" | "],
             [parts componentsJoinedByString:@" "], _band ? [_band debugState] : @"no band", _dock ? [_dock debugState] : @"no dock",
             [[AtelierQuotes shared] debugState], (unsigned long)[AtelierHost hiddenAppCount]];
@@ -1543,6 +1796,7 @@ static NSDictionary *AtelierMenuItem(NSString *title, NSString *symbol, BOOL red
         if (_menu) add(@"menu", _menu.frame, 0);
     }
     for (NSString *line in [AtelierSheets debugWhere]) [lines addObject:line];           // the picker's field and keyboard, when it is up
+    for (NSString *line in [[AtelierTrigger shared] debugWhere]) [lines addObject:line]; // the edge strip and its handle
     NSString *text = [lines componentsJoinedByString:@"\n"];
     [[text stringByAppendingString:@"\n"] writeToFile:[AtelierLogDir() stringByAppendingPathComponent:@"atelier_where.txt"]
                                           atomically:YES encoding:NSUTF8StringEncoding error:nil];

@@ -12,7 +12,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Atelier AtelierPrefs
 
-Atelier_FILES = Tweak.m AtelierCore.m AtelierScenes.m AtelierLayout.m AtelierBench.m AtelierBand.m AtelierQuotes.m AtelierToggles.m AtelierSheets.m AtelierTrigger.m AtelierDebug.m
+Atelier_FILES = Tweak.m AtelierCore.m AtelierScenes.m AtelierLayout.m AtelierBench.m AtelierGestures.m AtelierBand.m AtelierQuotes.m AtelierToggles.m AtelierSheets.m AtelierTrigger.m AtelierDebug.m
 Atelier_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 Atelier_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
 # Nothing is hooked through a hooking library (AtelierHook in AtelierCore.m uses the runtime),

@@ -236,6 +236,10 @@ static void AtelierBegin(NSInteger attempt) {
     @try { AtelierIconMenuInstall(); } @catch (NSException *e) { AtelierLog(@"start: the icon menu threw %@", e.reason); }
     AtelierStep(@"icon menu in place");
 
+    // "Go home" puts the bench away: the places SpringBoard hears it are watched (AtelierGestures.m)
+    @try { [AtelierHome install]; } @catch (NSException *e) { AtelierLog(@"start: the Home replacements threw %@", e.reason); }
+    AtelierStep(@"Home gesture in place");
+
     @try { [[AtelierTrigger shared] refresh]; } @catch (NSException *e) { AtelierLog(@"start: the edge strip threw %@", e.reason); }
     AtelierStep([[AtelierTrigger shared] debugState]);
 

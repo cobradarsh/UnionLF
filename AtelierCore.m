@@ -206,6 +206,50 @@ BOOL AtelierHook(NSString *className, NSString *selName, BOOL classMethod, IMP r
     return YES;
 }
 
+// One letter for what a type is, so that a method can be compared with what it is expected to be.
+static char AtelierTypeKind(const char *type) {
+    const char *t = AtelierBareType(type);
+    if (!t || !*t) return '?';
+    switch (*t) {
+        case '@': case '#': return '@';
+        case 'd': case 'f': return 'd';
+        case 'q': case 'Q': case 'i': case 'I': case 'l': case 'L': case 's': case 'S': return 'q';
+        case 'B': case 'c': case 'C': return 'B';
+        default: return *t;
+    }
+}
+
+BOOL AtelierHookShaped(NSString *className, NSString *selName, const char *shape, IMP replacement, IMP *original,
+                       NSString *__autoreleasing *why) {
+    Class c = NSClassFromString(className);
+    SEL s = NSSelectorFromString(selName);
+    Method m = c ? class_getInstanceMethod(c, s) : NULL;
+    if (!m) {
+        if (why) *why = c ? @"this iOS has the class but not the method" : @"this iOS has no such class";
+        return NO;
+    }
+    NSMutableString *is = [NSMutableString string];
+    char *returns = method_copyReturnType(m);
+    [is appendFormat:@"%c", AtelierTypeKind(returns)];
+    free(returns);
+    unsigned int count = method_getNumberOfArguments(m);         // self and _cmd are the first two
+    for (unsigned int i = 2; i < count; i++) {
+        char *arg = method_copyArgumentType(m, i);
+        [is appendFormat:@"%c", AtelierTypeKind(arg)];
+        free(arg);
+    }
+    size_t want = strlen(shape);
+    BOOL fits = is.length == want;
+    for (NSUInteger i = 0; fits && i < want; i++) {
+        if (shape[i] != '?' && shape[i] != (char)[is characterAtIndex:i]) fits = NO;
+    }
+    if (!fits) {
+        if (why) *why = [NSString stringWithFormat:@"it looks different on this iOS (%@, expected %s): left alone", is, shape];
+        return NO;
+    }
+    return AtelierHook(className, selName, NO, replacement, original);
+}
+
 #pragma mark - haptics
 
 void AtelierHapticPlay(AtelierHaptic kind) {
@@ -279,6 +323,7 @@ static NSInteger AtelierClampInt(double v, NSInteger lo, NSInteger hi, NSInteger
 - (NSInteger)triggerSide               { return AtelierClampInt([self _d:@"triggerSide" def:1], 0, 1, 1); }
 - (CGFloat)triggerSize                 { return MAX(60, MIN(220, [self _d:@"triggerSize" def:110])); }
 - (NSInteger)triggerMode               { return AtelierClampInt([self _d:@"triggerMode" def:0], 0, 1, 0); }
+- (BOOL)showHandle                     { return [self _b:@"showHandle" def:YES]; }
 - (BOOL)addFront                       { return [self _b:@"addFront" def:YES]; }
 - (BOOL)resizeApps                     { return [self _b:@"resizeApps" def:NO]; }
 - (BOOL)iconMenu                       { return [self _b:@"iconMenu" def:YES]; }

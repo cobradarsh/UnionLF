@@ -103,7 +103,7 @@ items = [
           "Open in HyperTrade.\n\n"
           "The pill with three dots above the big app is its menu: Full Screen, Switch Layout, "
           "Replace App, Close App, Save as Set. Hold a mini for its own menu. A swipe up from "
-          "the bottom of the screen puts the bench away."),
+          "the bottom of the screen, the Home gesture, puts the bench away."),
     switch("enabled", "HyperTrade", True),
 
     group("Layout",
@@ -185,12 +185,16 @@ items = [
     switch("toggleLowPower", "Low Power Mode", True),
 
     group("Opening",
-          "The edge strip is see-through, 16 points wide. It takes touches where it lies, so "
-          "keep it only as tall as you need. The same swipe closes the bench.\n\n"
+          "Slide a finger in from the edge, or up along it: the bench comes in with your "
+          "finger and opens when you let go. A short swipe or a flick is enough. With the "
+          "bench open, the same swipe inward sends it away again.\n\n"
+          "The strip is see-through and 22 points wide; the faint pill on the edge shows "
+          "where it is. It takes touches where it lies, so keep it only as tall as you need.\n\n"
           "Bring the Current App Along: the app you are in when you open the bench becomes "
           "the big app.\n\n"
           "Icon Menu: Open in HyperTrade, your sets, and HyperTrade Sets… when you hold an app's icon."),
     switch("trigger", "Edge Swipe", True),
+    switch("showHandle", "Show Edge Handle", True),
     segments("triggerSide", 1, [(0, "Left Edge"), (1, "Right Edge")]),
     group("Height of the Strip"),
     slider("triggerSize", 60, 220, 110),

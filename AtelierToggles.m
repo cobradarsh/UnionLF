@@ -21,9 +21,11 @@
     another app, lock button, screen off). The switch itself goes back to off each time, so the
     screen is never kept on by a choice made days ago.
 
-    States are read when the bench comes up, after a tap (at once, and again a moment later for
-    the slower radios), and every three seconds while the bench is on screen; nothing is read or
-    watched while it is not. Every action is logged with the state before and after.
+    States are read when the bench comes up and every three seconds while it is on screen;
+    nothing is read or watched while it is not. A tapped switch shows what was asked for at
+    once; the phone is asked again 0.6 s later and 2 s later (the radios are slow to follow),
+    and the second answer stands: if the phone said no, the switch goes back. Every tap is
+    logged once, with the state before, what was asked for and what came of it.
 
     The switches stand in two even groups, left and right, and the credit sits between them,
     centred on the screen: in one line where there is room for it, else as two short lines (the
@@ -237,19 +239,13 @@ static BOOL AtelierIdleReset(BOOL really) {
     if (kind < 0 || kind >= AtelierToggleCount) return;
     NSString *name = [self name:kind];
     BOOL before = [self isOn:kind];
-    if (gFake[kind]) { gFakeOn[kind] = on; AtelierLog(@"toggle %@: test look only, %@", name, on ? @"on" : @"off"); if (then) then(); return; }
+    if (gFake[kind]) { gFakeOn[kind] = on; if (then) then(); return; }               // tests: the look only
     if (![self available:kind]) { AtelierLog(@"toggle %@: this iOS has no way to set it", name); if (then) then(); return; }
     __block NSString *problem = nil;
+    // (what came of it is looked at, and logged, by the dock: 0.6 s and 2 s after the tap)
     void (^after)(void) = ^{
-        // the radios take a moment: read again shortly, and say what came of it
-        AtelierAfter(0.7, ^{
-            [AtelierToggles refresh:^{
-                BOOL now = [AtelierToggles isOn:kind];
-                AtelierLog(@"toggle %@: was %@, asked for %@, now %@%@", name, before ? @"on" : @"off", on ? @"on" : @"off", now ? @"on" : @"off",
-                           problem ? [NSString stringWithFormat:@" (%@)", problem] : (now == on ? @"" : @" (not yet, or refused)"));
-                if (then) then();
-            }];
-        });
+        if (problem) AtelierLog(@"toggle %@: asking for %@ failed: %@", name, on ? @"on" : @"off", problem);
+        if (then) then();
     };
     @try {
         switch (kind) {
@@ -323,6 +319,8 @@ static BOOL AtelierIdleReset(BOOL really) {
 @interface AtelierToggleButton : UIControl
 @property (nonatomic) AtelierToggleKind kind;
 @property (nonatomic) BOOL on;
+@property (nonatomic) NSInteger asked;                  // what a tap asked for and the phone has not answered yet: 1 on, 0 off; -1 nothing
+@property (nonatomic) NSInteger taps;
 @property (nonatomic, strong) UIImageView *glyph;
 @end
 
@@ -378,6 +376,7 @@ static BOOL AtelierIdleReset(BOOL really) {
     _glyph.userInteractionEnabled = NO;
     [self addSubview:_glyph];
     self.accessibilityLabel = [AtelierToggles name:kind];
+    _asked = -1;
     self.on = NO;
     return self;
 }
@@ -503,7 +502,7 @@ static const CGFloat kToggle = 28, kToggleGap = 6;
 }
 
 - (void)_paint {
-    for (AtelierToggleButton *b in _buttons) b.on = [AtelierToggles isOn:b.kind];
+    for (AtelierToggleButton *b in _buttons) if (b.asked < 0) b.on = [AtelierToggles isOn:b.kind];      // not one that is waiting for its answer
 }
 
 - (void)refresh {
@@ -513,13 +512,33 @@ static const CGFloat kToggle = 28, kToggleGap = 6;
 }
 
 - (void)_tapped:(AtelierToggleButton *)button {
+    BOOL was = [AtelierToggles isOn:button.kind];
     BOOL want = !button.on;
     AtelierHapticPlay(AtelierHapticTick);
-    button.on = want;                                    // at once; put right below if it did not take
+    button.asked = want ? 1 : 0;                         // what was asked for shows at once, and stays until the phone has answered
+    button.on = want;
+    NSInteger tap = ++button.taps;
+    [AtelierToggles setOn:want kind:button.kind then:nil];
     __weak typeof(self) weak = self;
-    [AtelierToggles setOn:want kind:button.kind then:^{
-        [weak _paint];
-        AtelierAfter(1.6, ^{ [weak refresh]; });         // Bluetooth and Wi-Fi settle a little later still
+    __weak AtelierToggleButton *b = button;
+    AtelierAfter(0.6, ^{ [weak _look:b tap:tap was:was want:want last:NO]; });
+    AtelierAfter(2.0, ^{ [weak _look:b tap:tap was:was want:want last:YES]; });
+}
+
+// The phone is asked what the switch is at. Followed: done. Not yet, at the first look: wait for
+// the second. Not at the second either: the phone said no, and the switch shows what is true.
+- (void)_look:(AtelierToggleButton *)button tap:(NSInteger)tap was:(BOOL)was want:(BOOL)want last:(BOOL)last {
+    if (!button || button.taps != tap || button.asked < 0) return;         // tapped again since, or settled at the first look
+    __weak AtelierToggleButton *b = button;
+    [AtelierToggles refresh:^{
+        AtelierToggleButton *strong = b;
+        if (!strong || strong.taps != tap || strong.asked < 0) return;
+        BOOL now = [AtelierToggles isOn:strong.kind];
+        if (now != want && !last) return;
+        strong.asked = -1;
+        strong.on = now;
+        AtelierLog(@"toggle %@: was %@, asked for %@, now %@ (%@)", [AtelierToggles name:strong.kind], was ? @"on" : @"off", want ? @"on" : @"off",
+                   now ? @"on" : @"off", now == want ? (last ? @"followed within 2 s" : @"followed within 0.6 s") : @"the phone did not follow: the switch is put back");
     }];
 }
 

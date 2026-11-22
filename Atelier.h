@@ -22,7 +22,9 @@
       AtelierQuotes  the live NIFTY and SENSEX numbers (a public feed, only while the bench is up)
       AtelierDock    the toggles and the credit line under the tiles
       AtelierSheets  the app picker (with a search field) and the Sets list, as bottom sheets
-      AtelierTrigger the strip in the bottom corner that opens the bench on a swipe
+      AtelierTrigger the strip on the edge that opens the bench, and closes it, with a swipe
+      AtelierGestures  the fingers: a mini's tap, hold and swipe, the swipe up that closes the
+                     bench, and the phone's own Home gesture
       AtelierDebug   test commands from a file, so the bench can be driven over SSH
 
     Every private call is looked up at run time and skipped (with a log line) when this iOS
@@ -33,7 +35,7 @@
 #import <objc/message.h>
 #import <notify.h>
 
-#define ATELIER_VERSION   @"1.2.0"
+#define ATELIER_VERSION   @"1.2.1"
 #define ATELIER_NAME      @"HyperTrade"                     // what the user reads
 #define ATELIER_DOMAIN    @"com.adarsh.atelier"
 #define ATELIER_N_PREFS   "com.adarsh.atelier/prefs"        // Settings -> SpringBoard (PostNotification)
@@ -65,6 +67,15 @@ typedef NS_ENUM(NSInteger, AtelierSwipeDown) {             // what a swipe down 
 
 typedef NS_ENUM(NSInteger, AtelierHaptic) { AtelierHapticTick = 0, AtelierHapticSwap, AtelierHapticOpen };
 
+typedef NS_ENUM(NSInteger, AtelierMotion) {                // how the bench comes onto the screen and leaves it
+    AtelierMotionZoom = 0,         // a small zoom: a menu, an icon, a command
+    AtelierMotionFromRight,        // in from the right edge and back out to it: the edge strip
+    AtelierMotionFromLeft,
+    AtelierMotionLift,             // up and away: a swipe up from the bottom, the Home gesture
+};
+
+typedef NS_ENUM(NSInteger, AtelierTouchPhase) { AtelierTouchBegan = 0, AtelierTouchMoved, AtelierTouchEnded, AtelierTouchCancelled };
+
 #pragma mark - core (AtelierCore.m)
 
 NSString *AtelierLogDir(void);
@@ -86,6 +97,11 @@ id AtelierMsgObj(id target, NSString *selName, id arg);      // one object argum
 id AtelierSingleton(NSString *className);                    // sharedInstanceIfExists where there is one
 // Replaces a method with plain runtime calls (no hooking library needed). NO if it isn't there.
 BOOL AtelierHook(NSString *className, NSString *selName, BOOL classMethod, IMP replacement, IMP *original);
+// The same for an instance method, but only if it looks as expected: `shape` is what it returns
+// and then its arguments, one letter each (v nothing, @ object, d number with a fraction,
+// q whole number, B yes/no, ? anything). *why says what was wrong when it is left alone.
+BOOL AtelierHookShaped(NSString *className, NSString *selName, const char *shape, IMP replacement, IMP *original,
+                       NSString *__autoreleasing *why);
 void AtelierHapticPlay(AtelierHaptic kind);
 
 @interface AtelierSettings : NSObject
@@ -100,6 +116,7 @@ void AtelierHapticPlay(AtelierHaptic kind);
 @property (nonatomic, readonly) NSInteger triggerSide;       // 0 left, 1 right
 @property (nonatomic, readonly) CGFloat triggerSize;         // its height in points
 @property (nonatomic, readonly) NSInteger triggerMode;       // 0 a strip window, 1 a system gesture (takes no taps)
+@property (nonatomic, readonly) BOOL showHandle;             // the faint pill that marks the edge strip
 @property (nonatomic, readonly) BOOL addFront;               // the app in front joins the bench when it opens
 @property (nonatomic, readonly) BOOL resizeApps;             // beta: give apps the size of their tile
 @property (nonatomic, readonly) BOOL iconMenu;               // "Open in Atelier" in the Home Screen icon menu
@@ -204,6 +221,43 @@ typedef NS_ENUM(NSInteger, AtelierPaneState) {
 + (BOOL)activateScene:(id)scene;                             // bring exactly this scene to the front, full screen
 @end
 
+#pragma mark - fingers (AtelierGestures.m)
+
+// A finger, followed from where it came down, in screen points.
+@interface AtelierTrack : NSObject
+@property (nonatomic, readonly) CGPoint down, now;
+@property (nonatomic, readonly) CFTimeInterval downTime, lastTime;
+- (void)beginAt:(CGPoint)p time:(CFTimeInterval)t;
+- (void)moveTo:(CGPoint)p time:(CFTimeInterval)t;            // also for the lift
+- (CGPoint)travel;                                           // now - down
+- (CGPoint)velocity;                                         // points a second, over the last 80 ms or so
+@end
+
+@class AtelierShield;
+@protocol AtelierShieldDelegate <NSObject>
+- (void)shieldTapped:(AtelierShield *)shield;
+- (void)shieldHeld:(AtelierShield *)shield;                  // 0.4 s without moving 8 points
+- (void)shield:(AtelierShield *)shield swipe:(AtelierTouchPhase)phase track:(AtelierTrack *)track;     // from 8 points of movement on
+@end
+
+// The view over a mini: it takes the mini's touches and tells a tap, a hold and a swipe apart.
+@interface AtelierShield : UIView
+@property (nonatomic, weak) id<AtelierShieldDelegate> delegate;
+@end
+
+// The lowest strip of the bench: a finger that goes up from it carries the bench away.
+@interface AtelierCloseStrip : UIView
+@end
+
+// The phone's own Home gesture and "go home": watched, so that they put the bench away.
+@interface AtelierHome : NSObject
++ (instancetype)shared;
++ (void)install;                                             // once, at the start: the guarded replacements
++ (void)benchCameUp;                                         // watch SpringBoard's own Home recogniser while the bench is up
++ (void)benchWentAway;
++ (NSString *)debugState;
+@end
+
 #pragma mark - the bench (AtelierBench.m)
 
 @class AtelierBand, AtelierDock;
@@ -236,9 +290,24 @@ typedef NS_ENUM(NSInteger, AtelierSwipe) { AtelierSwipeLeft = 0, AtelierSwipeRig
 @property (nonatomic, readonly) BOOL visible;
 @property (nonatomic, readonly) AtelierLayoutKind layout;
 - (void)open;                                                // what was on the bench last time (plus the app in front)
+- (void)openWithMotion:(AtelierMotion)motion;
 - (void)openWithApps:(NSArray<NSString *> *)bids layout:(NSInteger)layout;   // layout -1 = keep
 - (void)openAdding:(NSString *)bid;                          // "Open in Atelier": bid becomes the main
 - (void)closeAnimated:(BOOL)animated reason:(NSString *)why;
+- (void)closeAnimated:(BOOL)animated reason:(NSString *)why motion:(AtelierMotion)motion;
+// Coming and going with a finger. One driver at a time (`owner`); only the Home gesture may take
+// over from another. Progress: 0 gone … 1 fully there.
+- (BOOL)beginDragOpening:(BOOL)opening motion:(AtelierMotion)motion owner:(id)owner;      // NO: the bench is not free to follow
+- (void)dragTo:(CGFloat)progress owner:(id)owner;
+// The finger has let go. complete: what it set out to do is done (an opening opens, a closing
+// closes); otherwise the bench springs back. velocity: how fast the finger was carrying it that
+// way, in progress per second. reason: what the log says if the bench ends up closed.
+- (void)endDrag:(BOOL)complete velocity:(CGFloat)velocity reason:(NSString *)why owner:(id)owner;
+- (BOOL)dragging;
+- (CGFloat)progress;
+- (void)homeAction:(NSString *)what;                         // "go home" happened: the bench goes away
+- (void)backdropTapped;
+- (CGFloat)marginOnRight:(BOOL)right;                        // the room between the tiles and that edge of the screen
 - (void)toggle;
 - (void)makeMain:(NSUInteger)slot;                           // a mini changes places with the main
 - (void)setLayout:(AtelierLayoutKind)layout animated:(BOOL)animated;
@@ -373,7 +442,8 @@ typedef NS_ENUM(NSInteger, AtelierToggleKind) {
 + (instancetype)shared;
 - (void)refresh;                                             // settings, lock, or the bench changed
 - (NSString *)debugState;
-- (void)debugSwipe;                                          // tests: what a swipe on the strip does
+- (NSArray<NSString *> *)debugWhere;                         // tests: the strip and its handle, on the screen
+- (void)debugSwipe;                                          // tests: what a swipe on the strip does, without a finger
 @end
 
 #pragma mark - entry points shared between files
