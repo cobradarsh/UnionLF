@@ -501,8 +501,8 @@ touch_test() {
   phone_drag "$(calc "$(lx mini2) + 30")" "$(cy mini2)" "$(calc "$(lx mini2) + 19")" "$(cy mini2)" 0.6; sleep 2
   echo "T6b 11 pt, slowly, on Safari: $(last 'swipe left on com.apple.mobilesafari')"
   shot 50a-after-11pt
-  phone_flick "$(calc "$(lx mini3) + 55")" "$(cy mini3)" "$(calc "$(lx mini3) + 37")" "$(cy mini3)" 0.04; sleep 3
-  echo "T6c a flick left (18 pt in 0.04 s, 65 pt from the edge) on Calendar: $(last 'swipe left on com.apple.mobilecal')"
+  phone_flick "$(calc "$(lx mini3) + 55")" "$(cy mini3)" "$(calc "$(lx mini3) + 37")" "$(cy mini3)" 0.025; sleep 3
+  echo "T6c a flick left (18 pt in 0.025 s, 65 pt from the edge) on Calendar: $(last 'swipe left on com.apple.mobilecal')"
   shot 50b-after-flick
   where
   drag_shot "$(cx mini2)" "$(cy mini2)" "$(cx mini2)" "$(calc "$(cy mini2) + 80")" 51-swipe-down-held
@@ -618,8 +618,8 @@ touch_test() {
   echo "T21 edge strip, 9 pt in, then let go: $(last 'strip touch') · $(last 'bench close')"
   shot g04-edge-open-sprang-back
   cmd "close" "wait 2"; sleep 2
-  phone_flick "$EX" "$EY" "$(calc "$EX - 12")" "$EY" 0.04; sleep 5
-  echo "T22 edge strip, a flick of 12 pt: $(last 'strip touch')"
+  phone_flick "$EX" "$EY" "$(calc "$EX - 12")" "$EY" 0.02; sleep 5
+  echo "T22 edge strip, a flick of 12 pt in 0.02 s: $(last 'strip touch')"
   shot g05-edge-flick
   cmd "open" "wait 6" "state"; sleep 3
   where
@@ -640,8 +640,8 @@ touch_test() {
   echo "T25 swipe up, 25 pt, then let go: $(last 'bottom swipe')"
   shot g11-swipe-up-sprang-back
   cmd "open" "wait 5"; sleep 2
-  phone_flick 215 915 215 895 0.04; sleep 4
-  echo "T26 a flick up of 20 pt: $(last 'bottom swipe') · $(last 'bench close')"
+  phone_flick 215 915 215 895 0.03; sleep 4
+  echo "T26 a flick up of 20 pt in 0.03 s: $(last 'bottom swipe') · $(last 'bench close')"
   shot g12-flick-up
   cmd "open" "wait 6"; sleep 3
   before=$(count 'Home')

@@ -69,15 +69,21 @@
     return CGPointMake(_now.x - _down.x, _now.y - _down.y);
 }
 
-// What the finger was doing over its last 80 ms or so. (The lift is noted as a sample of its
-// own, so a finger that stopped and then lifted has no speed.)
+// What the finger was doing at the very end: from the oldest of its last samples that is no more
+// than 50 ms old (a flick is over in a tenth of a second; a longer look would count its start
+// in). The lift is a sample of its own, so a finger that stopped and then lifted has no speed:
+// with nothing in those 50 ms, the sample before them is used, however old.
 - (CGPoint)velocity {
     if (_count < 2) return CGPointZero;
-    int newest = (_head + 7) % 8, pick = newest;
+    int newest = (_head + 7) % 8, pick = -1;
     for (int i = 1; i < _count; i++) {
-        pick = (newest - i + 8) % 8;
-        if (_times[newest] - _times[pick] >= 0.08) break;
+        int k = (newest - i + 8) % 8;
+        BOOL old = _times[newest] - _times[k] > 0.05;
+        if (old && pick >= 0) break;
+        pick = k;
+        if (old) break;
     }
+    if (pick < 0) return CGPointZero;
     CFTimeInterval dt = _times[newest] - _times[pick];
     if (dt < 0.004) return CGPointZero;
     return CGPointMake((_points[newest].x - _points[pick].x) / dt, (_points[newest].y - _points[pick].y) / dt);
