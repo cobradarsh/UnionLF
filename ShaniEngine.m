@@ -97,10 +97,15 @@ static void ShaniNoteAppend(NSString *bundleID, NSDictionary *entry) {
     dispatch_async(ShaniStoreQueue(), ^{
         NSMutableArray *all = [ShaniReadNoteLog(bundleID) mutableCopy];
         // SpringBoard hands a held notification out again after a respring: that is the same
-        // line in the log, with the time it first came
+        // line in the log, with the time it first came. Anything else about a notification that
+        // is already in the log (a tap on Shani after it came up) is a line of its own.
         NSUInteger again = NSNotFound;
-        for (NSUInteger i = all.count; i-- > 0 && all.count - i <= 400;) {
-            if ([all[i][@"id"] isEqual:entry[@"id"]]) { again = i; break; }
+        if ([entry[@"st"] integerValue] == ShaniFateHeld) {
+            for (NSUInteger i = all.count; i-- > 0 && all.count - i <= 400;) {
+                if (![all[i][@"id"] isEqual:entry[@"id"]]) continue;
+                if ([all[i][@"st"] integerValue] == ShaniFateHeld) again = i;
+                break;
+            }
         }
         if (again != NSNotFound) {
             NSMutableDictionary *m = [entry mutableCopy];
