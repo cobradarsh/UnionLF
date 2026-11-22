@@ -66,14 +66,11 @@ items = [
 
     group("Layout",
           "Side: minis in a column on the left. Top: minis in a row across the top. "
-          "Split: two apps next to each other, both usable at once.\n\n"
-          "Normally every app keeps its full size and the bench shows it smaller, which works "
-          "with every app. Resize Apps to Fit instead asks apps to lay themselves out at the "
-          "size of their tile: the big app fills the width in Top, and Split becomes one app "
-          "above the other. Apps that can't change size may look cut off or stretched; switch "
-          "it off again if one does."),
+          "Split: two apps next to each other, both usable at once; drag the handle between "
+          "them to give one more room.\n\n"
+          "Every app keeps its full size and the bench shows it smaller, so every app works "
+          "on it and changing places is instant."),
     choice("layout", "Layout", 0, [(0, "Side"), (1, "Top"), (2, "Split")]),
-    switch("resizeApps", "Resize Apps to Fit (Beta)", False),
 
     group("Mini Tiles",
           "Smart: minis are live while you use the bench, turn into still pictures after the "

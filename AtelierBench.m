@@ -102,6 +102,17 @@
 
 @end
 
+// Holds the tiles and nothing else: a touch between them falls through to the backdrop.
+@interface AtelierPassView : UIView
+@end
+
+@implementation AtelierPassView
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    return hit == self ? nil : hit;
+}
+@end
+
 #pragma mark - the "..." menu
 
 @interface AtelierMenu : UIView
@@ -241,6 +252,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     NSString *_frontAtOpen;
     double _split;
     BOOL _closing;
+    BOOL _swipeFromBottom;
     AtelierGeometry _geometry;
 }
 
@@ -302,8 +314,15 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     home.edges = UIRectEdgeBottom;
     home.delegate = self;
     [_root addGestureRecognizer:home];
+    // The same wish without the edge: a finger that starts on the backdrop in the lowest strip of
+    // the screen and slides up. (In the simulator a mouse drag from the bottom never reached the
+    // edge recogniser; this one does not depend on where iOS thinks the edge is.)
+    UIPanGestureRecognizer *up = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(_bottomSwipe:)];
+    up.maximumNumberOfTouches = 1;
+    up.delegate = self;
+    [_dim addGestureRecognizer:up];
 
-    _stage = [[UIView alloc] initWithFrame:_root.bounds];
+    _stage = [[AtelierPassView alloc] initWithFrame:_root.bounds];
     _stage.autoresizingMask = _blur.autoresizingMask;
     [_root addSubview:_stage];
 
@@ -832,6 +851,19 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 
 - (void)_homeSwipe:(UIScreenEdgePanGestureRecognizer *)g {
     if (g.state == UIGestureRecognizerStateBegan) [self closeAnimated:YES reason:@"Home gesture"];
+}
+
+- (void)_bottomSwipe:(UIPanGestureRecognizer *)g {
+    CGPoint moved = [g translationInView:_root];
+    if (g.state == UIGestureRecognizerStateBegan) {
+        CGFloat startY = [g locationInView:_root].y - moved.y;
+        _swipeFromBottom = startY >= [AtelierHost screenSize].height - 48;
+    }
+    if (!_swipeFromBottom || (g.state != UIGestureRecognizerStateBegan && g.state != UIGestureRecognizerStateChanged)) return;
+    if (moved.y <= -56 && fabs(moved.x) < fabs(moved.y)) {
+        _swipeFromBottom = NO;
+        [self closeAnimated:YES reason:@"swipe up from the bottom"];
+    }
 }
 
 - (void)_plusTapped {

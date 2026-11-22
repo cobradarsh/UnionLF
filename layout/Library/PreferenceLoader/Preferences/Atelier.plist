@@ -41,9 +41,9 @@ The pill with three dots above the big app is its menu: Full Screen, Switch Layo
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Side: minis in a column on the left. Top: minis in a row across the top. Split: two apps next to each other, both usable at once.
+			<string>Side: minis in a column on the left. Top: minis in a row across the top. Split: two apps next to each other, both usable at once; drag the handle between them to give one more room.
 
-Normally every app keeps its full size and the bench shows it smaller, which works with every app. Resize Apps to Fit instead asks apps to lay themselves out at the size of their tile: the big app fills the width in Top, and Split becomes one app above the other. Apps that can't change size may look cut off or stretched; switch it off again if one does.</string>
+Every app keeps its full size and the bench shows it smaller, so every app works on it and changing places is instant.</string>
 			<key>label</key>
 			<string>Layout</string>
 		</dict>
@@ -74,20 +74,6 @@ Normally every app keeps its full size and the bench shows it smaller, which wor
 				<integer>1</integer>
 				<integer>2</integer>
 			</array>
-		</dict>
-		<dict>
-			<key>PostNotification</key>
-			<string>com.adarsh.atelier/prefs</string>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.adarsh.atelier</string>
-			<key>key</key>
-			<string>resizeApps</string>
-			<key>label</key>
-			<string>Resize Apps to Fit (Beta)</string>
 		</dict>
 		<dict>
 			<key>cell</key>

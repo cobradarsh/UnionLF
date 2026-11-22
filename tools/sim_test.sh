@@ -161,6 +161,9 @@ sleep 8
 
 # ---- helpers ----
 cmd() {                                               # one or more command lines, run in order by SpringBoard
+  local waited=0                                      # the last file must have been taken first, or its lines are lost
+  while [ -e "$RUN/atelier_cmd.txt" ] && [ "$waited" -lt 90 ]; do sleep 1; waited=$((waited + 1)); done
+  [ "$waited" -gt 3 ] && echo "  (SpringBoard took $waited s to take the last commands)"
   printf '%s\n' "$@" > "$RUN/cmd.tmp"
   mv "$RUN/cmd.tmp" "$RUN/atelier_cmd.txt"
 }
@@ -216,12 +219,6 @@ step 18-picked 8 "pick 4" "wait 5" "state"
 step 19-sets-empty 4 "sets"
 step 20-set-saved 5 "sheetclose" "wait 0.6" "saveset" "wait 3" "sets"
 step 21-icon-menu 3 "sheetclose" "iconmenu $MAPS" "iconmenu $CAL" "state"
-
-echo "== resize (beta)"
-step 22-resize-side 9 "set resizeApps true" "wait 6" "state" "scenes"
-step 23-resize-top 8 "layout top" "wait 5" "state"
-step 24-resize-split 8 "layout split" "wait 5" "state"
-step 25-resize-off 8 "set resizeApps false" "layout side" "wait 5" "state" "scenes"
 
 echo "== leaving and coming back"
 step 26-full-screen 8 "full 0" "wait 5" "state" "scenes"
@@ -308,28 +305,33 @@ touch_test() {
   phone 248 193; sleep 3                              # its second row: Switch Layout
   echo "T4b menu row: $(grep -E '  layout [0-9]' "$RUN/Atelier.log" | tail -1)"
   shot 46-touch-layout
-  phone_drag 215 929 215 560; sleep 4                 # up from the bottom edge: the Home gesture
-  echo "T5 home gesture: $(grep 'bench close' "$RUN/Atelier.log" | tail -1)"
+  phone_drag 215 921 215 560; sleep 4                 # up from the bottom of the screen
+  echo "T5 swipe up from the bottom: $(grep 'bench close' "$RUN/Atelier.log" | tail -1)"
   shot 47-touch-home-gesture
   cmd "close" "wait 1"; sleep 3
   phone_drag 426 840 300 815; sleep 5                 # in from the right edge, on the strip
   echo "T6 edge strip: $(grep 'trigger:' "$RUN/Atelier.log" | tail -1) · $(grep 'bench open' "$RUN/Atelier.log" | tail -1 | cut -c1-80)"
   shot 48-touch-edge-swipe
 
-  # 3. the same touch with the presentation context's hit-test switch set either way
-  cmd "close" "wait 1.5" "set presenterStopsHit 0" "apps $PROBE $SET $MAPS" "layout side" "wait 6" "state"
-  sleep 14
-  phone 236 360; sleep 2
-  echo "T7 scaled main, presenterStopsHit 0: clicked phone 236,360 · the probe got $(last_touch) · wanted 200 300"
-  cmd "close" "wait 1.5" "set presenterStopsHit 1" "apps $PROBE $SET $MAPS" "layout side" "wait 6" "state"
-  sleep 14
-  phone 236 360; sleep 2
-  echo "T8 scaled main, presenterStopsHit 1: clicked phone 236,360 · the probe got $(last_touch) · wanted 200 300"
-  cmd "unset presenterStopsHit" "set miniMode 0" "close" "wait 2" "state"
+  cmd "set miniMode 0" "close" "wait 2" "state"
   sleep 5
 }
 echo "== touches (clicks on the Simulator window)"
 touch_test 2>&1 | tee "$OUT/touch.txt"
+
+# ---- "Resize apps" (not offered in Settings; see the README) ----
+# Last, because it has stalled SpringBoard for half a minute before: nothing else depends on it.
+echo "== resize (set resizeApps true)"
+cmd "apps $SET $MAPS $SAFARI $FILES $PROBE" "layout side" "wait 6" "state"
+sleep 9
+step 50-resize-side 10 "set resizeApps true" "wait 6" "state" "scenes"
+step 51-resize-top 9 "layout top" "wait 5" "state"
+step 52-resize-split 9 "layout split" "wait 5" "state"
+step 53-resize-off 9 "set resizeApps false" "layout side" "wait 5" "state" "scenes"
+cmd "close" "wait 2" "state"
+sleep 5
+cmd "state"
+sleep 3
 
 cp "$RUN/Atelier.log" "$OUT/Atelier.log" 2>/dev/null || true
 DATA=$(xcrun simctl get_app_container "$UDID" "$PROBE" data 2>/dev/null)
