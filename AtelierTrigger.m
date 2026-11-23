@@ -12,9 +12,10 @@
       armed         14 pt in from the edge, or 20 pt up along it; a light tick says so
       or a flick    350 pt/s inward after 8 pt, or upward after 10
 
-    With the bench up the same strip sends it away again, by a swipe inward only (a finger
-    going up along the edge there is somebody scrolling the app), and the strip is only as wide
-    as the margin beside the tiles, so it never lies over an app. A tap on the strip does
+    With the bench up the same strip sends it away again, by the same swipe: inward, or up along
+    the edge (the user tried that twice on the phone and nothing happened). The strip is then
+    only as wide as the margin beside the tiles, so it never lies over an app and no finger on
+    it can be scrolling one. A tap on the strip does
     nothing, but the strip does take it: whatever lies under it can't be tapped there. That is
     the price of the simple, dependable way (a window); Settings can make the strip shorter,
     move it to the other side or switch it off.
@@ -181,8 +182,9 @@
         _opening = !bench.visible;
         return;
     }
-    // with the bench up only a swipe inward counts: up along the edge there is a finger scrolling the app
-    BOOL upCounts = _opening;
+    // up along the edge counts both ways: the swipe that opened the bench closes it too (the strip
+    // never lies over an app, so nobody is scrolling under it)
+    BOOL upCounts = YES;
     CGFloat travel = MAX(inward, upCounts ? up * 0.7 : 0);
     BOOL armed = inward >= 14 || (upCounts && up >= 20 && inward > -10);
     if (phase == AtelierTouchMoved) {

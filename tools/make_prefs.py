@@ -201,6 +201,12 @@ items = [
     group(),
     switch("addFront", "Bring the Current App Along", True),
     switch("iconMenu", "Icon Menu", True),
+    group(None,
+          "When the bench is full and you open one more app, the social app you used longest "
+          "ago (WhatsApp, Telegram, X, Reddit, Instagram and the like) is closed to make room. "
+          "Locked apps and every other kind of app are left alone; with no social app to close, "
+          "the bench says it is full."),
+    switch("makeRoom", "Make Room on a Full Bench", True),
 
     group("Feel"),
     choice("haptics", "Haptics", 1, [(0, "Off"), (1, "Light"), (2, "Medium"), (3, "Firm")]),

@@ -325,6 +325,7 @@ static NSInteger AtelierClampInt(double v, NSInteger lo, NSInteger hi, NSInteger
 - (NSInteger)triggerMode               { return AtelierClampInt([self _d:@"triggerMode" def:0], 0, 1, 0); }
 - (BOOL)showHandle                     { return [self _b:@"showHandle" def:YES]; }
 - (BOOL)addFront                       { return [self _b:@"addFront" def:YES]; }
+- (BOOL)makeRoom                       { return [self _b:@"makeRoom" def:YES]; }
 - (BOOL)resizeApps                     { return [self _b:@"resizeApps" def:NO]; }
 - (BOOL)iconMenu                       { return [self _b:@"iconMenu" def:YES]; }
 - (NSInteger)haptics                   { return AtelierClampInt([self _d:@"haptics" def:1], 0, 3, 1); }
@@ -558,6 +559,57 @@ static NSSet<NSString *> *gHiddenApps;
 + (BOOL)isHiddenApp:(NSString *)bid {
     if (!gHiddenApps) [self reloadHiddenApps];
     return bid.length && [gHiddenApps containsObject:bid];
+}
+
+// Is this one of the apps people mean by "social media"? The well-known ones by bundle id, and
+// whatever the App Store files under Social Networking. Used for one thing only: choosing what a
+// full bench lets go of.
++ (BOOL)isSocialApp:(NSString *)bid {
+    if (bid.length == 0) return NO;
+    static NSSet<NSString *> *known;
+    static NSMutableDictionary<NSString *, NSNumber *> *seen;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        known = [NSSet setWithArray:@[
+            @"net.whatsapp.whatsapp", @"net.whatsapp.whatsappsmb", @"ph.telegra.telegraph", @"org.whispersystems.signal",
+            @"com.atebits.tweetie2", @"com.reddit.reddit", @"com.burbn.instagram", @"com.burbn.barcelona",
+            @"com.facebook.facebook", @"com.facebook.messenger", @"com.toyopagroup.picaboo", @"com.linkedin.linkedin",
+            @"com.hammerandchisel.discord", @"com.zhiliaoapp.musically", @"pinterest", @"com.tumblr.tumblr",
+            @"xyz.blueskyweb.app", @"org.joinmastodon.app", @"com.tencent.xin", @"jp.naver.line", @"com.viber",
+            @"com.christianselig.apollo",
+        ]];
+        seen = [NSMutableDictionary dictionary];
+    });
+    NSNumber *hit = seen[bid];
+    if (hit) return hit.boolValue;
+    BOOL social = [known containsObject:bid.lowercaseString];
+    if (!social) {
+        // the App Store's genre for the app, where it has one (6005 is Social Networking); the return
+        // type is read first, so an object is never taken for a number or the other way round
+        @try {
+            Class cls = NSClassFromString(@"LSApplicationProxy");
+            SEL make = NSSelectorFromString(@"applicationProxyForIdentifier:");
+            id proxy = [cls respondsToSelector:make] ? ((id (*)(id, SEL, id))objc_msgSend)(cls, make, bid) : nil;
+            SEL genre = NSSelectorFromString(@"genreID");
+            Method m = proxy ? class_getInstanceMethod(object_getClass(proxy), genre) : NULL;
+            if (m) {
+                char type[8] = { 0 };
+                method_getReturnType(m, type, sizeof(type));
+                long long g = 0;
+                if (type[0] == '@') {
+                    id v = ((id (*)(id, SEL))objc_msgSend)(proxy, genre);
+                    if ([v respondsToSelector:@selector(longLongValue)]) g = [v longLongValue];
+                } else if (type[0] == 'q' || type[0] == 'Q') {
+                    g = ((long long (*)(id, SEL))objc_msgSend)(proxy, genre);
+                } else if (type[0] == 'i' || type[0] == 'I') {
+                    g = ((int (*)(id, SEL))objc_msgSend)(proxy, genre);
+                }
+                social = (g == 6005);
+            }
+        } @catch (__unused id e) {}
+    }
+    seen[bid] = @(social);
+    return social;
 }
 
 + (NSUInteger)hiddenAppCount {

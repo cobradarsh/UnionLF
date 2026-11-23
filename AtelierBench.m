@@ -44,6 +44,7 @@
 @property (nonatomic) BOOL parked;                  // not shown in this layout
 @property (nonatomic) BOOL mini;
 @property (nonatomic) CFAbsoluteTime liveSince;     // when it last became a live mini
+@property (nonatomic) CFAbsoluteTime usedAt;        // when it was last the main app, or joined the bench
 @property (nonatomic) NSInteger restarts;           // times its app was started again under the bench
 - (instancetype)initWithPane:(AtelierPane *)pane;
 - (void)applyRect:(CGRect)rect mini:(BOOL)mini;
@@ -665,19 +666,40 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     return bid.length && [_locked containsObject:bid];
 }
 
-// `bid` first, the rest after it. A bench that is full loses its last app that isn't locked;
-// nil when every other app is locked and there is no room.
+// A full bench that must take one more app lets go of a social app, and of nothing else (the
+// user's rule: "close the oldest open social media app only"). Among the social apps that aren't
+// locked it is the one that was the main app longest ago; the main app itself only when there is
+// no other; with nothing to tell them apart, the last in the row. NO when Settings has this
+// switched off or no such app is on the bench: then nothing is removed.
+- (BOOL)_makeRoomIn:(NSMutableArray<NSString *> *)apps for:(NSString *)bid {
+    if (apps.count < ATELIER_MAX_SLOTS) return YES;
+    if (![AtelierSettings shared].makeRoom) return NO;
+    NSUInteger pick = NSNotFound;
+    CFAbsoluteTime oldest = 0;
+    for (NSUInteger i = 0; i < apps.count; i++) {
+        NSString *other = apps[i];
+        if ([other isEqualToString:bid] || [self isLocked:other] || ![AtelierHost isSocialApp:other]) continue;
+        CFAbsoluteTime used = 0;
+        for (AtelierTile *t in _tiles) if ([t.pane.bundleID isEqualToString:other]) { used = t.usedAt; break; }
+        if (i == 0 && _visible) used = CFAbsoluteTimeGetCurrent();               // the main app is in use right now
+        if (pick == NSNotFound || used <= oldest) { pick = i; oldest = used; }
+    }
+    if (pick == NSNotFound) return NO;
+    NSString *gone = apps[pick];
+    AtelierLog(@"room: %@ leaves the full bench for %@ (the social app used longest ago)", gone, bid);
+    [AtelierHost toast:[NSString stringWithFormat:@"Closed %@ to make room.", [AtelierHost displayNameForBundleID:gone]]];
+    [apps removeObjectAtIndex:pick];
+    return YES;
+}
+
+// `bid` first, the rest after it. A bench that is full makes room the one way it may (see above);
+// nil when it cannot, and then there is no room.
 - (NSArray<NSString *> *)_list:(NSArray<NSString *> *)list withFirst:(NSString *)bid {
     NSMutableArray<NSString *> *out = [NSMutableArray arrayWithArray:list ?: @[]];
     if (bid.length) {
         [out removeObject:bid];
+        while (out.count >= ATELIER_MAX_SLOTS) if (![self _makeRoomIn:out for:bid]) return nil;
         [out insertObject:bid atIndex:0];
-        while (out.count > ATELIER_MAX_SLOTS) {
-            NSUInteger drop = NSNotFound;
-            for (NSUInteger i = out.count - 1; i >= 1; i--) if (![self isLocked:out[i]]) { drop = i; break; }
-            if (drop == NSNotFound) return nil;
-            [out removeObjectAtIndex:drop];
-        }
     }
     return out;
 }
@@ -717,11 +739,12 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     if ([AtelierHost isHiddenApp:bid]) return;
     NSArray<NSString *> *base = _visible ? [self apps] : [[AtelierSettings shared] slots];
     NSArray<NSString *> *with = [self _list:base withFirst:bid];
-    if (!with) [AtelierHost toast:@"The bench is full of locked apps. Unlock one to make room."];
+    if (!with) [AtelierHost toast:@"The bench is full. Close an app to make room."];
     [self openWithApps:(with ?: base) layout:-1];
 }
 
-// A shortcut app from the band: it becomes the main app. Nothing is pushed off a full bench.
+// A shortcut app from the band: it becomes the main app. A full bench makes room for it by
+// closing a social app, if one is open; otherwise it says it is full.
 - (void)openShortcut:(NSString *)bid {
     if (!_visible || bid.length == 0 || [AtelierHost isHiddenApp:bid]) return;
     [self hideMenu];
@@ -733,10 +756,14 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         return;
     }
     if (apps.count >= ATELIER_MAX_SLOTS) {
-        AtelierLog(@"shortcut %@: the bench is full", bid);
-        AtelierHapticPlay(AtelierHapticSwap);
-        [AtelierHost toast:@"The bench is full. Close an app to make room."];
-        return;
+        NSMutableArray<NSString *> *room = [apps mutableCopy];
+        if (![self _makeRoomIn:room for:bid]) {
+            AtelierLog(@"shortcut %@: the bench is full", bid);
+            AtelierHapticPlay(AtelierHapticSwap);
+            [AtelierHost toast:@"The bench is full. Close an app to make room."];
+            return;
+        }
+        apps = room;
     }
     AtelierLog(@"shortcut %@: opened as the main app", bid);
     [self _setApps:[@[ bid ] arrayByAddingObjectsFromArray:apps] animated:YES];
@@ -918,6 +945,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
             tile.shield.delegate = self;
             tile.alpha = 0;
             tile.liveSince = CFAbsoluteTimeGetCurrent();
+            tile.usedAt = tile.liveSince;
             [_stage addSubview:tile];
         }
         [next addObject:tile];
@@ -947,6 +975,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         } completion:^(BOOL done) { [self _gone:gone]; }];
     }
     _tiles = next;
+    if (_tiles.count) _tiles[0].usedAt = CFAbsoluteTimeGetCurrent();
     [self _layoutAnimated:animated];
     if (_visible) [self _persist];
 }
@@ -1078,6 +1107,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierTile *up = _tiles[slot], *down = _tiles[0];
     [_tiles exchangeObjectAtIndex:0 withObjectAtIndex:slot];
     down.liveSince = CFAbsoluteTimeGetCurrent();
+    up.usedAt = down.usedAt = down.liveSince;            // both were just in use: one until now, one from now
     if (up.frozen) [self _thaw:up];
     AtelierHapticPlay(AtelierHapticSwap);
     [self _layoutAnimated:YES];

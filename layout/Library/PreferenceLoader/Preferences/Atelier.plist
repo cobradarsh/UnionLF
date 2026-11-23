@@ -641,6 +641,26 @@ Icon Menu: Open in HyperTrade, your sets, and HyperTrade Sets… when you hold a
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>When the bench is full and you open one more app, the social app you used longest ago (WhatsApp, Telegram, X, Reddit, Instagram and the like) is closed to make room. Locked apps and every other kind of app are left alone; with no social app to close, the bench says it is full.</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.atelier/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.atelier</string>
+			<key>key</key>
+			<string>makeRoom</string>
+			<key>label</key>
+			<string>Make Room on a Full Bench</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>Feel</string>
 		</dict>

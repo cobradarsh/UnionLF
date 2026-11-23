@@ -35,7 +35,7 @@
 #import <objc/message.h>
 #import <notify.h>
 
-#define ATELIER_VERSION   @"1.2.1"
+#define ATELIER_VERSION   @"1.2.2"
 #define ATELIER_NAME      @"HyperTrade"                     // what the user reads
 #define ATELIER_DOMAIN    @"com.adarsh.atelier"
 #define ATELIER_N_PREFS   "com.adarsh.atelier/prefs"        // Settings -> SpringBoard (PostNotification)
@@ -118,6 +118,7 @@ void AtelierHapticPlay(AtelierHaptic kind);
 @property (nonatomic, readonly) NSInteger triggerMode;       // 0 a strip window, 1 a system gesture (takes no taps)
 @property (nonatomic, readonly) BOOL showHandle;             // the faint pill that marks the edge strip
 @property (nonatomic, readonly) BOOL addFront;               // the app in front joins the bench when it opens
+@property (nonatomic, readonly) BOOL makeRoom;               // a full bench closes its oldest social app for one more app
 @property (nonatomic, readonly) BOOL resizeApps;             // beta: give apps the size of their tile
 @property (nonatomic, readonly) BOOL iconMenu;               // "Open in Atelier" in the Home Screen icon menu
 @property (nonatomic, readonly) NSInteger haptics;           // 0 off … 3 strong
@@ -166,6 +167,7 @@ void AtelierHapticPlay(AtelierHaptic kind);
 // Apps hidden by SporeX (the user's own tweak) while it is switched on: never listed anywhere.
 + (void)reloadHiddenApps;
 + (BOOL)isHiddenApp:(NSString *)bid;
++ (BOOL)isSocialApp:(NSString *)bid;                         // WhatsApp, Telegram, X, Reddit, Instagram … (see AtelierCore.m)
 + (NSUInteger)hiddenAppCount;
 + (CGSize)screenSize;                                        // portrait, in points
 + (UIEdgeInsets)safeInsets;
