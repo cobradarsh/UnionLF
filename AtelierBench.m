@@ -30,6 +30,23 @@
 #import "Atelier.h"
 #import <dlfcn.h>
 
+// When each app was last the main app of the bench, or was put on it by hand. Kept by bundle id
+// for as long as SpringBoard runs, so it outlives the bench being put away and brought back (the
+// tiles don't: they are made anew each time, and on the phone the first version of this, kept on
+// the tile, let go of whichever social app happened to come first in the row). A full bench
+// lets go of the social app with the oldest entry; none at all counts as oldest.
+static NSMutableDictionary<NSString *, NSNumber *> *gUsedAt;
+
+static void AtelierNoteUsed(NSString *bid) {
+    if (bid.length == 0) return;
+    if (!gUsedAt) gUsedAt = [NSMutableDictionary dictionary];
+    gUsedAt[bid] = @(CFAbsoluteTimeGetCurrent());
+}
+
+static CFAbsoluteTime AtelierUsedAt(NSString *bid) {
+    return bid.length ? [gUsedAt[bid] doubleValue] : 0;
+}
+
 #pragma mark - a tile
 
 @interface AtelierTile : UIView
@@ -44,7 +61,6 @@
 @property (nonatomic) BOOL parked;                  // not shown in this layout
 @property (nonatomic) BOOL mini;
 @property (nonatomic) CFAbsoluteTime liveSince;     // when it last became a live mini
-@property (nonatomic) CFAbsoluteTime usedAt;        // when it was last the main app, or joined the bench
 @property (nonatomic) NSInteger restarts;           // times its app was started again under the bench
 - (instancetype)initWithPane:(AtelierPane *)pane;
 - (void)applyRect:(CGRect)rect mini:(BOOL)mini;
@@ -679,8 +695,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     for (NSUInteger i = 0; i < apps.count; i++) {
         NSString *other = apps[i];
         if ([other isEqualToString:bid] || [self isLocked:other] || ![AtelierHost isSocialApp:other]) continue;
-        CFAbsoluteTime used = 0;
-        for (AtelierTile *t in _tiles) if ([t.pane.bundleID isEqualToString:other]) { used = t.usedAt; break; }
+        CFAbsoluteTime used = AtelierUsedAt(other);
         if (i == 0 && _visible) used = CFAbsoluteTimeGetCurrent();               // the main app is in use right now
         if (pick == NSNotFound || used <= oldest) { pick = i; oldest = used; }
     }
@@ -933,6 +948,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
 - (void)_setApps:(NSArray<NSString *> *)bids animated:(BOOL)animated {
     NSMutableArray<AtelierTile *> *next = [NSMutableArray array];
     NSMutableArray<AtelierTile *> *old = [_tiles mutableCopy];
+    NSUInteger had = old.count;
+    NSMutableArray<NSString *> *fresh = [NSMutableArray array];
     for (NSString *bid in bids) {
         AtelierTile *tile = nil;
         for (AtelierTile *t in old) if ([t.pane.bundleID isEqualToString:bid]) { tile = t; break; }
@@ -945,7 +962,7 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
             tile.shield.delegate = self;
             tile.alpha = 0;
             tile.liveSince = CFAbsoluteTimeGetCurrent();
-            tile.usedAt = tile.liveSince;
+            [fresh addObject:bid];
             [_stage addSubview:tile];
         }
         [next addObject:tile];
@@ -975,7 +992,10 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
         } completion:^(BOOL done) { [self _gone:gone]; }];
     }
     _tiles = next;
-    if (_tiles.count) _tiles[0].usedAt = CFAbsoluteTimeGetCurrent();
+    // one app added to a bench that was already there was put on it by hand, just now; a whole
+    // bench coming up tells nothing about when its apps were last used
+    if (had > 0 && fresh.count == 1) AtelierNoteUsed(fresh[0]);
+    if (_tiles.count) AtelierNoteUsed(_tiles[0].pane.bundleID);
     [self _layoutAnimated:animated];
     if (_visible) [self _persist];
 }
@@ -1107,7 +1127,8 @@ static void AtelierHIDEvent(void *target, void *refcon, void *queue, void *event
     AtelierTile *up = _tiles[slot], *down = _tiles[0];
     [_tiles exchangeObjectAtIndex:0 withObjectAtIndex:slot];
     down.liveSince = CFAbsoluteTimeGetCurrent();
-    up.usedAt = down.usedAt = down.liveSince;            // both were just in use: one until now, one from now
+    AtelierNoteUsed(down.pane.bundleID);                 // in use until now
+    AtelierNoteUsed(up.pane.bundleID);                   // in use from now
     if (up.frozen) [self _thaw:up];
     AtelierHapticPlay(AtelierHapticSwap);
     [self _layoutAnimated:YES];

@@ -35,7 +35,7 @@
 #import <objc/message.h>
 #import <notify.h>
 
-#define ATELIER_VERSION   @"1.2.2"
+#define ATELIER_VERSION   @"1.2.3"
 #define ATELIER_NAME      @"HyperTrade"                     // what the user reads
 #define ATELIER_DOMAIN    @"com.adarsh.atelier"
 #define ATELIER_N_PREFS   "com.adarsh.atelier/prefs"        // Settings -> SpringBoard (PostNotification)
