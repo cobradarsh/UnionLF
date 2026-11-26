@@ -1,0 +1,33 @@
+# A short experiment: how the test app gets Photos access in the iOS 16.4 simulator (tools/photos_probe.sh).
+name: VidGrab Photos probe
+on:
+  push:
+    branches: [vidgrab]
+    paths:
+      - tools/photos_probe.sh
+      - tests/probe/**
+      - .github/workflows/photos-probe.yml
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get an iOS 16.4 simulator
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          if xcrun simctl list runtimes | grep -q "iOS 16\.4"; then echo "already there"; exit 0; fi
+          xcodebuild -downloadPlatform iOS -buildVersion 16.4 || xcodebuild -downloadPlatform iOS -buildVersion 20E247 || true
+      - name: Probe
+        run: bash tools/photos_probe.sh "$PWD/probe-out" 16.4
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photos-probe
+          path: |
+            probe-out/*.jpg
+            probe-out/probe.log
+          if-no-files-found: ignore

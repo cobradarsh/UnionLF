@@ -12,6 +12,9 @@ on:
     branches: [vidgrab]
     paths-ignore:
       - README.md
+      - tools/photos_probe.sh
+      - tests/probe/**
+      - .github/workflows/photos-probe.yml
   workflow_dispatch:
 
 jobs:
