@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.32";
+NSString *const kWPVersion = @"1.0.33";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -41,7 +41,7 @@ static WMReplyMode const kWPDatingModes[] = {
 };
 static WMReplyMode const kWPGeneralModes[] = {
     WMReplyModeAggressive, WMReplyModeDecentRoast, WMReplyModeRoastedToHell,
-    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeFactCheck, WMReplyModeExcuse,   WMReplyModeFunny,
+    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeFactCheck, WMReplyModeDefuse, WMReplyModeExcuse,   WMReplyModeFunny,
     WMReplyModeGenZ,       WMReplyModeLyrical,     WMReplyModeExcited,  WMReplyModeThankful,
     WMReplyModeWishing,    WMReplyModeFormal,      WMReplyModeChill,    WMReplyModeEmojify,
     WMReplyModeRemix,      WMReplyModeFacts,       WMReplyModeBackhand
@@ -842,6 +842,7 @@ static void WPTakeKeyboardSoon(void) {
         if (s.provider == WMAPIProviderClaude && notes) busy = @"Checking what's on near you…";
         else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeHilarify) busy = @"Finding fresh local material…";
         else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeFactCheck) busy = @"Checking the facts…";
+        else if (mode == WMReplyModeDefuse) busy = @"Cooling things down…";
         self->_status.text = busy;
         @try {
             [[WMAPIClient shared] generateRepliesWithProvider:s.provider

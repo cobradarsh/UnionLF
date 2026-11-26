@@ -37,6 +37,7 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeBackhand,     // backhanded compliment
     WMReplyModeExcuse,       // a believable, warm way out of a plan or a tense moment
     WMReplyModeFactCheck,    // disprove an accusation with facts, logic and persuasion (web search on Claude)
+    WMReplyModeDefuse,       // cool a heated chat down with empathy and quiet persuasion, so it ends my way
     // dating / flirt styles (consenting adults)
     WMReplyModePlanDate,
     WMReplyModeRomance,

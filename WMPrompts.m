@@ -193,6 +193,28 @@
                     "way'. Make the three different: one that leads with the evidence, one that exposes the flaw "
                     "in their logic, and one calm question that makes them walk it back.", look];
         }
+        case WMReplyModeDefuse:
+            return @"DEFUSE. Things are heated or tense between us (it's in the chat or in my context). Cool it "
+                    "down and bring them round to my side so it ends my way, without it ever feeling like a fight "
+                    "I won. First read what's really going on: what set them off, and the feeling under the words "
+                    "(hurt, feeling ignored or unimportant, embarrassed, stressed, insecure). Lead with real "
+                    "empathy, the way I'd text someone I actually care about (as warm as fits who they are to "
+                    "me): say what they're feeling in plain words and show I get why it landed that way, and "
+                    "never follow it with 'but' (that cancels it). Validate the feeling, not the accusation. Then "
+                    "persuade quietly: start from what we both want, make the facts make sense from their side "
+                    "(from where they stood it looked like this, and here's what actually happened), blame the "
+                    "situation (a misread text, bad timing, a long day) instead of them, and ask one gentle "
+                    "question that lets them reach my conclusion on their own. Leave them a way to back down "
+                    "without losing face, and end by moving us forward (a call, a plan, a fresh start) so we're "
+                    "out of the fight. If the chat shows I really did get something wrong, own that part plainly "
+                    "in a few words (it disarms more than any defence would) and steer to what happens next. "
+                    "Never invent facts or excuses that aren't in the chat or my context. No gaslighting ('that "
+                    "never happened', 'you're overreacting', 'calm down'), no guilt trips, no grovelling, no "
+                    "'sorry you feel that way', no lecturing or therapy-speak. Emoji: only a soft, warm one (a "
+                    "heart, folded hands, a hug, a small smile) or none, never a laughing or smirking one. Make "
+                    "the three different: one that leads with empathy and gently reframes it, one that walks them "
+                    "through the facts so they come round on their own, and one that offers the way out on my "
+                    "terms.";
         case WMReplyModeExcuse:
             return @"EXCUSE. Get me out of this gracefully. Read the chat and my context to see exactly "
                     "what I need out of: an invite or event I can't or don't want to go to, a plan I want "
@@ -453,6 +475,8 @@
             ? @"LENGTH: SHORT. One quick text, about 6 to 18 words: enough room to compliment her and land the twist.\n\n"
             : mode == WMReplyModeFactCheck
             ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: the one fact or contradiction that settles it, said plainly.\n\n"
+            : mode == WMReplyModeDefuse
+            ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: name what they're feeling, then the one line that cools it and tilts it my way.\n\n"
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:@"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
@@ -488,6 +512,7 @@
         case WMReplyModeBackhand:      return @"Backhand Compliment";
         case WMReplyModeExcuse:        return @"Excuse";
         case WMReplyModeFactCheck:     return @"Fact Check";
+        case WMReplyModeDefuse:        return @"Defuse";
         case WMReplyModePlanDate:      return @"Plan a Date";
         case WMReplyModeRomance:       return @"Romance Her";
         case WMReplyModeSeduce:        return @"Seduce (Bond)";
@@ -527,6 +552,7 @@
         case WMReplyModeBackhand:      return @"\U0001F3AD"; // 🎭
         case WMReplyModeExcuse:        return @"\U0001F6AA"; // 🚪
         case WMReplyModeFactCheck:     return @"\U0001F50E"; // magnifying glass
+        case WMReplyModeDefuse:        return @"\U0001F54A\U0000FE0F"; // dove
         case WMReplyModePlanDate:      return @"\U0001F4C5"; // 📅
         case WMReplyModeRomance:       return @"\U0001F339"; // 🌹
         case WMReplyModeSeduce:        return @"\U0001F576"; // 🕶
