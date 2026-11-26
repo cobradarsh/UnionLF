@@ -290,15 +290,16 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
             VGEnd(job, NO, error.localizedDescription ?: @"The video could not be saved.");
             return;
         }
-        switch (delivery) {
-            case VGDeliverPhotos: dispatch_async(dispatch_get_main_queue(), ^{ VGSaveToPhotos(job, file, window); }); break;
-            case VGDeliverShare: VGShare(job, file, window, nil); break;
-            case VGDeliverStash: VGSendToStash(job, file, source); break;
-            default: {
-                NSDictionary *about = VGDescribeFile(file);
-                VGEnd(job, YES, [NSString stringWithFormat:@"Fetched: %@, %@, %.1f s, %@", about[@"video"] ?: @"no picture", about[@"audio"] ?: @"no sound",
-                                 [about[@"seconds"] doubleValue], VGByteString([about[@"bytes"] longLongValue])]);
-            }
+        if (delivery == VGDeliverPhotos) {
+            dispatch_async(dispatch_get_main_queue(), ^{ VGSaveToPhotos(job, file, window); });
+        } else if (delivery == VGDeliverShare) {
+            VGShare(job, file, window, nil);
+        } else if (delivery == VGDeliverStash) {
+            VGSendToStash(job, file, source);
+        } else {
+            NSDictionary *about = VGDescribeFile(file);
+            VGEnd(job, YES, [NSString stringWithFormat:@"Fetched: %@, %@, %.1f s, %@", about[@"video"] ?: @"no picture", about[@"audio"] ?: @"no sound",
+                             [about[@"seconds"] doubleValue], VGByteString([about[@"bytes"] longLongValue])]);
         }
     }];
 }

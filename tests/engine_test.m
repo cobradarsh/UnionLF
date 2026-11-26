@@ -156,8 +156,7 @@ static void StreamTest(NSString *name, NSString *address, NSInteger maxLines, NS
         NSString *word = [stage componentsSeparatedByString:@" "].firstObject;
         if (![word isEqualToString:lastWord]) {
             lastWord = word;
-            printf("   … %s (%.2f)
-", stage.UTF8String, fraction);
+            printf("   … %s (%.2f)\n", stage.UTF8String, fraction);
         }
     };
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
@@ -170,8 +169,7 @@ static void StreamTest(NSString *name, NSString *address, NSInteger maxLines, NS
         dispatch_semaphore_signal(done);
     }];
     if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_SEC)) != 0) {
-        printf("   stalled at \"%s\" (%.2f); so far: %s
-", lastStage.UTF8String, lastFraction, job.report.UTF8String);
+        printf("   stalled at \"%s\" (%.2f); so far: %s\n", lastStage.UTF8String, lastFraction, job.report.UTF8String);
         [job cancel];
         Check(NO, [name stringByAppendingString:@": finished within 100 seconds"]);
         return;
@@ -248,6 +246,51 @@ static void RefusalTest(void) {
           [NSString stringWithFormat:@"cancelling stops a download and leaves nothing behind (%@)", cancelProblem.localizedDescription]);
 }
 
+/// Not a test of VidGrab 2: what 1.1.0 did with a stream, tried here so that the claim about it
+/// rests on a run and not on memory. Segments on disk, a playlist pointing at them, AVAssetExportSession.
+static void OldWayObservation(NSString *folder) {
+    printf("== observation: the 1.1.0 way (export a playlist of downloaded segments)\n");
+    NSString *work = [folder stringByAppendingPathComponent:@"old-way"];
+    [NSFileManager.defaultManager removeItemAtPath:work error:NULL];
+    [NSFileManager.defaultManager createDirectoryAtPath:work withIntermediateDirectories:YES attributes:nil error:NULL];
+    NSURL *list = [NSURL URLWithString:@"https://test-streams.mux.dev/x36xhzz/url_2/193039199_mp4_h264_aac_ld_7.m3u8"];
+    VGFetcher *fetcher = [[VGFetcher alloc] initWithHeaders:nil];
+    NSData *data = [fetcher dataAtURL:list error:NULL];
+    NSString *text = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+    if (!text) { printf("NOTE  could not fetch the stream: nothing observed\n"); return; }
+    VGMedia *media = VGParseMedia(text, list);
+    if (media.segments.count < 2) { printf("NOTE  no segments: nothing observed\n"); return; }
+    NSArray<NSURL *> *urls = @[media.segments[0].url, media.segments[1].url];
+    NSArray<NSString *> *paths = @[[work stringByAppendingPathComponent:@"local_seg_00000.ts"], [work stringByAppendingPathComponent:@"local_seg_00001.ts"]];
+    if (![fetcher downloadURLs:urls toPaths:paths ranges:nil starts:nil progress:nil error:NULL]) { printf("NOTE  could not fetch segments: nothing observed\n"); return; }
+    NSString *local = @"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-TARGETDURATION:10\n#EXTINF:10.000,\nlocal_seg_00000.ts\n#EXTINF:10.000,\nlocal_seg_00001.ts\n#EXT-X-ENDLIST\n";
+    NSURL *playlist = [NSURL fileURLWithPath:[work stringByAppendingPathComponent:@"local.m3u8"]];
+    [local writeToURL:playlist atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:playlist options:nil];
+    printf("NOTE  the local playlist as an asset: %lu tracks, exportable %d, playable %d, duration %.2f s\n",
+           (unsigned long)asset.tracks.count, asset.exportable, asset.playable, CMTimeGetSeconds(asset.duration));
+    for (NSString *preset in @[AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality]) {
+        AVAssetExportSession *session = [[AVAssetExportSession alloc] initWithAsset:asset presetName:preset];
+        if (!session) { printf("NOTE  %s: no export session could be made for it\n", preset.UTF8String); continue; }
+        NSURL *output = [NSURL fileURLWithPath:[work stringByAppendingPathComponent:@"out.mp4"]];
+        [NSFileManager.defaultManager removeItemAtURL:output error:NULL];
+        session.outputURL = output;
+        session.outputFileType = AVFileTypeMPEG4;
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        [session exportAsynchronouslyWithCompletionHandler:^{ dispatch_semaphore_signal(done); }];
+        BOOL returned = dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC)) == 0;
+        long long size = [[NSFileManager.defaultManager attributesOfItemAtPath:output.path error:NULL] fileSize];
+        printf("NOTE  %s: %s, status %ld, file %lld bytes, error: %s\n", preset.UTF8String, returned ? "returned" : "no answer in 60 s",
+               (long)session.status, size, session.error ? session.error.localizedDescription.UTF8String : "none");
+        if (!returned) [session cancelExport];
+    }
+    // and the same two segments through VidGrab 2's reader, for comparison
+    NSError *problem = nil;
+    NSArray<id<VGTrack>> *tracks = VGOpenTracks(paths[0], YES, YES, &problem);
+    printf("NOTE  VidGrab 2's reader on the first segment: %lu tracks%s%s\n", (unsigned long)tracks.count, problem ? ", " : "",
+           problem ? problem.localizedDescription.UTF8String : "");
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         setvbuf(stdout, NULL, _IONBF, 0);                   // every line at once: a run that stalls shows where
@@ -275,6 +318,7 @@ int main(int argc, const char *argv[]) {
             }
         }
         if (!only) RefusalTest();
+        if (!only) OldWayObservation(folder);
         printf("== %d passed, %d failed, %d skipped (no network)\n", gPassed, gFailed, gSkipped);
         return gFailed ? 1 : 0;
     }
