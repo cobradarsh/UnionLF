@@ -76,18 +76,33 @@ static UIView *VGHostView(CALayer *layer) {
     return nil;
 }
 
-CGRect VGLayerFrameInWindow(CALayer *layer, UIWindow *window) {
+/// The part of the layer that can be seen, in the layer's own coordinates: cut by every container
+/// that clips (apps draw videos zoomed in, inside a card that cuts them off), by the window and by
+/// the status bar. CGRectNull when nothing of it shows in that window.
+static CGRect VGVisibleRectInLayer(CALayer *layer, UIWindow *window) {
     CALayer *root = window.layer;
     if (!root || !layer) return CGRectNull;
+    CGRect visible = layer.bounds;
     for (CALayer *l = layer; l; l = l.superlayer) {
         if (l.isHidden || l.opacity < 0.02f) return CGRectNull;
+        if (l != layer && l.masksToBounds) visible = CGRectIntersection(visible, [layer convertRect:l.bounds fromLayer:l]);
+        if (CGRectIsNull(visible) || CGRectIsEmpty(visible)) return CGRectNull;
         if (l == root) {
-            CGRect frame = [layer convertRect:layer.bounds toLayer:root];
-            if (CGRectIsEmpty(frame) || !CGRectIntersectsRect(frame, root.bounds)) return CGRectNull;
-            return frame;
+            CGRect screen = root.bounds;
+            CGFloat top = window.safeAreaInsets.top;
+            screen.origin.y += top;
+            screen.size.height -= top;
+            visible = CGRectIntersection(visible, [layer convertRect:screen fromLayer:root]);
+            return CGRectIsNull(visible) || CGRectIsEmpty(visible) ? CGRectNull : visible;
         }
     }
     return CGRectNull;                                       // in another window, or in none
+}
+
+CGRect VGLayerFrameInWindow(CALayer *layer, UIWindow *window) {
+    CGRect visible = VGVisibleRectInLayer(layer, window);
+    if (CGRectIsNull(visible)) return CGRectNull;
+    return [layer convertRect:visible toLayer:window.layer];
 }
 
 BOOL VGLayerCoveredAtPoint(AVPlayerLayer *layer, UIWindow *window, CGPoint point) {
@@ -205,8 +220,15 @@ static void VGLayoutBadge(AVPlayerLayer *layer) {
         objc_setAssociatedObject(layer, &kBadgeKey, badge, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (badge.superlayer != layer) [layer addSublayer:badge];
-    // the corner of the picture itself, which can be smaller than the layer (letterboxing) or larger (fill)
-    CGRect area = layer.bounds;
+    // the corner of what is seen of the picture: the picture can be smaller than the layer
+    // (letterboxing) or larger (zoomed in and cut off by its card), and part of it can be scrolled away
+    UIWindow *window = VGHostView(layer).window;
+    CGRect area = window ? VGVisibleRectInLayer(layer, window) : CGRectNull;
+    if (CGRectIsNull(area) || area.size.width < kBadgeSize + 2 * kBadgeMargin || area.size.height < kBadgeSize + 2 * kBadgeMargin) {
+        badge.hidden = YES;
+        [CATransaction commit];
+        return;
+    }
     CGRect picture = layer.videoRect;
     if (!CGRectIsEmpty(picture) && !CGRectIsInfinite(picture) && !isnan(picture.origin.x) && !isnan(picture.size.width)) {
         CGRect shared = CGRectIntersection(area, picture);
@@ -238,6 +260,37 @@ AVPlayerLayer *VGBadgeLayerAtPoint(UIWindow *window, CGPoint point) {
         return layer;
     }
     return nil;
+}
+
+@interface VGFollower : NSObject
+@property (nonatomic, strong) CADisplayLink *link;
+@property (nonatomic) CFTimeInterval until;
+@end
+
+@implementation VGFollower
+- (void)tick:(CADisplayLink *)link {
+    for (AVPlayerLayer *layer in VGKnownPlayerLayers()) {
+        if (objc_getAssociatedObject(layer, &kBadgeKey) || layer.player.rate != 0) VGLayoutBadge(layer);
+    }
+    if (CACurrentMediaTime() > self.until) {
+        [self.link invalidate];
+        self.link = nil;
+    }
+}
+@end
+
+/// Scrolling moves a video without the video laying itself out again, so after each touch the
+/// buttons are placed every frame (at 20 a second) until the scroll has surely come to rest.
+void VGFollowScrolling(void) {
+    if (!NSThread.isMainThread) return;
+    static VGFollower *follower;
+    if (!follower) follower = [VGFollower new];
+    follower.until = CACurrentMediaTime() + 3.0;
+    if (!follower.link && atomic_load(&gEnabled) && atomic_load(&gBadgeOn)) {
+        follower.link = [CADisplayLink displayLinkWithTarget:follower selector:@selector(tick:)];
+        follower.link.preferredFramesPerSecond = 20;
+        [follower.link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+    }
 }
 
 void VGRefreshBadgesSoon(void) {

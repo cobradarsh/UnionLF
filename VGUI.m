@@ -581,6 +581,7 @@ static char kAttachedKey;
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     VGRefreshBadgesSoon();                                   // a touch is a good moment to look at the players again
+    VGFollowScrolling();
     if (![recognizer isKindOfClass:VGBadgeTapRecognizer.class]) return YES;
     VGBadgeTapRecognizer *tap = (VGBadgeTapRecognizer *)recognizer;
     UIWindow *window = (UIWindow *)recognizer.view;

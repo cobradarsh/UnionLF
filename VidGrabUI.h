@@ -25,6 +25,8 @@ CGRect VGBadgeFrameInWindow(AVPlayerLayer *layer, UIWindow *window);
 BOOL VGLayerCoveredAtPoint(AVPlayerLayer *layer, UIWindow *window, CGPoint point);
 /// Looks at every known layer again, soon, on the main queue. Cheap; call freely.
 void VGRefreshBadgesSoon(void);
+/// Keeps the buttons on their videos while the screen scrolls (call on each touch, main thread).
+void VGFollowScrolling(void);
 
 #pragma mark - touch (VGUI.m)
 
