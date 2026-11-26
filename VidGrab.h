@@ -15,7 +15,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-#define VG_VERSION @"2.2.0"
+#define VG_VERSION @"2.2.1"
 
 #pragma mark - core (VGCore.m)
 
@@ -51,7 +51,8 @@ typedef NS_ENUM(NSInteger, VGErrorCode) {
 + (NSInteger)holdFingers;   // 0 off, 1, 2
 + (double)holdTime;
 + (BOOL)blockAppHold;       // stop the app's own hold action when VidGrab takes the hold
-+ (NSInteger)action;        // 0 menu, 1 save to Photos, 2 share, 3 GIF Stash
++ (NSInteger)action;        // a hold on a video: 0 menu, 1 save to Photos, 2 share, 3 GIF Stash
++ (NSInteger)tapAction;     // a tap on the button: 1 save to Photos (default), 0 menu, 2 share; a hold on it: the menu
 + (NSInteger)maxHeight;     // 0 = best there is
 + (BOOL)album;
 + (BOOL)haptic;

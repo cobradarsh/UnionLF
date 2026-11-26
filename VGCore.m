@@ -142,6 +142,7 @@ static double VGPrefNumber(NSString *key, double fallback) {
 + (double)holdTime { return MAX(0.25, MIN(2.0, VGPrefNumber(@"holdTime", 0.55))); }
 + (BOOL)blockAppHold { return VGPrefBool(@"blockAppHold", YES); }
 + (NSInteger)action { return (NSInteger)VGPrefNumber(@"action", 0); }
++ (NSInteger)tapAction { return (NSInteger)VGPrefNumber(@"tapAction", 1); }
 + (NSInteger)maxHeight { return MAX(0, (NSInteger)VGPrefNumber(@"quality", 0)); }
 + (BOOL)album { return VGPrefBool(@"album", YES); }
 + (BOOL)haptic { return VGPrefBool(@"haptic", YES); }

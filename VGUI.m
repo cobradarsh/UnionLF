@@ -437,10 +437,13 @@ static BOOL VGStashInstalled(void) {
 }
 
 void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
+    VGTriggerAction(source, window, anchor, [VGPrefs action]);
+}
+
+void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSInteger action) {
     if (!source) return;
     if ([VGPrefs haptic]) [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
-    VGLog(@"trigger: %@ in %@", source.shortName, NSStringFromClass(window.class));
-    NSInteger action = [VGPrefs action];
+    VGLog(@"trigger: %@ in %@ (action %ld)", source.shortName, NSStringFromClass(window.class), (long)action);
     if (action == 1) { VGStartDownload(source, VGDeliverPhotos, nil, window); return; }
     if (action == 2) { VGStartDownload(source, VGDeliverShare, nil, window); return; }
     if (action == 3 && VGStashInstalled() && !source.isPicture) { VGStartDownload(source, VGDeliverStash, nil, window); return; }
@@ -479,7 +482,10 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
 
 @interface VGHoldRecognizer : UILongPressGestureRecognizer
 @property (nonatomic, weak) AVPlayerLayer *target;
+@property (nonatomic, weak) CALayer *button;                   // held on a download button: the menu
 @end
+
+static CFTimeInterval gButtonHeldAt;                          // a hold on a button: the tap that ends it is no tap
 @implementation VGHoldRecognizer
 @end
 
@@ -630,8 +636,10 @@ static char kAttachedKey;
     if (![window isKindOfClass:UIWindow.class]) return NO;
     if ([recognizer isKindOfClass:VGHoldRecognizer.class]) {
         VGHoldRecognizer *hold = (VGHoldRecognizer *)recognizer;
-        hold.target = VGPlayerLayerAtPoint(window, [recognizer locationInView:window]);
-        return hold.target != nil;                           // a hold anywhere else is not VidGrab's business
+        CGPoint point = [recognizer locationInView:window];
+        hold.button = VGBadgeLayerAtPoint(window, point);   // on a button (a video's or a picture's): the menu
+        hold.target = hold.button ? nil : VGPlayerLayerAtPoint(window, point);
+        return hold.button != nil || hold.target != nil;     // a hold anywhere else is not VidGrab's business
     }
     return ((VGBadgeTapRecognizer *)recognizer).target != nil;
 }
@@ -645,6 +653,14 @@ static char kAttachedKey;
 - (void)held:(VGHoldRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan) return;
     UIWindow *window = (UIWindow *)recognizer.view;
+    CALayer *button = recognizer.button;
+    if (button && [window isKindOfClass:UIWindow.class]) {
+        VGSource *source = VGSourceForBadgeLayer(button);
+        if (!source) return;
+        gButtonHeldAt = CACurrentMediaTime();
+        VGTriggerAction(source, window, VGBadgeFrameInWindow(button, window), 0);
+        return;
+    }
     AVPlayerLayer *layer = recognizer.target;
     CGPoint point = [recognizer locationInView:window];
     if (!layer || ![window isKindOfClass:UIWindow.class]) return;
@@ -669,9 +685,13 @@ static char kAttachedKey;
     UIWindow *window = (UIWindow *)recognizer.view;
     CALayer *layer = recognizer.target;
     if (!layer || ![window isKindOfClass:UIWindow.class]) return;
+    if (CACurrentMediaTime() - gButtonHeldAt < 2.0) {                 // the finger lifting after a hold on the button
+        gButtonHeldAt = 0;
+        return;
+    }
     VGSource *source = VGSourceForBadgeLayer(layer);
     if (!source) return;
-    VGTrigger(source, window, VGBadgeFrameInWindow(layer, window));
+    VGTriggerAction(source, window, VGBadgeFrameInWindow(layer, window), [VGPrefs tapAction]);
 }
 
 @end

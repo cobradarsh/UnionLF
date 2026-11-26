@@ -182,7 +182,10 @@ shot 02-menu
 echo "  $(last 'press ')"; echo "  $(last 'menu:')"; echo "  $(last 'state:')"
 
 echo "== 3. Save to Photos (smallest quality, the whole stream)"
-cmd "photos"
+# In the 16.4 simulator only the "add only" permission can be granted (tools/photos_probe.sh: full
+# access stays "not asked" however it is granted). The album needs full access, so here it is off
+# and saves go in with add-only access; the album itself is checked on the phone.
+cmd "set album 0" "photos"
 echo "  Photos access before: $(last 'photos:')"
 cmd "dismiss" "wait 1" "set quality 240" "photos" "press" "wait 1" "choose Save to Photos" "wait 2.5" "result"
 shot 03-progress
@@ -194,8 +197,8 @@ echo "  $(last 'result:')"; echo "  after: $(last 'photos:')"
 cmd "wait 4" "state"
 echo "  a little later: $(last 'state:')"
 
-echo "== 4. a tap on the button, the quality list, cancelling"
-cmd "tap" "wait 1.2" "menu" "choose Choose Quality" "wait 6" "menu"
+echo "== 4. a hold on the button: the menu, the quality list, cancelling"
+cmd "buttonhold" "wait 1.2" "menu" "choose Choose Quality" "wait 6" "menu"
 shot 05-qualities
 echo "  $(last 'tap ')"; echo "  $(last 'menu:')"
 cmd "choose 1080p" "wait 3" "result"
@@ -244,13 +247,13 @@ shot 10b-picture-buttons
 grep -F "    picture " "$LOG" | tail -4 | cut -c21- | sed 's/^/  /'
 echo "  $(last 'pictures:')"; echo "  $(last 'state:')"
 PICTURES=$(last "pictures:")
-cmd "pictap 0" "wait 1.2" "menu"
+cmd "pichold 0" "wait 1.2" "menu"
 shot 10c-picture-menu
 echo "  $(last 'pictap ')"; echo "  $(last 'menu:')"
-cmd "choose Save to Photos" "wait 1"
+cmd "dismiss" "wait 1" "pictap 0" "wait 1"      # a tap on the button saves at once
 wait_result 60 || echo "  the first picture did not end in a minute"
 echo "  $(last 'result:')"
-cmd "pictap 1" "wait 1.2" "choose Save to Photos" "wait 1"
+cmd "pictap 1" "wait 1"
 wait_result 60 || echo "  the second picture did not end in a minute"
 cmd "photos"
 echo "  $(last 'pictap ')"; echo "  $(last 'result:')"; echo "  $(last 'photos:')"
@@ -280,8 +283,7 @@ check "three hooks are in"                               "3 of 3 hooks"
 check "a button is on the playing video"                 "button {{"
 check "a hold on the video finds its stream"             "press {"
 check "the menu has its entries"                         "menu: Save to Photos | Share… | Save to GIF Stash | Choose Quality… | Copy Link"
-check "the stream was saved into Photos and the album"   "ok: Saved to Photos · VidGrab album"
-check "Photos holds the video in the VidGrab album"      "VidGrab album holds 1"
+check "the stream was saved into Photos"                "ok: Saved to Photos ["
 check "the quality list shows the stream's sizes"        "menu: 1080p · H.264"
 check "cancelling ends a download"                       "result: cancelled"
 check "the share sheet came up and was closed"           "share sheet closed"
@@ -293,8 +295,8 @@ if [ "$(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null || true)" -ge 3 ]; the
 check "under a solid panel the button takes no tap"      "no download button there"
 check "the picture hooks are in"                         "pictures: 2 hooks"
 check "a picture's menu has its entries"                 "menu: Save to Photos | Share… | Copy Picture"
-check "a picture was saved as shown, into the album"     "ok: Saved to Photos · VidGrab album [as shown: 600x900"
-check "a picture was fetched again from its address"     "from https://picsum.photos/id/237/600/800.jpg"
+check "a picture was saved as shown"                    "ok: Saved to Photos [as shown: 600x900"
+check "a picture was fetched again from its address"  "ok: Saved to Photos [jpg 600x800"
 if echo "$PICTURES" | grep -q ", 2 with a button"; then echo "PASS  both pictures have a button, the small face none"; else echo "FAIL  both pictures have a button, the small face none ($PICTURES)"; FAILED=$((FAILED + 1)); fi
 if echo "$PICTURESOFF" | grep -q ", 0 with a button"; then echo "PASS  the switch takes the picture buttons away"; else echo "FAIL  the switch takes the picture buttons away ($PICTURESOFF)"; FAILED=$((FAILED + 1)); fi
 if [ "$BUTTON1" != "$BUTTON2" ] && [ -n "$BUTTON2" ]; then echo "PASS  the corner setting moves the button"; else echo "FAIL  the corner setting moves the button ($BUTTON1 / $BUTTON2)"; FAILED=$((FAILED + 1)); fi

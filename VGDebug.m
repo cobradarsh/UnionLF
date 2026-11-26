@@ -9,9 +9,11 @@
 //   state                 version, hooks, settings, windows
 //   layers [full]         every player layer: where, ready, playing, what it plays, its button
 //   press [x y]           what a hold at that point does (default: the middle of the first video)
-//   tap                   what a tap on the first download button does
+//   tap                   what a tap on the first download button does (saves, unless Settings say otherwise)
+//   buttonhold            what a hold on the first download button does (the menu)
 //   pictures              every picture with a button or a claim to one: what it is, where, its button
 //   pictap [n]            what a tap on the button of the n-th picture with a button does (default the first)
+//   pichold [n]           the same for a hold on that button (the menu)
 //   scan                  everything on screen drawn as a large image, known to VidGrab or not
 //   hit [x y]             what a touch at the point (default: the first button) lands on in the app
 //   menu                  the entries of the open menu
@@ -125,7 +127,7 @@ static void VGRunLine(NSString *line) {
                   CGRectIsNull(badge) ? @"hidden" : NSStringFromCGRect(badge),
                   home ? (VGLayerCoveredAtPoint(layer, home, centre) ? @"; covered at its middle" : @"; open at its middle") : @"");
         }
-    } else if ([command isEqualToString:@"press"] || [command isEqualToString:@"tap"] || [command isEqualToString:@"hit"]) {
+    } else if ([command isEqualToString:@"press"] || [command isEqualToString:@"tap"] || [command isEqualToString:@"buttonhold"] || [command isEqualToString:@"hit"]) {
         AVPlayerLayer *first = nil;
         UIWindow *window = VGFirstWindowWithVideo(&first);
         CGPoint point = CGPointZero;
@@ -150,9 +152,9 @@ static void VGRunLine(NSString *line) {
         } else {
             CALayer *layer = VGBadgeLayerAtPoint(window, point);
             VGLog(@"tap %@: %@", NSStringFromCGPoint(point), layer ? VGShort(VGSourceForBadgeLayer(layer), NO) : @"no download button there");
-            if (layer) VGTrigger(VGSourceForBadgeLayer(layer), window, VGBadgeFrameInWindow(layer, window));
+            if (layer) VGTriggerAction(VGSourceForBadgeLayer(layer), window, VGBadgeFrameInWindow(layer, window), [command isEqualToString:@"buttonhold"] ? 0 : [VGPrefs tapAction]);
         }
-    } else if ([command isEqualToString:@"pictures"] || [command isEqualToString:@"pictap"]) {
+    } else if ([command isEqualToString:@"pictures"] || [command isEqualToString:@"pictap"] || [command isEqualToString:@"pichold"]) {
         VGLayoutPictures();
         NSMutableArray<CALayer *> *withButton = [NSMutableArray new];
         NSMutableArray<UIWindow *> *homes = [NSMutableArray new];
@@ -182,7 +184,7 @@ static void VGRunLine(NSString *line) {
                 CALayer *hit = VGBadgeLayerAtPoint(window, point);
                 VGLog(@"pictap %lu at %@: %@", (unsigned long)index, NSStringFromCGPoint(point),
                       hit ? VGShort(VGSourceForBadgeLayer(hit), YES) : @"the button takes no tap there");
-                if (hit) VGTrigger(VGSourceForBadgeLayer(hit), window, badge);
+                if (hit) VGTriggerAction(VGSourceForBadgeLayer(hit), window, badge, [command isEqualToString:@"pichold"] ? 0 : [VGPrefs tapAction]);
             }
         }
     } else if ([command isEqualToString:@"scan"]) {

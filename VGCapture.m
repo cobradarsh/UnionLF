@@ -13,7 +13,7 @@
 static char kHeadersKey, kBadgeKey;
 static const CGFloat kBadgeSize = 30;
 static const CGFloat kBadgeMargin = 10;
-static const CGFloat kBadgeReach = 9;               // how far outside the drawn button a touch still counts
+static const CGFloat kBadgeReach = 14;              // how far outside the drawn button a touch still counts
 
 static atomic_bool gEnabled, gBadgeOn;
 static atomic_int gCorner;

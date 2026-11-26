@@ -60,6 +60,8 @@ void VGLogPictureScan(UIWindow *window);
 void VGGesturesInstall(void);
 /// What a hold or a tap on the button does: the menu, or the action chosen in Settings.
 void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor);
+/// The same with the action given: 0 menu, 1 save to Photos, 2 share, 3 GIF Stash.
+void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSInteger action);
 
 typedef NS_ENUM(NSInteger, VGDelivery) { VGDeliverPhotos = 1, VGDeliverShare = 2, VGDeliverStash = 3, VGDeliverNothing = 9 };
 

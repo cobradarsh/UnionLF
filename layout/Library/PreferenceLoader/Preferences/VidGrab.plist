@@ -19,7 +19,7 @@
 			<key>footerText</key>
 			<string>VidGrab saves the video you are watching.
 
-A small download button sits in a corner of every video an app plays. Tap it, or hold the video, and choose what to do with it. A bar at the top shows the progress and has a button to cancel.
+A small download button sits in a corner of every video an app plays. Tap it to save the video at once; hold it, or the video, for a menu. A bar at the top shows the progress and has a button to cancel.
 
 Pictures get the same button (a hold on a picture is left to the app). Where the app's picture address leads to the original (Pinterest, X, Reddit), the original is saved; otherwise the picture as the app shows it.
 
@@ -193,9 +193,45 @@ It works with videos an app plays through iOS's own player. Where an app draws i
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Show Menu offers Save to Photos, Share, Save to GIF Stash, Choose Quality and Copy Link; for a picture Save to Photos, Share, Copy Picture and Copy Link. The other choices do that one thing straight away (Save to GIF Stash shows the menu for a picture).</string>
+			<string>Save to Photos saves the video or picture at once, in the quality chosen below. Hold the button instead for the menu.</string>
 			<key>label</key>
-			<string>When Triggered</string>
+			<string>Tapping the Button</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.vidgrab/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<integer>1</integer>
+			<key>defaults</key>
+			<string>com.adarsh.vidgrab</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>tapAction</string>
+			<key>label</key>
+			<string>Tap Does</string>
+			<key>validTitles</key>
+			<array>
+				<string>Save to Photos</string>
+				<string>Share</string>
+				<string>Show Menu</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>1</integer>
+				<integer>2</integer>
+				<integer>0</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Show Menu offers Save to Photos, Share, Save to GIF Stash, Choose Quality and Copy Link; for a picture Save to Photos, Share, Copy Picture and Copy Link. The other choices do that one thing straight away.</string>
+			<key>label</key>
+			<string>A Hold on a Video</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -561,7 +597,7 @@ It works with videos an app plays through iOS's own player. Where an app draws i
 			<key>footerText</key>
 			<string>Writes what VidGrab does into vidgrab.log in each app's temporary folder: which player was found, what was downloaded and how it ended. Addresses of videos appear in it; nothing leaves the iPhone.
 
-VidGrab 2.2.0</string>
+VidGrab 2.2.1</string>
 			<key>label</key>
 			<string>Troubleshooting</string>
 		</dict>

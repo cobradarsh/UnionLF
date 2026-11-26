@@ -18,7 +18,7 @@ import sys
 
 D = "com.adarsh.vidgrab"
 NOTE = "com.adarsh.vidgrab/prefs"
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 OUT = args[0] if args else "layout/Library/PreferenceLoader/Preferences"
@@ -56,8 +56,8 @@ APPS = [
 items = [
     group(None,
           "VidGrab saves the video you are watching.\n\n"
-          "A small download button sits in a corner of every video an app plays. Tap it, or "
-          "hold the video, and choose what to do with it. A bar at the top shows the progress "
+          "A small download button sits in a corner of every video an app plays. Tap it to "
+          "save the video at once; hold it, or the video, for a menu. A bar at the top shows the progress "
           "and has a button to cancel.\n\n"
           "Pictures get the same button (a hold on a picture is left to the app). Where the "
           "app's picture address leads to the original (Pinterest, X, Reddit), the original is "
@@ -85,11 +85,15 @@ items = [
     choice("holdTime", "Hold For", 0.55, [(0.4, "0.4 Seconds"), (0.55, "0.55 Seconds"), (0.8, "0.8 Seconds"), (1.0, "1 Second")]),
     switch("blockAppHold", "Stop the App's Own Hold Action", True),
 
-    group("When Triggered",
+    group("Tapping the Button",
+          "Save to Photos saves the video or picture at once, in the quality chosen below. "
+          "Hold the button instead for the menu."),
+    choice("tapAction", "Tap Does", 1, [(1, "Save to Photos"), (2, "Share"), (0, "Show Menu")]),
+
+    group("A Hold on a Video",
           "Show Menu offers Save to Photos, Share, Save to GIF Stash, Choose Quality and Copy "
           "Link; for a picture Save to Photos, Share, Copy Picture and Copy Link. The other "
-          "choices do that one thing straight away (Save to GIF Stash shows the menu for a "
-          "picture)."),
+          "choices do that one thing straight away."),
     choice("action", "Do", 0, [(0, "Show Menu"), (1, "Save to Photos"), (2, "Share"), (3, "Save to GIF Stash")]),
 
     group("Quality",

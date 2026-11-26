@@ -4,7 +4,7 @@ Save the video you are watching, in apps that play video with iOS's own player.
 
 **Package:** `com.adarsh.vidgrab` · **Built for:** iPhone 14 Pro Max, iOS 16.5, RootHide (ElleKit, PreferenceLoader)
 
-A small download button sits in a corner of every playing video. Tap it, or hold the video, and choose:
+A small download button sits in a corner of every playing video. A tap saves it to Photos at once (best quality); hold the button, or the video, for the menu:
 
 - **Save to Photos** (also into an album named VidGrab)
 - **Share…** (straight to WhatsApp, Telegram, Files, AirDrop, without going through Photos)
