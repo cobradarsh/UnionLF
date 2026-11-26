@@ -45,7 +45,7 @@ NSArray<NSURL *> *VGPictureCandidateURLs(NSURL *url) {
         if (candidate && ![list containsObject:candidate]) [list addObject:candidate];
     };
     NSString *host = url.host.lowercaseString ?: @"";
-    NSString *path = url.percentEncodedPath ?: @"";
+    NSString *path = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES].percentEncodedPath ?: @"";
     NSArray<NSString *> *pieces = [path componentsSeparatedByString:@"/"];        // "", size, …
 
     if ([host hasSuffix:@"pinimg.com"] && pieces.count > 2 && pieces[1].length) {
