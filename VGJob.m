@@ -355,6 +355,7 @@
     [self note:@"%@ fetched", VGByteString(_fetcher.bytesReceived)];
 
     [self stage:@"Putting it together" fraction:0.85];
+    VGLog(@"job: parts fetched, joining");
     NSString *pictureFile = [self assemble:picture named:@"video" paths:paths indexOf:indexOf starts:starts error:error];
     if (!pictureFile) return nil;
     NSString *soundFile = nil;
@@ -448,6 +449,7 @@
         return nil;
     }
     [self note:@"%@%@", hasPicture ? @"picture" : @"no picture", hasSound ? @" + sound" : @", no sound"];
+    VGLog(@"job: tracks open (%lu), writing", (unsigned long)tracks.count);
     [self stage:@"Finishing" fraction:0.87];
     NSURL *output = [NSURL fileURLWithPath:[_work stringByAppendingPathComponent:[self finalNameWithExtension:hasPicture ? @"mp4" : @"m4a"]]];
     __weak VGJob *weakSelf = self;

@@ -148,10 +148,17 @@ static void StreamTest(NSString *name, NSString *address, NSInteger maxLines, NS
     __block NSString *lastStage = nil;
     __block double lastFraction = -1;
     __block BOOL backwards = NO;
+    __block NSString *lastWord = nil;
     job.onProgress = ^(double fraction, NSString *stage) {
         if (fraction + 0.001 < lastFraction) backwards = YES;
         lastFraction = fraction;
         lastStage = stage;
+        NSString *word = [stage componentsSeparatedByString:@" "].firstObject;
+        if (![word isEqualToString:lastWord]) {
+            lastWord = word;
+            printf("   … %s (%.2f)
+", stage.UTF8String, fraction);
+        }
     };
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     __block NSURL *result = nil;
@@ -162,9 +169,11 @@ static void StreamTest(NSString *name, NSString *address, NSInteger maxLines, NS
         problem = error;
         dispatch_semaphore_signal(done);
     }];
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_SEC)) != 0) {
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_SEC)) != 0) {
+        printf("   stalled at \"%s\" (%.2f); so far: %s
+", lastStage.UTF8String, lastFraction, job.report.UTF8String);
         [job cancel];
-        Check(NO, [name stringByAppendingString:@": finished within five minutes"]);
+        Check(NO, [name stringByAppendingString:@": finished within 100 seconds"]);
         return;
     }
     printf("   %.1f s; %s\n", -began.timeIntervalSinceNow, job.report.UTF8String);
@@ -241,6 +250,7 @@ static void RefusalTest(void) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
+        setvbuf(stdout, NULL, _IONBF, 0);                   // every line at once: a run that stalls shows where
         NSString *folder = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : NSTemporaryDirectory();
         NSString *only = argc > 3 && strcmp(argv[2], "only") == 0 ? [NSString stringWithUTF8String:argv[3]] : nil;
         [NSFileManager.defaultManager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:NULL];

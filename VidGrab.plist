@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Filter</key>
+	<dict>
+		<key>Bundles</key>
+		<array>
+			<string>com.atebits.Tweetie2</string>
+			<string>com.burbn.instagram</string>
+			<string>com.burbn.barcelona</string>
+			<string>com.facebook.Facebook</string>
+			<string>com.facebook.Messenger</string>
+			<string>com.zhiliaoapp.musically</string>
+			<string>com.google.ios.youtube</string>
+			<string>com.reddit.Reddit</string>
+			<string>com.tumblr.tumblr</string>
+			<string>com.pinterest</string>
+			<string>tv.twitch</string>
+			<string>net.whatsapp.WhatsApp</string>
+			<string>net.whatsapp.WhatsAppSMB</string>
+			<string>com.linkedin.LinkedIn</string>
+			<string>com.vk.vkclient</string>
+			<string>com.tellm.jodel</string>
+		</array>
+		<key>Executables</key>
+		<array>
+			<string>Twitter</string>
+			<string>X</string>
+			<string>Instagram</string>
+			<string>Barcelona</string>
+			<string>Threads</string>
+			<string>Facebook</string>
+			<string>Messenger</string>
+			<string>TikTok</string>
+			<string>YouTube</string>
+			<string>Reddit</string>
+			<string>RedditApp</string>
+			<string>Tumblr</string>
+			<string>Pinterest</string>
+			<string>Consumer</string>
+			<string>Twitch</string>
+			<string>WhatsApp</string>
+			<string>LinkedIn</string>
+			<string>Flickr</string>
+			<string>VKClient</string>
+			<string>Jodel</string>
+			<string>LIKE</string>
+		</array>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,8 @@
+#!/bin/sh
+# An app that is open still runs without VidGrab (or with the previous one): closing it makes its
+# next start load the new library. The GIF Stash hand-over lives in SpringBoard and needs a respring;
+# that is left to you (or to the package manager's "Respring" button).
+for app in Twitter X Instagram Barcelona Threads Facebook Messenger TikTok YouTube Reddit RedditApp Tumblr Pinterest Consumer Twitch WhatsApp LinkedIn Flickr VKClient Jodel LIKE; do
+  killall -9 "$app" 2>/dev/null
+done
+exit 0

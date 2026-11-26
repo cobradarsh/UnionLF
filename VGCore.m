@@ -124,7 +124,9 @@ static double VGPrefNumber(NSString *key, double fallback) {
 + (BOOL)enabled {
     if (!VGPrefBool(@"enabled", YES)) return NO;
     NSString *name = NSBundle.mainBundle.executablePath.lastPathComponent ?: @"";
-    return VGPrefBool([@"app-" stringByAppendingString:name], YES);
+    // one switch per app in Settings, also where an app's program has gone by two names
+    NSString *known = @{@"X": @"Twitter", @"Threads": @"Barcelona", @"Reddit": @"RedditApp", @"Consumer": @"LinkedIn"}[name];
+    return VGPrefBool([@"app-" stringByAppendingString:known ?: name], YES);
 }
 + (BOOL)badge { return VGPrefBool(@"badge", YES); }
 + (NSInteger)badgeCorner { return (NSInteger)VGPrefNumber(@"badgeCorner", 1); }

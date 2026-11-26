@@ -199,6 +199,7 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
 
     BOOL ok = [writer startWriting];
     if (ok) [writer startSessionAtSourceTime:start];
+    VGLog(@"mux: %lu tracks, session starts at %.3f s, writer %@", (unsigned long)n, CMTimeGetSeconds(start), ok ? @"started" : writer.error.localizedDescription);
     NSString *why = nil;
     NSUInteger appended = 0;
     while (ok) {
@@ -272,6 +273,7 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
         return NO;
     }
     for (NSUInteger i = 0; i < n; i++) if (!finished[i]) [inputs[i] markAsFinished];
+    VGLog(@"mux: %lu buffers written, finishing the file", (unsigned long)appended);
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     [writer finishWritingWithCompletionHandler:^{ dispatch_semaphore_signal(done); }];
     dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
