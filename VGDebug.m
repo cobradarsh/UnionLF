@@ -165,7 +165,8 @@ static void VGRunLine(NSString *line) {
         VGLog(@"%@ %@", command, source.url ? source.shortName : @"(not an address)");
         if (source.url) VGStartDownload(source, delivery, nil, VGAppWindows().firstObject);
     } else if ([command isEqualToString:@"result"]) {
-        VGLog(@"result: %@; download %@; pill %@", VGLastDownloadResult(), VGDownloadRunning() ? @"running" : @"idle", [VGPill stateForLog]);
+        VGLog(@"result: %@; download %@; queue %lu; pill %@", VGLastDownloadResult(), VGDownloadRunning() ? @"running" : @"idle",
+              (unsigned long)VGQueueCount(), [VGPill stateForLog]);
     } else if ([command isEqualToString:@"cancel"]) {
         VGCancelDownload();
         VGLog(@"cancel");

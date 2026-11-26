@@ -70,6 +70,9 @@ typedef NS_ENUM(NSInteger, VGDelivery) { VGDeliverPhotos = 1, VGDeliverShare = 2
 NSString *VGAppName(void);
 void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *_Nullable variant, UIWindow *_Nullable window);
 BOOL VGDownloadRunning(void);
+/// Downloads asked for while one runs wait their turn and start one after another.
+NSUInteger VGQueueCount(void);
+NSUInteger VGClearQueue(void);
 void VGCancelDownload(void);
 NSString *VGLastDownloadResult(void);
 

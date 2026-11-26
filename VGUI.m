@@ -445,7 +445,10 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
     if (action == 2) { VGStartDownload(source, VGDeliverShare, nil, window); return; }
     if (action == 3 && VGStashInstalled()) { VGStartDownload(source, VGDeliverStash, nil, window); return; }
 
-    VGMenu *menu = [VGMenu menuWithTitle:@"VidGrab" message:source.shortName];
+    NSString *busy = VGDownloadRunning() || VGQueueCount()
+        ? [NSString stringWithFormat:@"\n%@%lu waiting: a new one joins the queue", VGDownloadRunning() ? @"1 downloading, " : @"", (unsigned long)VGQueueCount()]
+        : @"";
+    VGMenu *menu = [VGMenu menuWithTitle:@"VidGrab" message:[source.shortName stringByAppendingString:busy]];
     [menu add:@"Save to Photos" run:^{ VGStartDownload(source, VGDeliverPhotos, nil, window); }];
     [menu add:@"Share…" run:^{ VGStartDownload(source, VGDeliverShare, nil, window); }];
     if (VGStashInstalled()) [menu add:@"Save to GIF Stash" run:^{ VGStartDownload(source, VGDeliverStash, nil, window); }];
@@ -454,6 +457,12 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
         [menu add:@"Copy Link" run:^{
             UIPasteboard.generalPasteboard.URL = source.url;
             [VGPill note:@"Link copied" from:window];
+        }];
+    }
+    if (VGQueueCount()) {
+        [menu add:[NSString stringWithFormat:@"Clear Queue (%lu)", (unsigned long)VGQueueCount()] run:^{
+            NSUInteger cleared = VGClearQueue();
+            [VGPill note:[NSString stringWithFormat:@"%lu waiting download%@ removed", (unsigned long)cleared, cleared == 1 ? @"" : @"s"] from:window];
         }];
     }
     [menu presentFrom:window anchor:anchor];

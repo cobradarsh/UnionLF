@@ -14,6 +14,76 @@ static NSString *const kAlbum = @"VidGrab";
 BOOL VGDownloadRunning(void) { return gJob != nil; }
 NSString *VGLastDownloadResult(void) { return gLastResult; }
 
+static void VGEndBackgroundTask(void) {
+    if (gBackground == UIBackgroundTaskInvalid) return;
+    UIBackgroundTaskIdentifier task = gBackground;
+    gBackground = UIBackgroundTaskInvalid;
+    [UIApplication.sharedApplication endBackgroundTask:task];
+}
+
+#pragma mark - the queue
+
+/// A download waiting for its turn.
+@interface VGQueued : NSObject
+@property (nonatomic, strong) VGSource *source;
+@property (nonatomic) VGDelivery delivery;
+@property (nonatomic, strong) VGVariant *variant;
+@property (nonatomic, weak) UIWindow *window;
+@property (nonatomic, copy) NSString *key;
+@end
+@implementation VGQueued
+@end
+
+static NSMutableArray<VGQueued *> *gQueue;
+static NSString *gRunningKey;                  // what the running job is, for telling a second request for it
+static BOOL gShareOpen;                        // the next download waits until the share sheet is closed
+static CFAbsoluteTime gFlashUntil;             // until then the bar shows gFlashText instead of the stage
+static NSString *gFlashText;
+static const NSUInteger kQueueLimit = 20;
+
+static void VGRun(VGQueued *entry);
+
+NSUInteger VGQueueCount(void) { return gQueue.count; }
+
+NSUInteger VGClearQueue(void) {
+    NSUInteger count = gQueue.count;
+    [gQueue removeAllObjects];
+    VGLog(@"queue cleared (%lu)", (unsigned long)count);
+    return count;
+}
+
+static NSString *VGQueueKey(VGSource *source, VGDelivery delivery, VGVariant *variant) {
+    NSString *what = source.url.absoluteString ?: [NSString stringWithFormat:@"%p", source.asset];
+    return [NSString stringWithFormat:@"%ld|%@|%@", (long)delivery, variant.url.absoluteString ?: @"", what];
+}
+
+/// "", " · 1 more waiting", " · 3 more waiting".
+static NSString *VGWaitingSuffix(void) {
+    NSUInteger n = gQueue.count;
+    return n ? [NSString stringWithFormat:@" · %lu more waiting", (unsigned long)n] : @"";
+}
+
+static void VGStartNext(void) {
+    if (gJob || gShareOpen || gQueue.count == 0) return;
+    VGQueued *entry = gQueue.firstObject;
+    [gQueue removeObjectAtIndex:0];
+    VGLog(@"queue: starting the next one, %lu left", (unsigned long)gQueue.count);
+    VGRun(entry);
+}
+
+/// The running job is over, one way or another (main thread). After a moment, so that its
+/// result can be read on the bar, the next one in the queue starts.
+static void VGJobFinished(VGJob *job) {
+    if (gJob == job) {
+        gJob = nil;
+        gRunningKey = nil;
+    }
+    VGEndBackgroundTask();
+    if (gQueue.count) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ VGStartNext(); });
+    }
+}
+
 static char kEndedKey, kDeliveringKey;
 
 /// YES the first time it is asked for a job: a job ends once, whoever ends it first.
@@ -30,13 +100,6 @@ static BOOL VGEnded(VGJob *job) {
     return ended;
 }
 
-static void VGEndBackgroundTask(void) {
-    if (gBackground == UIBackgroundTaskInvalid) return;
-    UIBackgroundTaskIdentifier task = gBackground;
-    gBackground = UIBackgroundTaskInvalid;
-    [UIApplication.sharedApplication endBackgroundTask:task];
-}
-
 /// Stops a job at any stage: while it downloads, and also while the file waits for Photos
 /// (a permission question can stay on screen for as long as nobody answers it).
 static void VGCancelJob(VGJob *job) {
@@ -47,9 +110,8 @@ static void VGCancelJob(VGJob *job) {
         gLastResult = [NSString stringWithFormat:@"cancelled while saving [%@]", job.report];
         VGLog(@"download %@", gLastResult);
         [job cleanUp];
-        if (gJob == job) gJob = nil;
-        [VGPill note:@"Cancelled" from:nil];
-        VGEndBackgroundTask();
+        [VGPill note:gQueue.count ? [@"Cancelled" stringByAppendingString:VGWaitingSuffix()] : @"Cancelled" from:nil];
+        VGJobFinished(job);
     });
 }
 
@@ -63,9 +125,9 @@ static void VGEnd(VGJob *job, BOOL success, NSString *text) {
         gLastResult = [NSString stringWithFormat:@"%@: %@ [%@]", success ? @"ok" : @"failed", text, job.report];
         VGLog(@"download %@", gLastResult);
         [job cleanUp];
-        if (gJob == job) gJob = nil;
-        if (success) [VGPill succeed:text]; else [VGPill fail:text];
-        VGEndBackgroundTask();
+        NSString *shown = [text stringByAppendingString:VGWaitingSuffix()];
+        if (success) [VGPill succeed:shown]; else [VGPill fail:shown];
+        VGJobFinished(job);
     });
 }
 
@@ -172,23 +234,21 @@ static void VGShare(VGJob *job, NSURL *file, UIWindow *window, NSString *note) {
         sheet.completionWithItemsHandler = ^(UIActivityType type, BOOL completed, NSArray *items, NSError *error) {
             gLastResult = [NSString stringWithFormat:@"share sheet closed (%@, %@) [%@]", completed ? @"used" : @"not used", type ?: @"-", job.report];
             VGLog(@"download %@", gLastResult);
+            gShareOpen = NO;
             // the app that took the file has its own copy by now
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [job cleanUp];
                 [VGOverlay releaseIfIdle];
+                VGStartNext();
             });
         };
         UIWindow *overlay = [VGOverlay window];
         sheet.popoverPresentationController.sourceView = overlay.rootViewController.view ?: window;
         sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(window.bounds), CGRectGetMidY(window.bounds), 1, 1);
+        gShareOpen = YES;
         [VGOverlay present:sheet from:window];
         if (note) [VGPill note:note from:window];
-        if (gJob == job) gJob = nil;
-        if (gBackground != UIBackgroundTaskInvalid) {
-            UIBackgroundTaskIdentifier task = gBackground;
-            gBackground = UIBackgroundTaskInvalid;
-            [UIApplication.sharedApplication endBackgroundTask:task];
-        }
+        VGJobFinished(job);
     });
 }
 
@@ -279,14 +339,51 @@ static void VGSendToStash(VGJob *job, NSURL *file, VGSource *source) {
 
 void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, UIWindow *window) {
     if (!source) return;
-    if (gJob) {
-        [VGPill note:@"One download at a time: the other one is still running." from:window];
+    if (!gQueue) gQueue = [NSMutableArray new];
+    VGQueued *entry = [VGQueued new];
+    entry.source = source;
+    entry.delivery = delivery;
+    entry.variant = variant;
+    entry.window = window;
+    entry.key = VGQueueKey(source, delivery, variant);
+    if (!gJob && !gShareOpen && gQueue.count == 0) {
+        VGRun(entry);
         return;
     }
+    // busy: this one waits its turn
+    NSString *answer;
+    BOOL already = [entry.key isEqualToString:gRunningKey];
+    for (VGQueued *other in gQueue) if ([other.key isEqualToString:entry.key]) already = YES;
+    if (already) {
+        answer = @"Already in the queue";
+    } else if (gQueue.count >= kQueueLimit) {
+        answer = [NSString stringWithFormat:@"The queue is full (%lu waiting)", (unsigned long)kQueueLimit];
+    } else {
+        [gQueue addObject:entry];
+        answer = [NSString stringWithFormat:@"Added to the queue · %lu waiting", (unsigned long)gQueue.count];
+        if ([VGPrefs haptic]) [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+    }
+    VGLog(@"queue: %@ (%@)", answer, source.shortName);
+    if (gJob) {
+        // the bar of the running download says it for a moment
+        gFlashText = answer;
+        gFlashUntil = CFAbsoluteTimeGetCurrent() + 1.8;
+        [VGPill update:0 text:answer];
+    } else {
+        [VGPill note:gShareOpen ? [answer stringByAppendingString:@" · starts when the share sheet closes"] : answer from:window];
+    }
+}
+
+static void VGRun(VGQueued *entry) {
+    VGSource *source = entry.source;
+    VGDelivery delivery = entry.delivery;
+    VGVariant *variant = entry.variant;
+    UIWindow *window = entry.window ?: VGAppWindows().firstObject;
     VGJob *job = [[VGJob alloc] initWithSource:source];
     job.maxLines = [VGPrefs maxHeight];
     job.variant = variant;
     gJob = job;
+    gRunningKey = entry.key;
     UIApplication *app = UIApplication.sharedApplication;
     // leaving the app for a moment does not stop the download; iOS allows about half a minute
     gBackground = [app beginBackgroundTaskWithName:@"VidGrab download" expirationHandler:^{
@@ -298,7 +395,7 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
         }
     }];
     __weak VGJob *weakJob = job;
-    [VGPill showProgress:0.01 text:@"Getting ready" from:window onCancel:^{ VGCancelJob(weakJob); }];
+    [VGPill showProgress:0.01 text:[@"Getting ready" stringByAppendingString:VGWaitingSuffix()] from:window onCancel:^{ VGCancelJob(weakJob); }];
 
     __block CFAbsoluteTime lastShown = 0;
     job.onProgress = ^(double fraction, NSString *stage) {
@@ -306,7 +403,9 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
         if (now - lastShown < 0.1 && fraction < 0.999) return;      // ten updates a second are plenty
         lastShown = now;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (gJob == weakJob) [VGPill update:fraction text:stage];
+            if (gJob != weakJob) return;
+            BOOL flashing = CFAbsoluteTimeGetCurrent() < gFlashUntil;
+            [VGPill update:fraction text:flashing ? gFlashText : [stage stringByAppendingString:VGWaitingSuffix()]];
         });
     };
     VGLog(@"download: %@ → %ld", source.shortName, (long)delivery);
@@ -315,13 +414,8 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
             if (error.code == VGErrorCancelled) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     gLastResult = [NSString stringWithFormat:@"cancelled [%@]", job.report];
-                    if (gJob == job) gJob = nil;
-                    [VGPill note:@"Cancelled" from:nil];
-                    if (gBackground != UIBackgroundTaskInvalid) {
-                        UIBackgroundTaskIdentifier task = gBackground;
-                        gBackground = UIBackgroundTaskInvalid;
-                        [app endBackgroundTask:task];
-                    }
+                    [VGPill note:[@"Cancelled" stringByAppendingString:VGWaitingSuffix()] from:nil];
+                    VGJobFinished(job);
                 });
                 return;
             }

@@ -197,6 +197,19 @@ echo "  $(last 'result:')"; echo "  $(last 'state:')"
 cmd "dismiss" "wait 2.5" "state"
 echo "  after closing: $(last 'state:')"
 
+echo "== 5b. the queue: three downloads asked for at once, and the first one again"
+A=https://test-streams.mux.dev/x36xhzz/url_2/193039199_mp4_h264_aac_ld_7.m3u8
+B=https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4
+C=https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+cmd "set quality 240" "fetch $A" "fetch $B" "fetch $C" "fetch $A" "wait 0.5" "result" "shot 08b-queue"
+echo "  $(last 'result:')"
+for i in $(seq 1 40); do
+  sleep 3
+  [ "$(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null || true)" -ge 3 ] && break
+done
+cmd "result"
+grep -E "queue:|download ok: Fetched" "$LOG" | cut -c21- | sed 's/^/  /'
+
 echo "== 6. the button's corner and switch"
 cmd "set badgeCorner 2" "wait 1" "layers"
 shot 09-button-bottom-left
@@ -235,6 +248,10 @@ check "the quality list shows the stream's sizes"        "menu: 1080p · H.264"
 check "cancelling ends a download"                       "result: cancelled"
 check "the share sheet came up and was closed"           "share sheet closed"
 check "a hold away from the video is left alone"         "no video there: VidGrab stays out of it"
+check "a download asked for while one runs waits"        "queue: Added to the queue · 2 waiting"
+check "the same download twice is not queued twice"      "queue: Already in the queue"
+check "the queue starts the next one by itself"          "queue: starting the next one, 0 left"
+if [ "$(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null || true)" -ge 3 ]; then echo "PASS  all three queued downloads finished"; else echo "FAIL  all three queued downloads finished ($(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null) of 3)"; FAILED=$((FAILED + 1)); fi
 check "under a solid panel the button takes no tap"      "no download button there"
 if [ "$BUTTON1" != "$BUTTON2" ] && [ -n "$BUTTON2" ]; then echo "PASS  the corner setting moves the button"; else echo "FAIL  the corner setting moves the button ($BUTTON1 / $BUTTON2)"; FAILED=$((FAILED + 1)); fi
 if echo "$OFFLINE" | grep -q "button hidden"; then echo "PASS  the switch takes the button away"; else echo "FAIL  the switch takes the button away ($OFFLINE)"; FAILED=$((FAILED + 1)); fi

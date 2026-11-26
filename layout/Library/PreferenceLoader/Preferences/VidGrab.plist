@@ -541,7 +541,7 @@ It works with videos an app plays through iOS's own player. Where an app draws i
 			<key>footerText</key>
 			<string>Writes what VidGrab does into vidgrab.log in each app's temporary folder: which player was found, what was downloaded and how it ended. Addresses of videos appear in it; nothing leaves the iPhone.
 
-VidGrab 2.0.1</string>
+VidGrab 2.1.0</string>
 			<key>label</key>
 			<string>Troubleshooting</string>
 		</dict>
