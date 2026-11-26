@@ -22,7 +22,8 @@ SHARED=/var/mobile/Library/VidGrab                    # in the jailbreak root: a
 APPS=/rootfs/var/mobile/Containers/Data/Application
 
 container() {                                         # the data folder of the app with this bundle id
-  $SSH "for d in $APPS/*/; do if grep -q -a -F '$1' \"\$d.com.apple.mobile_container_manager.metadata.plist\" 2>/dev/null; then echo \"\$d\"; fi; done | head -1"
+  # exactly that id: not "<id>.WidgetExtension" (sideloaded Pinterest's id is plain "pinterest")
+  $SSH "for d in $APPS/*/; do m=\"\$d.com.apple.mobile_container_manager.metadata.plist\"; if grep -a -o '$1[A-Za-z0-9._-]*' \"\$m\" 2>/dev/null | grep -q -x -F '$1'; then echo \"\$d\"; fi; done | head -1"
 }
 
 case "${1:-}" in
