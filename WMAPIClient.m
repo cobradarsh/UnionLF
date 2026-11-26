@@ -62,6 +62,58 @@ NSURLSession *WMPrivateSession(void) {
     return session;
 }
 
+// No reply ever contains a dash (the user's rule, 1.0.37): not an em or en dash, not ' - ', not a hyphen inside a
+// word. The same rules run on Android (Replies.clean); they were tested together on sample replies. Dashes used as
+// punctuation become commas, ranges become 'to' (5 to 10), compounds become two words (low key). A rule ICU
+// refuses is skipped, and the character pass at the end still turns any dash left into a space.
+static NSString *WMNoDashes(NSString *s) {
+    static NSArray<NSArray *> *rules;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSArray *raw = @[
+        @[@"([:;=])[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]([)(DPpO\\]\\[/|*])", @"$1$2"],
+        @[@"(?m)^[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]+[ \\t]*", @""],
+        @[@"(?m)[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]+[ \\t]*$", @""],
+        @[@"(?<![\\d\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D])(\\d{1,4})[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D][ \\t]*(\\d{1,4})(?![\\d\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D])", @"$1 to $2"],
+        @[@"(?<=\\d)[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D](?=\\d)", @" "],
+        @[@"(?<![^\\s])[\\-\\u2212](?=\\d)", @"minus "],
+        @[@"([.,!?;:\\u2026])[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]+[ \\t]*", @"$1 "],
+        @[@"(?:[ \\t]+[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]+[ \\t]*|[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]+[ \\t]+|[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]{2,}[ \\t]*|[ \\t]*[\\u2012\\u2013\\u2014\\u2015\\u2E3A\\u2E3B\\uFE58][ \\t]*)(?=[\\p{L}\\p{M}\\p{N}])", @", "],
+        @[@"[ \\t]*(?:[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D]{2,}|[\\u2012\\u2013\\u2014\\u2015\\u2E3A\\u2E3B\\uFE58])[ \\t]*|[ \\t]+[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D][ \\t]*|[ \\t]*[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D][ \\t]+", @" "],
+        @[@"(?<=[\\p{L}\\p{M}\\p{N}])[\\-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2043\\u2212\\u2E3A\\u2E3B\\uFE58\\uFE63\\uFF0D](?=[\\p{L}\\p{M}\\p{N}])", @" "],
+        @[@"[ \\t]{2,}", @" "],
+        @[@"[ \\t]+,", @","],
+        @[@",{2,}", @","],
+        @[@",(?=[.!?])", @""],
+        @[@"(?<=[.!?]),", @""],
+        @[@"(?m)^[ \\t]*,[ \\t]*", @""],
+        @[@"(?m)[ \\t]*,[ \\t]*$", @""],
+        @[@"(?m)^[ \\t]+|[ \\t]+$", @""]
+        ];
+        NSMutableArray *built = [NSMutableArray array];
+        for (NSArray *r in raw) {
+            NSError *err = nil;
+            NSRegularExpression *re = [NSRegularExpression regularExpressionWithPattern:r[0] options:0 error:&err];
+            if (re) [built addObject:@[re, r[1]]];
+            else NSLog(@"[Wingman] dash rule skipped: %@", err);
+        }
+        rules = [built copy];
+    });
+    NSString *t = s ?: @"";
+    for (NSArray *r in rules) {
+        NSRegularExpression *re = r[0];
+        t = [re stringByReplacingMatchesInString:t options:0 range:NSMakeRange(0, t.length) withTemplate:r[1]];
+    }
+    static const unichar kDashes[] = { 0x002D, 0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2043, 0x2212, 0x2E3A, 0x2E3B, 0xFE58, 0xFE63, 0xFF0D };
+    NSMutableString *m = [t mutableCopy];
+    for (size_t k = 0; k < sizeof(kDashes) / sizeof(kDashes[0]); k++)
+        [m replaceOccurrencesOfString:[NSString stringWithCharacters:&kDashes[k] length:1] withString:@" "
+                              options:0 range:NSMakeRange(0, m.length)];
+    while ([m rangeOfString:@"  "].location != NSNotFound)
+        [m replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, m.length)];
+    return [m stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
 @implementation WMAPIClient
 
 + (instancetype)shared {
@@ -536,16 +588,12 @@ static NSArray<NSString *> *WPExtractQuotedStrings(NSString *s) {
     return clean;
 }
 
-// hard guarantee: no em/en dashes, no wrapping quotes
+// hard guarantee: no wrapping quotes and no dash of any kind (WMNoDashes)
 - (NSString *)_humanize:(NSString *)s {
     NSString *t = [s stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    t = [t stringByReplacingOccurrencesOfString:@" — " withString:@", "];
-    t = [t stringByReplacingOccurrencesOfString:@"—" withString:@", "];
-    t = [t stringByReplacingOccurrencesOfString:@" – " withString:@", "];
-    t = [t stringByReplacingOccurrencesOfString:@"–" withString:@"-"];
     if (t.length >= 2 && [t hasPrefix:@"\""] && [t hasSuffix:@"\""])
         t = [t substringWithRange:NSMakeRange(1, t.length - 2)];
-    return t;
+    return WMNoDashes(t);
 }
 
 - (NSError *)_err:(NSString *)msg {
