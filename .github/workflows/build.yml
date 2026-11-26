@@ -1,0 +1,88 @@
+# Builds VidGrab for RootHide and tests it.
+#
+#   syntax     every source compiled on Linux against the iOS 16.5 SDK (a minute; nothing is linked)
+#   engine     the download engine against real public streams, on the Mac and in an iOS simulator
+#   build      the .deb with RootHide's Theos and Xcode's clang, then the gate on what was built
+#
+# The macOS jobs run on two kinds of runner at once: the hosted arm64 runners have been out of
+# capacity before; whichever frees up first does the work, the other is the spare.
+name: Build VidGrab (RootHide)
+on:
+  push:
+    branches: [vidgrab]
+    paths-ignore:
+      - README.md
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get iOS 16.5 SDK
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/sdk.tar.xz" https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          mkdir -p "$RUNNER_TEMP/sdk"
+          tar xf "$RUNNER_TEMP/sdk.tar.xz" -C "$RUNNER_TEMP/sdk"
+
+      - name: Compile every source (syntax only)
+        run: |
+          clang --version
+          SDK="$RUNNER_TEMP/sdk/iPhoneOS16.5.sdk"
+          fail=0
+          for f in *.m tests/*.m tests/host/*.m; do
+            [ -f "$f" ] || continue
+            echo "== $f"
+            clang -fsyntax-only -x objective-c -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc \
+              -Wall -Werror -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function \
+              -Wno-unused-but-set-variable -I. "$f" || fail=1
+          done
+          for f in *.c; do
+            [ -f "$f" ] || continue
+            echo "== $f"
+            clang -fsyntax-only -target arm64-apple-ios15.0 -isysroot "$SDK" -Wall -Werror -Wno-unused-function -I. "$f" || fail=1
+          done
+          echo "== scripts"
+          python3 -m py_compile tools/*.py || fail=1
+          for f in tools/*.sh; do bash -n "$f" || fail=1; done
+          exit $fail
+
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Engine against real streams, on the Mac
+        run: bash tools/engine_test.sh mac "$PWD/engine-mac"
+
+      - name: Get an iOS 16.4 simulator (the nearest to the phone's 16.5)
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 25
+        run: |
+          if xcrun simctl list runtimes | grep -q "iOS 16\.4"; then echo "already there"; exit 0; fi
+          xcodebuild -downloadPlatform iOS -buildVersion 16.4 || xcodebuild -downloadPlatform iOS -buildVersion 20E247 || true
+          xcrun simctl list runtimes || true
+
+      - name: Engine against real streams, in the simulator
+        if: always()
+        run: bash tools/engine_test.sh sim "$PWD/engine-sim" 16.4
+
+      - name: Upload logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vidgrab-engine-${{ matrix.runner }}
+          path: |
+            engine-mac/*.log
+            engine-mac/*.txt
+            engine-sim/*.log
+            engine-sim/*.txt
+          if-no-files-found: ignore
