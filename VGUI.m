@@ -74,23 +74,40 @@ static VGOverlayWindow *VGOverlayFor(UIWindow *from) {
 + (UIWindow *)window { return gOverlay; }
 + (UIViewController *)presented { return gOverlay.rootViewController.presentedViewController; }
 
+/// iOS tells a share sheet's owner that it closed only when a person closes it. When VidGrab
+/// closes one itself (another sheet comes, a test), it says so here, or the queue would wait on it.
+static void VGClosedByVidGrab(UIViewController *controller) {
+    if (![controller isKindOfClass:UIActivityViewController.class]) return;
+    UIActivityViewControllerCompletionWithItemsHandler handler = ((UIActivityViewController *)controller).completionWithItemsHandler;
+    if (handler) handler(nil, NO, nil, nil);
+}
+
 + (void)present:(UIViewController *)controller from:(UIWindow *)window {
     VGOverlayWindow *overlay = VGOverlayFor(window);
     if (!overlay) return;
     UIViewController *root = overlay.rootViewController;
     void (^show)(void) = ^{ [root presentViewController:controller animated:YES completion:nil]; };
-    if (root.presentedViewController) [root dismissViewControllerAnimated:NO completion:show];
-    else show();
+    UIViewController *old = root.presentedViewController;
+    if (old) {
+        [root dismissViewControllerAnimated:NO completion:^{
+            VGClosedByVidGrab(old);
+            show();
+        }];
+    } else {
+        show();
+    }
 }
 
 + (void)dismissPresented:(void (^)(void))completion {
     UIViewController *root = gOverlay.rootViewController;
-    if (!root.presentedViewController) {
+    UIViewController *old = root.presentedViewController;
+    if (!old) {
         if (completion) completion();
         [self releaseIfIdle];
         return;
     }
     [root dismissViewControllerAnimated:YES completion:^{
+        VGClosedByVidGrab(old);
         if (completion) completion();
         [VGOverlay releaseIfIdle];
     }];

@@ -42,6 +42,7 @@ static NSString *gFlashText;
 static const NSUInteger kQueueLimit = 20;
 
 static void VGRun(VGQueued *entry);
+static BOOL VGShareStillOpen(void);
 
 NSUInteger VGQueueCount(void) { return gQueue.count; }
 
@@ -64,7 +65,7 @@ static NSString *VGWaitingSuffix(void) {
 }
 
 static void VGStartNext(void) {
-    if (gJob || gShareOpen || gQueue.count == 0) return;
+    if (gJob || gQueue.count == 0 || VGShareStillOpen()) return;
     VGQueued *entry = gQueue.firstObject;
     [gQueue removeObjectAtIndex:0];
     VGLog(@"queue: starting the next one, %lu left", (unsigned long)gQueue.count);
@@ -235,14 +236,34 @@ NSString *VGAppName(void) {
 
 #pragma mark - share sheet
 
+static __weak UIActivityViewController *gShareSheet;
+static void (^gShareClosed)(NSString *how);   // what is done once the sheet is gone; run once
+static CFTimeInterval gShareSince;
+
+/// YES while the share sheet is up. A sheet can also go without iOS saying so (the app or iOS
+/// takes VidGrab's window away): then it counts as closed here, so the queue does not wait for ever.
+static BOOL VGShareStillOpen(void) {
+    if (!gShareOpen) return NO;
+    UIActivityViewController *sheet = gShareSheet;
+    if (CACurrentMediaTime() - gShareSince < 2.0) return YES;          // still on its way up
+    if (sheet && (sheet.presentingViewController || sheet.isBeingPresented)) return YES;
+    if (gShareClosed) gShareClosed(@"gone without a word");
+    else gShareOpen = NO;
+    return NO;
+}
+
 static void VGShare(VGJob *job, NSURL *file, UIWindow *window, NSString *note) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [VGPill hide];
         UIActivityViewController *sheet = [[UIActivityViewController alloc] initWithActivityItems:@[file] applicationActivities:nil];
-        sheet.completionWithItemsHandler = ^(UIActivityType type, BOOL completed, NSArray *items, NSError *error) {
-            gLastResult = [NSString stringWithFormat:@"share sheet closed (%@, %@) [%@]", completed ? @"used" : @"not used", type ?: @"-", job.report];
+        __block BOOL over = NO;
+        void (^closed)(NSString *) = ^(NSString *how) {
+            if (over) return;
+            over = YES;
+            gLastResult = [NSString stringWithFormat:@"share sheet closed (%@) [%@]", how, job.report];
             VGLog(@"download %@", gLastResult);
             gShareOpen = NO;
+            gShareClosed = nil;
             // the app that took the file has its own copy by now
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [job cleanUp];
@@ -250,10 +271,16 @@ static void VGShare(VGJob *job, NSURL *file, UIWindow *window, NSString *note) {
                 VGStartNext();
             });
         };
+        sheet.completionWithItemsHandler = ^(UIActivityType type, BOOL completed, NSArray *items, NSError *error) {
+            closed([NSString stringWithFormat:@"%@, %@", completed ? @"used" : @"not used", type ?: @"-"]);
+        };
         UIWindow *overlay = [VGOverlay window];
         sheet.popoverPresentationController.sourceView = overlay.rootViewController.view ?: window;
         sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(window.bounds), CGRectGetMidY(window.bounds), 1, 1);
         gShareOpen = YES;
+        gShareSheet = sheet;
+        gShareClosed = closed;
+        gShareSince = CACurrentMediaTime();
         [VGOverlay present:sheet from:window];
         if (note) [VGPill note:note from:window];
         VGJobFinished(job);
@@ -354,7 +381,7 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
     entry.variant = variant;
     entry.window = window;
     entry.key = VGQueueKey(source, delivery, variant);
-    if (!gJob && !gShareOpen && gQueue.count == 0) {
+    if (!gJob && !VGShareStillOpen() && gQueue.count == 0) {
         VGRun(entry);
         return;
     }
@@ -378,7 +405,7 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
         gFlashUntil = CFAbsoluteTimeGetCurrent() + 1.8;
         [VGPill update:0 text:answer];
     } else {
-        [VGPill note:gShareOpen ? [answer stringByAppendingString:@" · starts when the share sheet closes"] : answer from:window];
+        [VGPill note:VGShareStillOpen() ? [answer stringByAppendingString:@" · starts when the share sheet closes"] : answer from:window];
     }
 }
 
