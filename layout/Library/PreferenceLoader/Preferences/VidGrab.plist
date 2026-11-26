@@ -21,6 +21,8 @@
 
 A small download button sits in a corner of every video an app plays. Tap it, or hold the video, and choose what to do with it. A bar at the top shows the progress and has a button to cancel.
 
+Downloads asked for while one is running wait in a queue and start one after another. The bar says how many are waiting; its cancel button stops only the one running, and the menu has Clear Queue.
+
 It works with videos an app plays through iOS's own player. Where an app draws its videos itself, no button appears and a hold does nothing.</string>
 		</dict>
 		<dict>
