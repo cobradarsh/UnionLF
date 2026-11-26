@@ -104,6 +104,34 @@ static NSDictionary *DecodeCheck(NSURL *file) {
             }
         }
         out[@"frames"] = @(frames);
+        if (reader.status == AVAssetReaderStatusFailed || frames < 100) {
+            // the first samples as stored: sizes, times, the kinds of units in them
+            AVAssetReader *raw = [[AVAssetReader alloc] initWithAsset:asset error:NULL];
+            AVAssetReaderTrackOutput *plain = [[AVAssetReaderTrackOutput alloc] initWithTrack:video outputSettings:nil];
+            [raw addOutput:plain];
+            NSMutableArray<NSString *> *list = [NSMutableArray new];
+            if ([raw startReading]) {
+                CMSampleBufferRef sample;
+                while (list.count < 6 && (sample = [plain copyNextSampleBuffer])) {
+                    CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sample);
+                    size_t length = block ? CMBlockBufferGetDataLength(block) : 0;
+                    NSMutableData *bytes = [NSMutableData dataWithLength:length];
+                    if (length) CMBlockBufferCopyDataBytes(block, 0, length, bytes.mutableBytes);
+                    NSMutableString *units = [NSMutableString new];
+                    const uint8_t *p = bytes.bytes;
+                    for (size_t at = 0; at + 5 <= length;) {
+                        uint32_t n = ((uint32_t)p[at] << 24) | ((uint32_t)p[at + 1] << 16) | ((uint32_t)p[at + 2] << 8) | p[at + 3];
+                        [units appendFormat:@"%d:%u ", p[at + 4] & 0x1F, n];
+                        at += 4 + n;
+                    }
+                    [list addObject:[NSString stringWithFormat:@"[%zu B pts %.4f dts %.4f: %@]", length,
+                                     CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample)),
+                                     CMTimeGetSeconds(CMSampleBufferGetDecodeTimeStamp(sample)), units]];
+                    CFRelease(sample);
+                }
+            }
+            out[@"firstSamples"] = [list componentsJoinedByString:@" "];
+        }
         out[@"lastFrameAt"] = @(last);
         out[@"ordered"] = @(ordered);
         if (reader.status == AVAssetReaderStatusFailed) out[@"videoError"] = reader.error.localizedDescription ?: @"failed";

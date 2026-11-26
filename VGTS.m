@@ -163,6 +163,9 @@ VGFileKind VGSniffFile(NSString *path) {
     NSData *_sps, *_pps;
     BOOL _gotKeyFrame;
     NSMutableData *_heldData;                       // the access unit waiting for its duration
+    NSMutableArray *_rawVideo;                      // finished pictures not yet made into samples
+    int64_t _lead, _lastDTS;
+    BOOL _leadFixed;
     NSMutableData *_auData;                         // the picture being put together
     BOOL _auHasSlice, _auKey, _auStamped, _stampFresh;
     int64_t _auPTS, _auDTS, _stampPTS, _stampDTS;
@@ -192,6 +195,8 @@ VGFileKind VGSniffFile(NSString *path) {
         _aacCarry = [NSMutableData new];
         _videoRaw = _audioRaw = _hint = VG_NO_TIME;
         _videoLastDuration = 3000;
+        _rawVideo = [NSMutableArray new];
+        _lastDTS = VG_NO_TIME;
         _chunk = malloc(188 * 512);
     }
     return self;
@@ -244,6 +249,7 @@ VGFileKind VGSniffFile(NSString *path) {
         return NO;
     }
     if (_audioPID >= 0 && !_packed && _audioType != 0x0F) _note = [NSString stringWithFormat:@"sound of type 0x%02x left out", _audioType];
+    [self fixLead];
     if (!_video.format && !_audio.format) {
         if (error) *error = VGError(VGErrorMedia, @"No picture or sound was found in the stream.");
         return NO;
@@ -286,6 +292,7 @@ VGFileKind VGSniffFile(NSString *path) {
         if (_audioOpen && _audioPES.length) [self audioPES];
         [self finishAU];
         [self releaseHeld:VG_NO_TIME];
+        if (_leadFixed) [self drainVideo];
     }
     return NO;
 }
@@ -465,7 +472,6 @@ VGFileKind VGSniffFile(NSString *path) {
         _videoRaw = outDTS - _videoShift;
     }
     if (_held && outDTS <= _heldDTS) outDTS = _heldDTS + 1;     // decode times must climb
-    if (outPTS < outDTS) outPTS = outDTS;                        // and no picture is shown before it is decoded
     [self releaseHeld:outDTS];
     _heldData = unit;
     _heldPTS = outPTS;
@@ -474,34 +480,63 @@ VGFileKind VGSniffFile(NSString *path) {
     _held = YES;
 }
 
-/// The held access unit goes out, now that the next one's time gives its duration.
+/// The held access unit goes out, now that the next one's time gives its duration. It is kept
+/// as a record first: some packagers stamp B-pictures with a decode time AFTER their display time
+/// (Apple's older sample streams do), which an MP4 cannot hold. All decode times are then moved
+/// back by one fixed lead, measured over the first two seconds, before any sample is made.
 - (void)releaseHeld:(int64_t)nextDTS {
     if (!_held) return;
     _held = NO;
     int64_t duration = nextDTS == VG_NO_TIME ? _videoLastDuration : nextDTS - _heldDTS;
     if (duration <= 0 || duration > kClock) duration = _videoLastDuration;
     _videoLastDuration = duration;
-
-    CMBlockBufferRef block = VGCopyBlock(_heldData.bytes, _heldData.length);
-    if (!block) return;
-    CMSampleTimingInfo timing = {CMTimeMake(duration, (int32_t)kClock), CMTimeMake(_heldPTS, (int32_t)kClock), CMTimeMake(_heldDTS, (int32_t)kClock)};
-    size_t size = _heldData.length;
-    CMSampleBufferRef sample = NULL;
-    OSStatus status = CMSampleBufferCreateReady(kCFAllocatorDefault, block, _video.format, 1, 1, &timing, 1, &size, &sample);
-    CFRelease(block);
+    if (_heldDTS - _heldPTS > _lead) _lead = _heldDTS - _heldPTS;
+    [_rawVideo addObject:@[_heldData, @(_heldPTS), @(_heldDTS), @(duration), @(_heldSync)]];
     _heldData = nil;
-    if (status != noErr || !sample) return;
-    if (!_heldSync) {
-        CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sample, true);
-        if (attachments && CFArrayGetCount(attachments) > 0) {
-            CFMutableDictionaryRef first = (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
-            CFDictionarySetValue(first, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
-            CFDictionarySetValue(first, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanTrue);
-        }
-    }
-    [_video.queue addObject:(__bridge id)sample];
-    CFRelease(sample);
     _videoSamples++;
+    if (_leadFixed) [self drainVideo];
+}
+
+/// Records into samples, with the lead applied.
+- (void)drainVideo {
+    for (NSArray *record in _rawVideo) {
+        NSData *data = record[0];
+        int64_t pts = [record[1] longLongValue], dts = [record[2] longLongValue] - _lead;
+        if (dts > pts) dts = pts;                                    // later and larger than the first two seconds showed
+        if (_lastDTS != VG_NO_TIME && dts <= _lastDTS) dts = _lastDTS + 1;
+        if (pts < dts) pts = dts;
+        _lastDTS = dts;
+        CMBlockBufferRef block = VGCopyBlock(data.bytes, data.length);
+        if (!block) continue;
+        CMSampleTimingInfo timing = {CMTimeMake([record[3] longLongValue], (int32_t)kClock), CMTimeMake(pts, (int32_t)kClock), CMTimeMake(dts, (int32_t)kClock)};
+        size_t size = data.length;
+        CMSampleBufferRef sample = NULL;
+        OSStatus status = CMSampleBufferCreateReady(kCFAllocatorDefault, block, _video.format, 1, 1, &timing, 1, &size, &sample);
+        CFRelease(block);
+        if (status != noErr || !sample) continue;
+        if (![record[4] boolValue]) {
+            CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sample, true);
+            if (attachments && CFArrayGetCount(attachments) > 0) {
+                CFMutableDictionaryRef first = (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
+                CFDictionarySetValue(first, kCMSampleAttachmentKey_NotSync, kCFBooleanTrue);
+                CFDictionarySetValue(first, kCMSampleAttachmentKey_DependsOnOthers, kCFBooleanTrue);
+            }
+        }
+        [_video.queue addObject:(__bridge id)sample];
+        CFRelease(sample);
+    }
+    [_rawVideo removeAllObjects];
+}
+
+/// Reads two seconds of picture ahead, fixes the lead, and turns what was read into samples.
+- (void)fixLead {
+    if (_leadFixed) return;
+    while (!_flushed && _rawVideo.count < 120 && _videoPID >= 0 && _videoType == 0x1B) {
+        if (![self pump]) break;
+    }
+    _leadFixed = YES;
+    if (_lead > 0) _note = [NSString stringWithFormat:@"%@decode times moved back %.3f s", _note ? [_note stringByAppendingString:@"; "] : @"", _lead / (double)kClock];
+    [self drainVideo];
 }
 
 #pragma mark sound
