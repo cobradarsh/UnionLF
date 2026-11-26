@@ -2,6 +2,7 @@
 // sheet, or GIF Stash.
 #import "VidGrabUI.h"
 #import <Photos/Photos.h>
+#import <objc/runtime.h>
 #import "VGSGifMaker.h"
 #include <notify.h>
 
@@ -13,22 +14,58 @@ static NSString *const kAlbum = @"VidGrab";
 BOOL VGDownloadRunning(void) { return gJob != nil; }
 NSString *VGLastDownloadResult(void) { return gLastResult; }
 
+static char kEndedKey, kDeliveringKey;
+
+/// YES the first time it is asked for a job: a job ends once, whoever ends it first.
+static BOOL VGClaimEnd(VGJob *job) {
+    if (objc_getAssociatedObject(job, &kEndedKey)) return NO;
+    objc_setAssociatedObject(job, &kEndedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return YES;
+}
+
+static BOOL VGEnded(VGJob *job) {
+    __block BOOL ended = NO;
+    if (NSThread.isMainThread) ended = objc_getAssociatedObject(job, &kEndedKey) != nil;
+    else dispatch_sync(dispatch_get_main_queue(), ^{ ended = objc_getAssociatedObject(job, &kEndedKey) != nil; });
+    return ended;
+}
+
+static void VGEndBackgroundTask(void) {
+    if (gBackground == UIBackgroundTaskInvalid) return;
+    UIBackgroundTaskIdentifier task = gBackground;
+    gBackground = UIBackgroundTaskInvalid;
+    [UIApplication.sharedApplication endBackgroundTask:task];
+}
+
+/// Stops a job at any stage: while it downloads, and also while the file waits for Photos
+/// (a permission question can stay on screen for as long as nobody answers it).
+static void VGCancelJob(VGJob *job) {
+    if (!job) return;
+    [job cancel];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!objc_getAssociatedObject(job, &kDeliveringKey) || !VGClaimEnd(job)) return;
+        gLastResult = [NSString stringWithFormat:@"cancelled while saving [%@]", job.report];
+        VGLog(@"download %@", gLastResult);
+        [job cleanUp];
+        if (gJob == job) gJob = nil;
+        [VGPill note:@"Cancelled" from:nil];
+        VGEndBackgroundTask();
+    });
+}
+
 void VGCancelDownload(void) {
-    [gJob cancel];
+    VGCancelJob(gJob);
 }
 
 static void VGEnd(VGJob *job, BOOL success, NSString *text) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (!VGClaimEnd(job)) return;
         gLastResult = [NSString stringWithFormat:@"%@: %@ [%@]", success ? @"ok" : @"failed", text, job.report];
         VGLog(@"download %@", gLastResult);
         [job cleanUp];
         if (gJob == job) gJob = nil;
         if (success) [VGPill succeed:text]; else [VGPill fail:text];
-        if (gBackground != UIBackgroundTaskInvalid) {
-            UIBackgroundTaskIdentifier task = gBackground;
-            gBackground = UIBackgroundTaskInvalid;
-            [UIApplication.sharedApplication endBackgroundTask:task];
-        }
+        VGEndBackgroundTask();
     });
 }
 
@@ -52,6 +89,7 @@ static PHAssetCollection *VGFindAlbum(void) {
 }
 
 static void VGWriteToPhotos(VGJob *job, NSURL *file, BOOL intoAlbum, void (^done)(BOOL ok, BOOL inAlbum, NSError *error)) {
+    if (VGEnded(job)) return;                               // cancelled while the permission question was up
     PHAssetCollection *album = intoAlbum ? VGFindAlbum() : nil;
     [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
         PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
@@ -260,7 +298,7 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
         }
     }];
     __weak VGJob *weakJob = job;
-    [VGPill showProgress:0.01 text:@"Getting ready" from:window onCancel:^{ [weakJob cancel]; }];
+    [VGPill showProgress:0.01 text:@"Getting ready" from:window onCancel:^{ VGCancelJob(weakJob); }];
 
     __block CFAbsoluteTime lastShown = 0;
     job.onProgress = ^(double fraction, NSString *stage) {
@@ -290,6 +328,7 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
             VGEnd(job, NO, error.localizedDescription ?: @"The video could not be saved.");
             return;
         }
+        dispatch_sync(dispatch_get_main_queue(), ^{ objc_setAssociatedObject(job, &kDeliveringKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC); });
         if (delivery == VGDeliverPhotos) {
             dispatch_async(dispatch_get_main_queue(), ^{ VGSaveToPhotos(job, file, window); });
         } else if (delivery == VGDeliverShare) {

@@ -163,6 +163,9 @@ VGFileKind VGSniffFile(NSString *path) {
     NSData *_sps, *_pps;
     BOOL _gotKeyFrame;
     NSMutableData *_heldData;                       // the access unit waiting for its duration
+    NSMutableData *_auData;                         // the picture being put together
+    BOOL _auHasSlice, _auKey, _auStamped, _stampFresh;
+    int64_t _auPTS, _auDTS, _stampPTS, _stampDTS;
     int64_t _heldPTS, _heldDTS;
     BOOL _held, _heldSync;
     int64_t _videoRaw, _videoShift, _videoLastDuration;
@@ -281,6 +284,7 @@ VGFileKind VGSniffFile(NSString *path) {
     if (!_packed) {
         if (_videoOpen && _videoPES.length) [self videoPES];
         if (_audioOpen && _audioPES.length) [self audioPES];
+        [self finishAU];
         [self releaseHeld:VG_NO_TIME];
     }
     return NO;
@@ -375,22 +379,53 @@ VGFileKind VGSniffFile(NSString *path) {
               (long)_traced, (unsigned long)_videoPES.length, parsed ? @"ok" : @"unreadable", pts == VG_NO_TIME ? -1 : pts, dts == VG_NO_TIME ? -1 : dts,
               _videoPES.length > 7 ? b[7] : 0, units);
     }
-    if (!parsed || pts == VG_NO_TIME) return;
-
-    NSMutableData *unit = [NSMutableData dataWithCapacity:_videoPES.length - offset + 64];
-    __block BOOL hasPicture = NO, keyFrame = NO;
+    if (!parsed) return;
+    // A packet's time stamps belong to the first picture that BEGINS in it. Packagers do not all
+    // cut packets at picture boundaries: some start a packet with the last slices of the picture
+    // before. So pictures are told apart by their own markers, not by packets.
+    if (pts != VG_NO_TIME) {
+        _stampPTS = pts;
+        _stampDTS = dts;
+        _stampFresh = YES;
+    }
     VGEachNAL(b + offset, _videoPES.length - offset, ^(const uint8_t *nal, NSUInteger length) {
-        int type = nal[0] & 0x1F;
-        if (type == 7) { if (!self->_sps) self->_sps = [NSData dataWithBytes:nal length:length]; return; }
-        if (type == 8) { if (!self->_pps) self->_pps = [NSData dataWithBytes:nal length:length]; return; }
-        if (type == 9 || type == 12 || type == 10 || type == 11) return;       // delimiters and filler
-        if (type >= 1 && type <= 5) hasPicture = YES;
-        if (type == 5) keyFrame = YES;
-        uint8_t size[4] = {(uint8_t)(length >> 24), (uint8_t)(length >> 16), (uint8_t)(length >> 8), (uint8_t)length};
-        [unit appendBytes:size length:4];
-        [unit appendBytes:nal length:length];
+        [self videoNAL:nal length:length];
     });
-    if (!hasPicture) return;
+}
+
+- (void)videoNAL:(const uint8_t *)nal length:(NSUInteger)length {
+    int type = nal[0] & 0x1F;
+    BOOL slice = type == 1 || type == 5;
+    BOOL firstSlice = slice && length > 1 && (nal[1] & 0x80);      // first_mb_in_slice is 0: a new picture
+    // what opens a new picture once the current one has its slices
+    BOOL opens = type == 9 || ((type == 6 || type == 7 || type == 8 || type == 13 || (type >= 14 && type <= 18)) && _auHasSlice)
+              || (firstSlice && _auHasSlice);
+    if (opens || !_auData) {
+        [self finishAU];
+        _auData = [NSMutableData dataWithCapacity:16 * 1024];
+        _auHasSlice = NO;
+        _auKey = NO;
+        _auStamped = _stampFresh;
+        _auPTS = _stampPTS;
+        _auDTS = _stampDTS;
+        _stampFresh = NO;
+    }
+    if (type == 7) { if (!_sps) _sps = [NSData dataWithBytes:nal length:length]; return; }
+    if (type == 8) { if (!_pps) _pps = [NSData dataWithBytes:nal length:length]; return; }
+    if (type == 9 || type == 10 || type == 11 || type == 12) return;       // delimiters, end markers, filler
+    if (slice) _auHasSlice = YES;
+    if (type == 5) _auKey = YES;
+    uint8_t size[4] = {(uint8_t)(length >> 24), (uint8_t)(length >> 16), (uint8_t)(length >> 8), (uint8_t)length};
+    [_auData appendBytes:size length:4];
+    [_auData appendBytes:nal length:length];
+}
+
+/// The picture being put together is complete.
+- (void)finishAU {
+    NSMutableData *unit = _auData;
+    _auData = nil;
+    if (!unit || !_auHasSlice) return;
+    BOOL keyFrame = _auKey;
 
     if (!_video.format && _sps && _pps) {
         const uint8_t *sets[2] = {_sps.bytes, _pps.bytes};
@@ -407,19 +442,30 @@ VGFileKind VGSniffFile(NSString *path) {
         _gotKeyFrame = YES;
     }
 
-    int64_t rawDTS = VGUnwrap(dts, _videoRaw);
-    int64_t rawPTS = VGUnwrap(pts, rawDTS);
-    _videoRaw = rawDTS;
-    int64_t outDTS = rawDTS + _videoShift;
-    if (_held) {
-        // a jump in the clock (segments joined across a discontinuity): carry on where the last sample ends
-        if (outDTS < _heldDTS - kClock || outDTS > _heldDTS + 10 * kClock) {
-            int64_t shift = (_heldDTS + _videoLastDuration) - outDTS;
-            _videoShift += shift;
-            outDTS += shift;
+    int64_t outDTS, outPTS;
+    if (_auStamped) {
+        int64_t rawDTS = VGUnwrap(_auDTS, _videoRaw);
+        int64_t rawPTS = VGUnwrap(_auPTS, rawDTS);
+        _videoRaw = rawDTS;
+        outDTS = rawDTS + _videoShift;
+        if (_held) {
+            // a jump in the clock (segments joined across a discontinuity): carry on where the last sample ends
+            if (outDTS <= _heldDTS - kClock || outDTS > _heldDTS + 10 * kClock) {
+                int64_t shift = (_heldDTS + _videoLastDuration) - outDTS;
+                _videoShift += shift;
+                outDTS += shift;
+            }
         }
+        outPTS = rawPTS + _videoShift;
+    } else {
+        // a picture without a time of its own: right after the one before
+        if (!_held) return;
+        outDTS = _heldDTS + _videoLastDuration;
+        outPTS = outDTS;
+        _videoRaw = outDTS - _videoShift;
     }
-    int64_t outPTS = rawPTS + _videoShift;
+    if (_held && outDTS <= _heldDTS) outDTS = _heldDTS + 1;     // decode times must climb
+    if (outPTS < outDTS) outPTS = outDTS;                        // and no picture is shown before it is decoded
     [self releaseHeld:outDTS];
     _heldData = unit;
     _heldPTS = outPTS;

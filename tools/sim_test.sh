@@ -65,8 +65,14 @@ tail -2 "$OUT/boot.log"
 xcrun simctl ui "$UDID" appearance dark > /dev/null 2>&1 || true
 xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 > /dev/null 2>&1 || true
 xcrun simctl install "$UDID" "$OUT/VidGrabHost.app" || { echo "the host app did not install"; exit 1; }
-xcrun simctl privacy "$UDID" grant photos "$HOST" || echo "(could not grant Photos)"
-xcrun simctl privacy "$UDID" grant photos-add "$HOST" || true
+# A grant made before the app has ever run did not take on the 16.4 runtime (the permission
+# question came up anyway): start the app once without VidGrab, then grant.
+xcrun simctl launch "$UDID" "$HOST" > /dev/null 2>&1 || true
+sleep 4
+xcrun simctl terminate "$UDID" "$HOST" > /dev/null 2>&1 || true
+for service in photos photos-add; do
+  xcrun simctl privacy "$UDID" grant "$service" "$HOST" && echo "granted $service" || echo "(could not grant $service)"
+done
 defaults write com.apple.CrashReporter DialogType none > /dev/null 2>&1 || true
 
 REPORTS=~/Library/Logs/DiagnosticReports
@@ -159,6 +165,8 @@ shot 02-menu
 echo "  $(last 'press ')"; echo "  $(last 'menu:')"; echo "  $(last 'state:')"
 
 echo "== 3. Save to Photos (smallest quality, the whole stream)"
+cmd "photos"
+echo "  Photos access before: $(last 'photos:')"
 cmd "dismiss" "wait 1" "set quality 240" "photos" "press" "wait 1" "choose Save to Photos" "wait 2.5" "result"
 shot 03-progress
 echo "  before: $(last 'photos:')"; echo "  $(last 'result:')"
