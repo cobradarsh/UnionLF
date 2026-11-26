@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.35";
+NSString *const kWPVersion = @"1.0.36";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -57,27 +57,30 @@ static NSString *const kWPPhotoStyleLabels[] = {
 static NSInteger const kWPPhotoStyleCount = sizeof(kWPPhotoStyleLabels)/sizeof(kWPPhotoStyleLabels[0]);
 static NSString *WPPhotoStyleBrief(NSInteger i) {
     switch (i) {
-        case 1: return @"FLAVOUR — refined and eloquent: a rare, considered line with real finesse, the "
-                        "kind a well-read man with taste would say. Appreciate her beauty with elegance "
-                        "and a touch of poetry, never cliche.";
-        case 2: return @"FLAVOUR — bold and alpha: confidently admire her figure and the way she carries "
-                        "herself in that shot, a little daring, owning the compliment with magnetic "
-                        "self-assurance. Tasteful and adult, never crude, creepy or objectifying.";
-        case 3: return @"FLAVOUR — flirty and teasing: playful flirtation with a little tease that makes "
-                        "her grin, charged and fun, with an easy hook for her to reply to.";
-        case 4: return @"FLAVOUR — cheeky: a playful accusation, a mock complaint or a confident cold "
-                        "read about her from the photo ('you're definitely the one who...'), push-pull "
-                        "that teases her a little while making it obvious I'm into her.";
-        case 5: return @"FLAVOUR — story spin: turn the photo into a tiny scene or a playful 'what "
-                        "happens next' that puts me in the picture with her, a mini adventure she'll "
-                        "want to add to.";
-        case 6: return @"FLAVOUR — witty: clever wordplay, a sharp one-liner or the perfect caption for her photo, smart "
-                        "and funny, with the flirt riding on the wit. Wit means a fresh comparison or callback ('the wind "
-                        "is clearly on your payroll'), never a stock line.";
-        default: return @"FLAVOUR — the full blend: lead with HER, a specific, genuine compliment on something you can see "
-                        "about her (her smile, her hair, her style, how she wears that outfit), use the scene as the "
-                        "setup or foil for it, and finish with a flirty twist or tease. Well beyond what an average guy "
-                        "sends ('you look beautiful'); make it the line she can't leave on read.";
+        case 1: return @"FLAVOUR — refined and eloquent: one rare, considered line with real finesse, the kind a "
+                        "well-read man with taste would say. Appreciate her beauty through an image or comparison she has "
+                        "never heard, with elegance and a touch of poetry; never flowery and never a cliche (no goddess, "
+                        "angel or painting lines).";
+        case 2: return @"FLAVOUR — bold and alpha: confidently admire her figure and the way she carries herself in that "
+                        "shot, then own it with a confident claim or a plan that has her in it (where I'm taking her, "
+                        "what she owes me for that photo), magnetic and self-assured. Tasteful and adult, never crude, "
+                        "creepy or objectifying.";
+        case 3: return @"FLAVOUR — flirty and teasing: a charged, playful line that makes her grin: the compliment hidden "
+                        "inside a tease, a dare or a deal she has to answer, a little push-pull, with an easy hook for "
+                        "her to reply to.";
+        case 4: return @"FLAVOUR — cheeky: a playful accusation, a mock complaint or a confident cold read about her from "
+                        "one small detail in the photo ('you're definitely the one who...'), push-pull that teases her a "
+                        "little while making it obvious I'm into her.";
+        case 5: return @"FLAVOUR — story spin: turn one photo into a tiny scene with a twist (what happened just before "
+                        "the shot, what happens next, or where the two of us are an hour later) that stars her and puts "
+                        "me in it, a mini adventure she'll want to add to.";
+        case 6: return @"FLAVOUR — witty: a sharp one-liner, an unexpected comparison, a callback, or the caption the "
+                        "photo should have had, smart and funny, with the flirt riding on the wit. Fresh every time, "
+                        "never a stock line or a pun for its own sake.";
+        default: return @"FLAVOUR — the full blend: lead with HER and make the compliment unmistakable, but carry it on a "
+                        "twist instead of describing her: notice something about her or the moment that other men would "
+                        "miss, use the scene as the setup or foil, and finish with a flirty tease or an easy hook. Well "
+                        "beyond what an average guy sends; make it the line she screenshots for her friends.";
     }
 }
 

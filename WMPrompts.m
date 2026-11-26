@@ -265,34 +265,42 @@
                     "generic 'hey how's it going', no empty compliments on looks, no "
                     "negging, no over-the-top flattery. Organic, specific and sincere.";
         case WMReplyModePhotoOpener: {
-            // Her first, the scene second: 1.0.27 and earlier asked for the scene first, kept the compliment
-            // indirect and banned 'great smile', so the replies praised the view instead of her.
-            NSString *base = @"PHOTO OPENER (opening message from her photos). Look CLOSELY at HER first: her smile, eyes, "
-                    "hair, expression, outfit and style, how she carries herself; then where she is and what she's "
-                    "doing. Every reply must openly appreciate her beauty through one specific thing you can see "
-                    "about HER (that smile, that long hair, the way she carries that dress), so it's obvious I'm into "
-                    "HER, not the view; an outfit can frame the compliment, but the compliment lands on her. The line "
-                    "has to actually praise how she looks (stunning, gorgeous, flawless, unfair, or praise just as "
-                    "clear): merely naming her hair or smile is not a compliment, and a tease only works on top of "
-                    "that praise. The place is the setup, foil or punchline and it lands back on her: tie her to the "
-                    "scene around her in most replies. Give it a spark: a playful assumption, a cheeky accusation or "
-                    "mock complaint about that smile or that look, a tiny scene that puts me in the picture with her, "
-                    "a playful callback to a photo's caption (once at most), or a compliment with a twist. Vary the "
-                    "moves: use the 'the view lost to you' joke (outshine, upstaged, never stood a chance) at most "
-                    "once, and let at least one reply end on an easy hook she can answer. Use only what is really "
-                    "visible in her photos or written on her profile: never invent a place, outfit or prop, never "
-                    "name a landmark, city or venue unless that name is written on her profile (describe it instead: "
-                    "'that monastery on the cliff', 'those city lights'), and never state facts about a place or what "
-                    "she did there (hiked, flew, stayed). BANNED: a bare 'you're beautiful' or 'great smile' with "
-                    "nothing specific, 'nice pic', 'main character energy', stock lines like 'should be illegal', "
-                    "calling her a 'thing' or a 'view', pickup-line cliches, and anything crude, creepy or "
-                    "objectifying. Warm, confident, a little magnetic. Emojis, the way a real guy texts: each reply "
-                    "gets ONE emoji that fits its mood or the photo (a smirk, a wink, a grin, a laugh, heart eyes, "
-                    "looking eyes, sparkles, or one for the scene such as a mountain, a wave or city lights), dropped "
-                    "where he'd naturally put it, usually at the very end or right after the punchline. Two at the "
-                    "very most in one reply, a different emoji in each of the three, nothing suggestive, never a row "
-                    "of them, never one after every phrase, and never an emoji standing in for a word. Make the three "
-                    "about THREE DIFFERENT photos and three different moves.";
+            // Her first, the scene second (1.0.28: the replies praised the view instead of her). 1.0.36: they
+            // stated the obvious, describing her own photos back to her, so the photo is now only the setup
+            // and the praise lands through a twist.
+            NSString *base = @"PHOTO OPENER (opening message from her photos). Study her photos closely: HER first (her "
+                    "smile, eyes, expression, style, how she carries herself), then the place, the moment and the "
+                    "small details around her. But she knows what's in her own photos, so never describe them "
+                    "back to her ('you at the beach', 'love that dress', 'beautiful smile', 'looks like you love "
+                    "travelling', 'I see you...'): that is stating the obvious, and it's what every other man "
+                    "sends. Use what you notice as the SETUP for something she didn't see coming. Every reply "
+                    "must still leave her in no doubt that I find her beautiful, but the praise lands through the "
+                    "twist, never as a plain adjective stuck on something she can already see (gorgeous or "
+                    "stunning are fine inside a twist, never as the whole line). Ways in: what one look of hers "
+                    "did to me or my day, a playful accusation or mock complaint, a rule or verdict she has to "
+                    "answer for, a comparison she has never heard, a tiny scene that puts me in the picture with "
+                    "her, a guess at what happened just before or just after the shot, what the place itself "
+                    "would say about her, or a read of her personality from one small detail. The scene is the "
+                    "setup, foil or punchline and lands back on her. Use the 'the view lost to you' idea "
+                    "(outshine, upstaged, never stood a chance) at most once, a photo's caption at most once, and "
+                    "let at least one reply end on an easy hook she can answer. If a line would work on any woman "
+                    "with a similar photo, or she'd think 'yes, I know, I was there', rewrite it. Use only what "
+                    "is really in her photos or written on her profile: never invent a place, outfit or prop, "
+                    "never name a landmark, city or venue unless that name is written on her profile (call it by "
+                    "what it looks like instead: 'that monastery on the cliff', 'those city lights'), and never "
+                    "state facts about a place or what she did there (hiked, flew, stayed); a guess has to sound "
+                    "like a guess. BANNED: describing the photo back to her, a bare 'you're beautiful' or 'great "
+                    "smile', 'nice pic', 'main character energy', stock lines like 'should be illegal' or 'should "
+                    "come with a warning', calling her a 'thing' or a 'view', pickup-line cliches, and anything "
+                    "crude, creepy or objectifying. Warm, confident, a little magnetic, and genuinely creative. "
+                    "The examples in these instructions only show the idea: invent your own and never reuse them. "
+                    "Emojis, the way a real guy texts: each reply gets ONE emoji that fits its mood or the photo "
+                    "(a smirk, a wink, a grin, a laugh, heart eyes, looking eyes, sparkles, or one for the scene "
+                    "such as a mountain, a wave or city lights), dropped where he'd naturally put it, usually at "
+                    "the very end or right after the punchline. Two at the very most in one reply, a different "
+                    "emoji in each of the three, nothing suggestive, never a row of them, never one after every "
+                    "phrase, and never an emoji standing in for a word. Make the three about THREE DIFFERENT "
+                    "photos and three different moves.";
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
@@ -469,10 +477,11 @@
                          "rules. Read everything she actually shared, then write my opening "
                          "message to her.\n\n"];
         if (mode == WMReplyModePhotoOpener)
-            [p appendString:@"For THIS opener, base it on what you can SEE in her PHOTOS (how she looks first: her "
-                             "smile, hair, expression, outfit and style; then the place, setting, light and mood "
-                             "around her). A photo's caption can add to the joke, but don't build the opener on her "
-                             "written prompt answers. Every reply compliments HER; the scenery frames it.\n\n"];
+            [p appendString:@"For THIS opener, work from her PHOTOS: notice how she looks first (her smile, expression and "
+                             "style), then the place, the light and the moment around her, and use what you notice as the "
+                             "setup for a twist, never as a description. A photo's caption can add to the joke, but don't "
+                             "build the opener on her written prompt answers. Every reply compliments HER; the scenery "
+                             "frames it.\n\n"];
         if (transcript.length > 0)
             [p appendFormat:@"HER PROFILE TEXT (read on my phone, top to bottom):\n%@\n\n", transcript];
         if (hasImages)
