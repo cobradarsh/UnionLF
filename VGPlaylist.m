@@ -126,7 +126,7 @@ VGMaster *VGParseMaster(NSString *text, NSURL *base) {
     VGVariant *pending = nil;
     for (NSString *line in VGLines(text)) {
         if ([line hasPrefix:@"#EXT-X-STREAM-INF:"]) {
-            NSDictionary *a = VGParseAttributes(VGAfterColon(line));
+            NSDictionary<NSString *, NSString *> *a = VGParseAttributes(VGAfterColon(line));
             pending = [VGVariant new];
             pending.bandwidth = [a[@"AVERAGE-BANDWIDTH"] ?: a[@"BANDWIDTH"] longLongValue];
             NSArray<NSString *> *size = [[a[@"RESOLUTION"] lowercaseString] componentsSeparatedByString:@"x"];
@@ -137,7 +137,7 @@ VGMaster *VGParseMaster(NSString *text, NSURL *base) {
             pending.codecs = a[@"CODECS"];
             pending.audioGroup = a[@"AUDIO"];
         } else if ([line hasPrefix:@"#EXT-X-MEDIA:"]) {
-            NSDictionary *a = VGParseAttributes(VGAfterColon(line));
+            NSDictionary<NSString *, NSString *> *a = VGParseAttributes(VGAfterColon(line));
             if (![[a[@"TYPE"] uppercaseString] isEqualToString:@"AUDIO"] || !a[@"GROUP-ID"]) continue;
             VGRendition *r = [VGRendition new];
             r.groupID = a[@"GROUP-ID"];
@@ -186,7 +186,7 @@ VGMedia *VGParseMedia(NSString *text, NSURL *base) {
         } else if ([line hasPrefix:@"#EXT-X-BYTERANGE:"]) {
             VGParseRange(VGAfterColon(line), &rangeLength, &rangeOffset);
         } else if ([line hasPrefix:@"#EXT-X-MAP:"]) {
-            NSDictionary *a = VGParseAttributes(VGAfterColon(line));
+            NSDictionary<NSString *, NSString *> *a = VGParseAttributes(VGAfterColon(line));
             NSString *uri = a[@"URI"];
             if (!uri.length) continue;
             NSString *identity = [NSString stringWithFormat:@"%@|%@", uri, a[@"BYTERANGE"] ?: @""];
