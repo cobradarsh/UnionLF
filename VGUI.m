@@ -488,9 +488,15 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
 - (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)other { return YES; }
 @end
 
+/// Recognizers VidGrab never touches: scrolling and zooming, and everything iOS itself puts on
+/// views (scroll views' helpers, the gate for system gestures at the screen's edges). What is
+/// left are plain taps and holds and the recognizers an app has written itself.
 static BOOL VGIsMovement(UIGestureRecognizer *recognizer) {
-    return [recognizer isKindOfClass:UIPanGestureRecognizer.class] || [recognizer isKindOfClass:UIPinchGestureRecognizer.class]
-        || [recognizer isKindOfClass:UIRotationGestureRecognizer.class] || [recognizer isKindOfClass:UISwipeGestureRecognizer.class];
+    if ([recognizer isKindOfClass:UIPanGestureRecognizer.class] || [recognizer isKindOfClass:UIPinchGestureRecognizer.class]
+        || [recognizer isKindOfClass:UIRotationGestureRecognizer.class] || [recognizer isKindOfClass:UISwipeGestureRecognizer.class]) return YES;
+    if ([recognizer isMemberOfClass:UITapGestureRecognizer.class] || [recognizer isMemberOfClass:UILongPressGestureRecognizer.class]) return NO;
+    NSString *name = NSStringFromClass(recognizer.class);
+    return [name hasPrefix:@"UI"] || [name hasPrefix:@"_UI"] || [name hasPrefix:@"_"];
 }
 
 /// The app's tap and hold recognizers on the views under a point (scrolling and zooming are left alone).

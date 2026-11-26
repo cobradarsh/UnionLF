@@ -202,9 +202,15 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
     VGLog(@"mux: %lu tracks, session starts at %.3f s, writer %@", (unsigned long)n, CMTimeGetSeconds(start), ok ? @"started" : writer.error.localizedDescription);
     NSString *why = nil;
     NSUInteger appended = 0;
+    NSInteger idle = 0;
     while (ok) {
+        // The writer keeps picture and sound side by side in the file and says, track by track,
+        // when it wants more. Of the tracks it is ready for, the one whose next sample is earliest
+        // goes next; insisting on strict time order across tracks makes the writer wait for the
+        // other track while we wait for this one.
         NSInteger pick = -1;
         CMTime best = kCMTimeInvalid;
+        BOOL anyLeft = NO;
         for (NSUInteger i = 0; i < n; i++) {
             if (!next[i]) {
                 if (!finished[i]) {                         // tell the writer at once: it stops waiting for this track
@@ -213,29 +219,35 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
                 }
                 continue;
             }
+            anyLeft = YES;
+            if (!inputs[i].isReadyForMoreMediaData) continue;
             CMTime time = CMTimeAdd(VGOrderTime(next[i]), shift[i]);
             if (pick < 0 || CMTimeCompare(time, best) < 0) {
                 pick = (NSInteger)i;
                 best = time;
             }
         }
-        if (pick < 0) break;
+        if (!anyLeft) break;
         if (cancelled && cancelled()) {
             ok = NO;
             why = @"Cancelled.";
             break;
         }
-        AVAssetWriterInput *input = inputs[(NSUInteger)pick];
-        NSInteger waited = 0;
-        while (!input.isReadyForMoreMediaData && writer.status == AVAssetWriterStatusWriting && waited < 30000) {
-            usleep(2000);
-            waited += 2;
-        }
-        if (writer.status != AVAssetWriterStatusWriting || !input.isReadyForMoreMediaData) {
+        if (writer.status != AVAssetWriterStatusWriting) {
             ok = NO;
             why = writer.error.localizedDescription ?: @"Writing the video stopped.";
             break;
         }
+        if (pick < 0) {                                     // the writer is busy with what it has: a moment
+            usleep(1000);
+            if (++idle > 30000) {
+                ok = NO;
+                why = @"Writing the video stopped: the writer took no more data.";
+            }
+            continue;
+        }
+        idle = 0;
+        AVAssetWriterInput *input = inputs[(NSUInteger)pick];
         CMSampleBufferRef sample = next[pick];
         if (CMTimeCompare(shift[pick], kCMTimeZero) != 0) {
             CMSampleBufferRef moved = VGShifted(sample, shift[pick]);

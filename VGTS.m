@@ -511,7 +511,7 @@ VGFileKind VGSniffFile(NSString *path) {
     const uint8_t *b = _aacCarry.bytes;
     NSUInteger n = _aacCarry.length, pos = 0;
 
-    enum { kBatch = 48 };
+    enum { kBatch = 6 };                              // an eighth of a second of sound per buffer: the writer interleaves it finely
     NSUInteger offsets[kBatch], sizes[kBatch];
     NSUInteger count = 0;
     while (n - pos >= 10) {
@@ -587,7 +587,7 @@ VGFileKind VGSniffFile(NSString *path) {
     size_t total = 0;
     for (NSUInteger i = 0; i < count; i++) total += sizes[i];
     uint8_t *joined = malloc(total);
-    AudioStreamPacketDescription packets[48];
+    AudioStreamPacketDescription packets[8];
     size_t at = 0;
     for (NSUInteger i = 0; i < count; i++) {
         memcpy(joined + at, base + offsets[i], sizes[i]);
