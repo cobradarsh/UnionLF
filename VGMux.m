@@ -203,6 +203,7 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
     NSString *why = nil;
     NSUInteger appended = 0;
     NSInteger idle = 0;
+    double shown = 0;
     while (ok) {
         // The writer keeps picture and sound side by side in the file and says, track by track,
         // when it wants more. Of the tracks it is ready for, the one whose next sample is earliest
@@ -261,8 +262,12 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
         CFRelease(sample);
         next[pick] = ok ? [tracks[(NSUInteger)pick] copyNextSample] : NULL;
         if (ok && progress && (++appended % 60) == 0 && expectedSeconds > 0) {
+            // the tracks take turns, so the newest sample's time can be behind the last one shown
             double done = CMTimeGetSeconds(CMTimeSubtract(best, start)) / expectedSeconds;
-            progress(MAX(0.0, MIN(1.0, done)));
+            if (done > shown) {
+                shown = done;
+                progress(MAX(0.0, MIN(1.0, done)));
+            }
         }
     }
     for (NSUInteger i = 0; i < n; i++) {
@@ -278,6 +283,10 @@ BOOL VGMuxTracks(NSArray<id<VGTrack>> *tracks, NSURL *output, double expectedSec
         }
     }
     if (!ok) {
+        NSError *inner = writer.error.userInfo[NSUnderlyingErrorKey];
+        VGLog(@"mux failed after %lu buffers: %@; writer error %@ %ld (%@); underneath %@ %ld", (unsigned long)appended, why,
+              writer.error.domain, (long)writer.error.code, writer.error.localizedFailureReason ?: writer.error.localizedDescription,
+              inner.domain, (long)inner.code);
         [writer cancelWriting];
         [NSFileManager.defaultManager removeItemAtURL:output error:NULL];
         BOOL stopped = cancelled && cancelled();

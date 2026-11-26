@@ -19,10 +19,10 @@ if [ "$MODE" = "mac" ]; then
   echo "== build for the Mac ($(uname -m))"
   xcrun clang -fobjc-arc -O1 -g $WARN $FRAMEWORKS -o "$OUT/engine_test" $SOURCES 2>&1 | tee "$OUT/build.log"
   [ -x "$OUT/engine_test" ] || { echo "build FAILED"; exit 1; }
-  VIDGRAB_DIR="$OUT" VIDGRAB_STDERR=1 "$OUT/engine_test" "$OUT/files" 2> "$OUT/engine.log" | tee "$OUT/result.txt"
+  VIDGRAB_DIR="$OUT" VIDGRAB_STDERR=1 VIDGRAB_TS_TRACE=1 "$OUT/engine_test" "$OUT/files" 2> "$OUT/engine.log" | tee "$OUT/result.txt"
   status=${PIPESTATUS[0]}
   echo "== the engine's own log"
-  tail -80 "$OUT/engine.log"
+  grep -E "ts trace|mux|job|transport|packed" "$OUT/engine.log" | cut -c1-420 | tail -150
   ls -la "$OUT/files" 2>/dev/null
   echo "exit status $status"
   exit "$status"

@@ -166,7 +166,7 @@ VGFileKind VGSniffFile(NSString *path) {
     int64_t _heldPTS, _heldDTS;
     BOOL _held, _heldSync;
     int64_t _videoRaw, _videoShift, _videoLastDuration;
-    NSInteger _videoSamples;
+    NSInteger _videoSamples, _traced;
 
     // sound
     NSMutableData *_aacCarry;
@@ -359,7 +359,23 @@ VGFileKind VGSniffFile(NSString *path) {
     int64_t pts, dts;
     NSUInteger offset;
     const uint8_t *b = _videoPES.bytes;
-    if (!VGParsePES(b, _videoPES.length, &pts, &dts, &offset) || pts == VG_NO_TIME) return;
+    BOOL parsed = VGParsePES(b, _videoPES.length, &pts, &dts, &offset);
+    if (_traced < 14 && getenv("VIDGRAB_TS_TRACE")) {
+        // what the stream's packets hold, for telling one packager's habits from another's
+        _traced++;
+        NSMutableString *units = [NSMutableString new];
+        if (parsed) {
+            VGEachNAL(b + offset, _videoPES.length - offset, ^(const uint8_t *nal, NSUInteger length) {
+                int type = nal[0] & 0x1F;
+                BOOL firstSlice = (type == 1 || type == 5) && length > 1 && (nal[1] & 0x80);
+                [units appendFormat:@" %d%@:%lu", type, firstSlice ? @"*" : @"", (unsigned long)length];
+            });
+        }
+        VGLog(@"ts trace: picture packet %ld, %lu bytes, header %@, pts %lld dts %lld, flags 0x%02x, units (type:size, * starts a picture):%@",
+              (long)_traced, (unsigned long)_videoPES.length, parsed ? @"ok" : @"unreadable", pts == VG_NO_TIME ? -1 : pts, dts == VG_NO_TIME ? -1 : dts,
+              _videoPES.length > 7 ? b[7] : 0, units);
+    }
+    if (!parsed || pts == VG_NO_TIME) return;
 
     NSMutableData *unit = [NSMutableData dataWithCapacity:_videoPES.length - offset + 64];
     __block BOOL hasPicture = NO, keyFrame = NO;

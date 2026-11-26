@@ -242,10 +242,20 @@ AVPlayerLayer *VGBadgeLayerAtPoint(UIWindow *window, CGPoint point) {
 
 void VGRefreshBadgesSoon(void) {
     static atomic_bool pending;
+    static atomic_int burst;
     if (atomic_exchange(&pending, true)) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         atomic_store(&pending, false);
         for (AVPlayerLayer *layer in VGKnownPlayerLayers()) VGLayoutBadge(layer);
+        // A layer says "ready" a moment after its player starts, and nothing announces that moment.
+        // So each occasion is followed by three more looks; a newer occasion replaces the older one's.
+        int mine = atomic_fetch_add(&burst, 1) + 1;
+        for (NSNumber *delay in @[@0.3, @1.0, @2.5]) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if (atomic_load(&burst) != mine) return;
+                for (AVPlayerLayer *layer in VGKnownPlayerLayers()) VGLayoutBadge(layer);
+            });
+        }
     });
 }
 
@@ -276,7 +286,9 @@ static void VGSetPlayer(AVPlayerLayer *self, SEL _cmd, AVPlayer *player) {
 static void (*gLayout)(AVPlayerLayer *, SEL);
 static void VGLayout(AVPlayerLayer *self, SEL _cmd) {
     gLayout(self, _cmd);
-    if (NSThread.isMainThread && objc_getAssociatedObject(self, &kBadgeKey)) VGLayoutBadge(self);
+    if (!NSThread.isMainThread) return;
+    if (objc_getAssociatedObject(self, &kBadgeKey)) VGLayoutBadge(self);
+    else if (atomic_load(&gEnabled) && atomic_load(&gBadgeOn) && self.player) VGRefreshBadgesSoon();     // no button yet: maybe it is due
 }
 
 NSString *VGCaptureHookSummary(void) {
