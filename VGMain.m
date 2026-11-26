@@ -10,6 +10,7 @@ __attribute__((constructor)) static void VidGrabInit(void) {
         if (![main.bundlePath.pathExtension isEqualToString:@"app"]) return;
         if ([identifier isEqualToString:@"com.apple.springboard"]) return;
         VGCaptureInstall();
+        VGPicturesInstall();
         VGGesturesInstall();
         VGDebugStart();
         VGLog(@"VidGrab %@ in %@ (%@): %@, %@", VG_VERSION, identifier, main.executablePath.lastPathComponent,

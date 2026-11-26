@@ -11,6 +11,12 @@
 }
 
 - (NSString *)shortName {
+    if (self.isPicture) {
+        NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObject:@"picture"];
+        if (self.url.host.length && !self.url.isFileURL) [parts addObject:self.url.host];
+        if (self.pictureWidth > 0 && self.pictureHeight > 0) [parts addObject:[NSString stringWithFormat:@"%ld×%ld", (long)self.pictureWidth, (long)self.pictureHeight]];
+        return [parts componentsJoinedByString:@" · "];
+    }
     if (!self.url) return self.asset ? @"video on this iPhone" : @"video";
     if (self.url.isFileURL) return @"video on this iPhone";
     NSString *extension = self.url.pathExtension.lowercaseString;
@@ -19,6 +25,80 @@
 }
 
 @end
+
+#pragma mark - where a picture's original is
+
+static NSURL *VGWithPath(NSURL *url, NSString *path, BOOL keepQuery) {
+    NSURLComponents *parts = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES];
+    if (!parts) return nil;
+    parts.percentEncodedPath = path;
+    if (!keepQuery) parts.query = nil;
+    return parts.URL;
+}
+
+NSArray<NSURL *> *VGPictureCandidateURLs(NSURL *url) {
+    if (!url) return @[];
+    NSString *scheme = url.scheme.lowercaseString;
+    if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return url.isFileURL ? @[url] : @[];
+    NSMutableArray<NSURL *> *list = [NSMutableArray new];
+    void (^add)(NSURL *) = ^(NSURL *candidate) {
+        if (candidate && ![list containsObject:candidate]) [list addObject:candidate];
+    };
+    NSString *host = url.host.lowercaseString ?: @"";
+    NSString *path = url.percentEncodedPath ?: @"";
+    NSArray<NSString *> *pieces = [path componentsSeparatedByString:@"/"];        // "", size, …
+
+    if ([host hasSuffix:@"pinimg.com"] && pieces.count > 2 && pieces[1].length) {
+        // i.pinimg.com/236x/ab/cd/ef/<hash>.jpg: the first folder is the size, "originals" the upload
+        NSString *rest = [[pieces subarrayWithRange:NSMakeRange(2, pieces.count - 2)] componentsJoinedByString:@"/"];
+        for (NSString *size in @[@"originals", @"1200x", @"736x"]) {
+            if ([pieces[1] isEqualToString:size]) break;           // already this size: nothing larger after it
+            add(VGWithPath(url, [NSString stringWithFormat:@"/%@/%@", size, rest], NO));
+        }
+    } else if ([host isEqualToString:@"pbs.twimg.com"] && [path hasPrefix:@"/media/"]) {
+        // pbs.twimg.com/media/<id>?format=jpg&name=small, or the older /media/<id>.jpg:small
+        NSString *name = path.lastPathComponent;
+        NSString *format = nil;
+        for (NSURLQueryItem *item in [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES].queryItems) {
+            if ([item.name isEqualToString:@"format"]) format = item.value;
+        }
+        NSRange colon = [name rangeOfString:@":"];
+        if (colon.location != NSNotFound) name = [name substringToIndex:colon.location];
+        if (name.pathExtension.length) {
+            format = format ?: name.pathExtension;
+            name = name.stringByDeletingPathExtension;
+        }
+        for (NSString *size in @[@"orig", @"4096x4096", @"large"]) {
+            NSURLComponents *parts = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES];
+            parts.percentEncodedPath = [@"/media/" stringByAppendingString:name];
+            parts.queryItems = @[[NSURLQueryItem queryItemWithName:@"format" value:format ?: @"jpg"], [NSURLQueryItem queryItemWithName:@"name" value:size]];
+            add(parts.URL);
+        }
+    } else if ([host isEqualToString:@"pbs.twimg.com"] && [path hasPrefix:@"/profile_images/"]) {
+        // …/<name>_normal.jpg, _bigger, _200x200, _400x400: without the ending, the upload itself
+        NSString *file = path.lastPathComponent;
+        for (NSString *ending in @[@"_normal", @"_bigger", @"_mini", @"_200x200", @"_400x400"]) {
+            NSRange found = [file rangeOfString:[ending stringByAppendingString:@"."]];
+            if (found.location == NSNotFound) continue;
+            NSString *plain = [file stringByReplacingCharactersInRange:NSMakeRange(found.location, ending.length) withString:@""];
+            add(VGWithPath(url, [[path stringByDeletingLastPathComponent] stringByAppendingPathComponent:plain], NO));
+            break;
+        }
+    } else if ([host isEqualToString:@"preview.redd.it"] && path.length > 1) {
+        // preview.redd.it/<name>.jpg?width=640&…&s=<signature> is a scaled copy of i.redd.it/<name>.jpg
+        // (newer names carry the post's title first: <title>-v0-<name>.jpeg)
+        NSURLComponents *parts = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES];
+        parts.host = @"i.redd.it";
+        parts.query = nil;
+        NSString *file = path.lastPathComponent;
+        NSRange marker = [file rangeOfString:@"-v0-" options:NSBackwardsSearch];
+        if (marker.location != NSNotFound) file = [file substringFromIndex:NSMaxRange(marker)];
+        parts.percentEncodedPath = [@"/" stringByAppendingString:file];
+        add(parts.URL);
+    }
+    add(url);
+    return list;
+}
 
 @interface VGJob ()
 - (void)note:(NSString *)format, ... NS_FORMAT_FUNCTION(1, 2);

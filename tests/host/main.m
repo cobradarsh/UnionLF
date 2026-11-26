@@ -13,6 +13,32 @@
 + (Class)layerClass { return AVPlayerLayer.class; }
 @end
 
+/// An image view that says where its picture came from, as image libraries' views do.
+@interface WebImageView : UIImageView
+@property (nonatomic, strong) NSURL *imageURL;
+@end
+@implementation WebImageView
+@end
+
+static UIImage *TestPicture(CGSize pixels, UIColor *from, UIColor *to, NSString *text) {
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = 1;
+    format.opaque = YES;
+    return [[[UIGraphicsImageRenderer alloc] initWithSize:pixels format:format] imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        CGFloat r1, g1, b1, a1, r2, g2, b2, a2;
+        [from getRed:&r1 green:&g1 blue:&b1 alpha:&a1];
+        [to getRed:&r2 green:&g2 blue:&b2 alpha:&a2];
+        for (int y = 0; y < (int)pixels.height; y += 4) {
+            CGFloat t = y / pixels.height;
+            [[UIColor colorWithRed:r1 + (r2 - r1) * t green:g1 + (g2 - g1) * t blue:b1 + (b2 - b1) * t alpha:1] setFill];
+            UIRectFill(CGRectMake(0, y, pixels.width, 4));
+        }
+        NSDictionary *style = @{NSFontAttributeName: [UIFont systemFontOfSize:pixels.width / 8 weight:UIFontWeightBold],
+                                NSForegroundColorAttributeName: UIColor.whiteColor};
+        [text drawAtPoint:CGPointMake(pixels.width / 12, pixels.height / 2 - pixels.width / 12) withAttributes:style];
+    }];
+}
+
 @interface FeedController : UIViewController
 @property (nonatomic, strong) AVPlayer *player;
 @property (nonatomic, strong) UILabel *status;
@@ -97,9 +123,43 @@
     body.numberOfLines = 0;
     body.textColor = [UIColor colorWithWhite:1 alpha:0.85];
     body.font = [UIFont systemFontOfSize:16];
-    body.text = @"A test pattern with a counter and beeps, played from a public sample stream. The rest of this feed is text.";
+    body.text = @"A test pattern with a counter and beeps, played from a public sample stream. Below it two pictures and a face.";
     [scroll addSubview:body];
-    scroll.contentSize = CGSizeMake(width, CGRectGetMaxY(body.frame) + 500);
+
+    // two pictures in rounded cards, drawn zoomed in (aspect fill) as feeds do, and a small face that gets no button
+    CGFloat top = CGRectGetMaxY(body.frame) + 8, tile = (width - 16 * 3) / 2;
+    UIImageView *face = [[UIImageView alloc] initWithFrame:CGRectMake(20, top, 40, 40)];
+    UIGraphicsImageRendererFormat *faceFormat = [UIGraphicsImageRendererFormat preferredFormat];
+    faceFormat.scale = 3;
+    face.image = [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(40, 40) format:faceFormat] imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [UIColor.systemTealColor setFill];
+        [[UIBezierPath bezierPathWithOvalInRect:CGRectMake(0, 0, 40, 40)] fill];
+    }];
+    [scroll addSubview:face];
+    top += 52;
+    for (int i = 0; i < 2; i++) {
+        UIView *card = [[UIView alloc] initWithFrame:CGRectMake(16 + i * (tile + 16), top, tile, round(tile * 1.35))];
+        card.layer.cornerRadius = 14;
+        card.layer.masksToBounds = YES;
+        [scroll addSubview:card];
+        UIImageView *picture = i == 0 ? [UIImageView new] : [WebImageView new];
+        picture.frame = card.bounds;
+        picture.contentMode = UIViewContentModeScaleAspectFill;
+        [card addSubview:picture];
+        if (i == 0) {
+            picture.image = TestPicture(CGSizeMake(600, 900), UIColor.systemPinkColor, UIColor.systemPurpleColor, @"On screen");
+        } else {
+            // a picture from the web: VidGrab should fetch it again from its address rather than keep the copy shown
+            NSURL *address = [NSURL URLWithString:NSProcessInfo.processInfo.environment[@"VG_PICTURE_URL"] ?: @"https://picsum.photos/id/237/600/800.jpg"];
+            ((WebImageView *)picture).imageURL = address;
+            picture.image = TestPicture(CGSizeMake(300, 400), UIColor.systemOrangeColor, UIColor.systemRedColor, @"Web");
+            [[NSURLSession.sharedSession dataTaskWithURL:address completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                UIImage *loaded = data ? [UIImage imageWithData:data] : nil;
+                if (loaded) dispatch_async(dispatch_get_main_queue(), ^{ picture.image = loaded; });
+            }] resume];
+        }
+    }
+    scroll.contentSize = CGSizeMake(width, top + round(tile * 1.35) + 400);
 
     NSString *address = NSProcessInfo.processInfo.environment[@"VG_PLAY_URL"]
         ?: @"https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8";

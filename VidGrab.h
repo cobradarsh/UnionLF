@@ -15,7 +15,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-#define VG_VERSION @"2.1.0"
+#define VG_VERSION @"2.2.0"
 
 #pragma mark - core (VGCore.m)
 
@@ -46,7 +46,8 @@ typedef NS_ENUM(NSInteger, VGErrorCode) {
 + (void)reload;
 + (BOOL)enabled;            // master switch and this app's switch
 + (BOOL)badge;              // the download button on videos
-+ (NSInteger)badgeCorner;   // 0 top left, 1 top right, 2 bottom left, 3 bottom right
++ (BOOL)pictures;           // the download button on pictures
++ (NSInteger)badgeCorner;   // 0 top left, 1 top right, 2 bottom left, 3 bottom right (Automatic already worked out)
 + (NSInteger)holdFingers;   // 0 off, 1, 2
 + (double)holdTime;
 + (BOOL)blockAppHold;       // stop the app's own hold action when VidGrab takes the hold
@@ -169,14 +170,22 @@ NSDictionary *VGDescribeFile(NSURL *file);
 
 #pragma mark - a download (VGJob.m)
 
-/// Where a video comes from: what the player on screen was given.
+/// Where a video comes from: what the player on screen was given. Or a picture: what an image
+/// view shows, and the address it was loaded from when the app tells.
 @interface VGSource : NSObject
 @property (nonatomic, strong, nullable) NSURL *url;
 @property (nonatomic, copy, nullable) NSDictionary<NSString *, NSString *> *headers;
 @property (nonatomic, strong, nullable) AVAsset *asset;      // when there is no usable URL
+@property (nonatomic) BOOL isPicture;
+@property (nonatomic, strong, nullable) id picture;          // the UIImage on screen (pictures only)
+@property (nonatomic) NSInteger pictureWidth, pictureHeight; // its pixels
 @property (nonatomic, readonly) BOOL looksLikeHLS;
-@property (nonatomic, readonly) NSString *shortName;         // "video.twimg.com · m3u8"
+@property (nonatomic, readonly) NSString *shortName;         // "video.twimg.com · m3u8", "picture · i.pinimg.com · 474×711"
 @end
+
+/// The addresses to try for a picture, the largest first: apps load pictures in a size that fits
+/// the screen, and some image servers hand out the original under a related address.
+NSArray<NSURL *> *VGPictureCandidateURLs(NSURL *url);
 
 @interface VGJob : NSObject
 - (instancetype)initWithSource:(VGSource *)source;

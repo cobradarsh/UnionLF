@@ -26,7 +26,7 @@ HOST=com.adarsh.vidgrabhost
 ARCH=$(uname -m)
 SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
 FLAGS="-arch $ARCH -mios-simulator-version-min=15.0 -isysroot $SDK -O1 -g -Wall -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable"
-SOURCES="VGMain.m VGCore.m VGPlaylist.m VGFetch.m VGTS.m VGMux.m VGJob.m VGCapture.m VGUI.m VGDeliver.m VGDebug.m VGSGifMaker.m VGSCommon.m"
+SOURCES="VGMain.m VGCore.m VGPlaylist.m VGFetch.m VGTS.m VGMux.m VGJob.m VGCapture.m VGUI.m VGDeliver.m VGPicture.m VGDebug.m VGSGifMaker.m VGSCommon.m"
 FRAMEWORKS="-framework UIKit -framework Foundation -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework Photos -framework ImageIO -framework Accelerate"
 echo "== build for the simulator ($ARCH)"
 (
@@ -221,7 +221,28 @@ echo "  switched off: $(last '    0:')"
 OFFLINE=$(last "    0:")
 cmd "set badge 1" "set badgeCorner 1" "wait 1" "layers"
 
-echo "== 7. a hold away from the video"
+echo "== 6b. pictures: a button on each, none on the small face; one saved as shown, one from its address"
+cmd "set badgeCorner -1" "wait 1" "state" "pictures" "scan"
+shot 10b-picture-buttons
+grep -F "    picture " "$LOG" | tail -4 | cut -c21- | sed 's/^/  /'
+echo "  $(last 'pictures:')"; echo "  $(last 'state:')"
+PICTURES=$(last "pictures:")
+cmd "pictap 0" "wait 1.2" "menu"
+shot 10c-picture-menu
+echo "  $(last 'pictap ')"; echo "  $(last 'menu:')"
+cmd "choose Save to Photos" "wait 1"
+wait_result 60 || echo "  the first picture did not end in a minute"
+echo "  $(last 'result:')"
+cmd "pictap 1" "wait 1.2" "choose Save to Photos" "wait 1"
+wait_result 60 || echo "  the second picture did not end in a minute"
+cmd "photos"
+echo "  $(last 'pictap ')"; echo "  $(last 'result:')"; echo "  $(last 'photos:')"
+cmd "set pictures 0" "wait 1" "pictures"
+PICTURESOFF=$(last "pictures:")
+echo "  switched off: $PICTURESOFF"
+cmd "set pictures 1" "wait 1"
+
+echo "== 7. a hold away from the video (on a picture: VidGrab leaves holds on pictures to the app)"
 cmd "press 200 760"
 echo "  $(last 'press ')"
 
@@ -253,6 +274,12 @@ check "the same download twice is not queued twice"      "queue: Already in the 
 check "the queue starts the next one by itself"          "queue: starting the next one, 0 left"
 if [ "$(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null || true)" -ge 3 ]; then echo "PASS  all three queued downloads finished"; else echo "FAIL  all three queued downloads finished ($(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null) of 3)"; FAILED=$((FAILED + 1)); fi
 check "under a solid panel the button takes no tap"      "no download button there"
+check "the picture hooks are in"                         "pictures: 2 hooks"
+check "a picture's menu has its entries"                 "menu: Save to Photos | Share… | Copy Picture"
+check "a picture was saved as shown, into the album"     "ok: Saved to Photos · VidGrab album [as shown: 600x900"
+check "a picture was fetched again from its address"     "from https://picsum.photos/id/237/600/800.jpg"
+if echo "$PICTURES" | grep -q ", 2 with a button"; then echo "PASS  both pictures have a button, the small face none"; else echo "FAIL  both pictures have a button, the small face none ($PICTURES)"; FAILED=$((FAILED + 1)); fi
+if echo "$PICTURESOFF" | grep -q ", 0 with a button"; then echo "PASS  the switch takes the picture buttons away"; else echo "FAIL  the switch takes the picture buttons away ($PICTURESOFF)"; FAILED=$((FAILED + 1)); fi
 if [ "$BUTTON1" != "$BUTTON2" ] && [ -n "$BUTTON2" ]; then echo "PASS  the corner setting moves the button"; else echo "FAIL  the corner setting moves the button ($BUTTON1 / $BUTTON2)"; FAILED=$((FAILED + 1)); fi
 if echo "$OFFLINE" | grep -q "button hidden"; then echo "PASS  the switch takes the button away"; else echo "FAIL  the switch takes the button away ($OFFLINE)"; FAILED=$((FAILED + 1)); fi
 

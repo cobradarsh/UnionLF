@@ -18,7 +18,7 @@ import sys
 
 D = "com.adarsh.vidgrab"
 NOTE = "com.adarsh.vidgrab/prefs"
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 OUT = args[0] if args else "layout/Library/PreferenceLoader/Preferences"
@@ -59,6 +59,9 @@ items = [
           "A small download button sits in a corner of every video an app plays. Tap it, or "
           "hold the video, and choose what to do with it. A bar at the top shows the progress "
           "and has a button to cancel.\n\n"
+          "Pictures get the same button (a hold on a picture is left to the app). Where the "
+          "app's picture address leads to the original (Pinterest, X, Reddit), the original is "
+          "saved; otherwise the picture as the app shows it.\n\n"
           "Downloads asked for while one is running wait in a queue and start one after "
           "another. The bar says how many are waiting; its cancel button stops only the one "
           "running, and the menu has Clear Queue.\n\n"
@@ -67,10 +70,12 @@ items = [
     switch("enabled", "VidGrab", True),
 
     group("Download Button",
-          "The corner is the corner of the picture. Choose another one if an app has a button "
-          "of its own there."),
+          "The corner is the corner of the video or picture. Automatic is the top right, and "
+          "the bottom right in Pinterest, whose sound button sits at the top right of every "
+          "video. Choose a corner to use it in every app."),
     switch("badge", "Show on Videos", True),
-    choice("badgeCorner", "Corner", 1, [(0, "Top Left"), (1, "Top Right"), (2, "Bottom Left"), (3, "Bottom Right")]),
+    switch("pictures", "Show on Pictures", True),
+    choice("badgeCorner", "Corner", -1, [(-1, "Automatic"), (0, "Top Left"), (1, "Top Right"), (2, "Bottom Left"), (3, "Bottom Right")]),
 
     group("Holding a Video",
           "Some apps act on a hold themselves: X plays faster, Instagram pauses. With Stop the "
@@ -82,7 +87,9 @@ items = [
 
     group("When Triggered",
           "Show Menu offers Save to Photos, Share, Save to GIF Stash, Choose Quality and Copy "
-          "Link. The other choices do that one thing straight away."),
+          "Link; for a picture Save to Photos, Share, Copy Picture and Copy Link. The other "
+          "choices do that one thing straight away (Save to GIF Stash shows the menu for a "
+          "picture)."),
     choice("action", "Do", 0, [(0, "Show Menu"), (1, "Save to Photos"), (2, "Share"), (3, "Save to GIF Stash")]),
 
     group("Quality",
@@ -92,9 +99,9 @@ items = [
     choice("quality", "Download", 0, [(0, "Best"), (2160, "Up to 4K"), (1080, "Up to 1080p"), (720, "Up to 720p"), (480, "Up to 480p")]),
 
     group("Photos",
-          "Saved videos also go into an album named VidGrab. An album needs full access to "
-          "Photos, so each app asks for that once; with access to add only, videos are saved "
-          "without the album."),
+          "Saved videos and pictures also go into an album named VidGrab. An album needs full "
+          "access to Photos, so each app asks for that once; with access to add only, they are "
+          "saved without the album."),
     switch("album", "VidGrab Album", True),
 
     group("Feedback"),

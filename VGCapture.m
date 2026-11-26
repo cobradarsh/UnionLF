@@ -68,7 +68,7 @@ VGSource *VGSourceForPlayerLayer(AVPlayerLayer *layer) {
     return VGSourceForItem(layer.player.currentItem);
 }
 
-static UIView *VGHostView(CALayer *layer) {
+UIView *VGHostView(CALayer *layer) {
     for (CALayer *l = layer; l; l = l.superlayer) {
         id delegate = l.delegate;
         if ([delegate isKindOfClass:UIView.class]) return delegate;
@@ -105,7 +105,7 @@ CGRect VGLayerFrameInWindow(CALayer *layer, UIWindow *window) {
     return [layer convertRect:visible toLayer:window.layer];
 }
 
-BOOL VGLayerCoveredAtPoint(AVPlayerLayer *layer, UIWindow *window, CGPoint point) {
+BOOL VGLayerCoveredAtPoint(CALayer *layer, UIWindow *window, CGPoint point) {
     UIView *host = VGHostView(layer);
     if (!host || host.window != window) return NO;
     UIView *hit = [window hitTest:point withEvent:nil];
@@ -115,6 +115,7 @@ BOOL VGLayerCoveredAtPoint(AVPlayerLayer *layer, UIWindow *window, CGPoint point
     CGRect video = VGLayerFrameInWindow(layer, window);
     // from what the touch lands on up to where its branch meets the video's: is any of it solid?
     for (UIView *view = hit; view && view != common; view = view.superview) {
+        if ([NSStringFromClass(view.class) containsString:@"Dimming"]) return YES;      // a sheet is open over it
         if (view.isHidden || view.alpha < 0.6) continue;
         if ([view isKindOfClass:UIVisualEffectView.class]) return YES;
         CGColorRef colour = view.backgroundColor.CGColor;
@@ -195,10 +196,18 @@ static BOOL VGLayerWantsBadge(AVPlayerLayer *layer) {
     return VGSourceForPlayerLayer(layer) != nil;
 }
 
-/// Shows, hides and places the layer's button. Main thread.
 static void VGLayoutBadge(AVPlayerLayer *layer) {
+    VGPlaceBadge(layer, VGLayerWantsBadge(layer), layer.videoRect);
+}
+
+BOOL VGHasBadge(CALayer *layer) {
+    return objc_getAssociatedObject(layer, &kBadgeKey) != nil;
+}
+
+/// Shows, hides and places a layer's button, in the chosen corner of what is seen of the picture
+/// (picture: where the layer draws it, in its own coordinates; CGRectNull: all of it). Main thread.
+void VGPlaceBadge(CALayer *layer, BOOL show, CGRect picture) {
     CALayer *badge = objc_getAssociatedObject(layer, &kBadgeKey);
-    BOOL show = VGLayerWantsBadge(layer);
     if (!show) {
         if (badge && !badge.isHidden) {
             [CATransaction begin];
@@ -229,8 +238,7 @@ static void VGLayoutBadge(AVPlayerLayer *layer) {
         [CATransaction commit];
         return;
     }
-    CGRect picture = layer.videoRect;
-    if (!CGRectIsEmpty(picture) && !CGRectIsInfinite(picture) && !isnan(picture.origin.x) && !isnan(picture.size.width)) {
+    if (!CGRectIsNull(picture) && !CGRectIsEmpty(picture) && !CGRectIsInfinite(picture) && !isnan(picture.origin.x) && !isnan(picture.size.width)) {
         CGRect shared = CGRectIntersection(area, picture);
         if (!CGRectIsNull(shared) && shared.size.width >= kBadgeSize + 2 * kBadgeMargin && shared.size.height >= kBadgeSize + 2 * kBadgeMargin) area = shared;
     }
@@ -243,16 +251,15 @@ static void VGLayoutBadge(AVPlayerLayer *layer) {
     [CATransaction commit];
 }
 
-CGRect VGBadgeFrameInWindow(AVPlayerLayer *layer, UIWindow *window) {
+CGRect VGBadgeFrameInWindow(CALayer *layer, UIWindow *window) {
     CALayer *badge = objc_getAssociatedObject(layer, &kBadgeKey);
     if (!badge || badge.isHidden || badge.superlayer != layer) return CGRectNull;
     if (CGRectIsNull(VGLayerFrameInWindow(layer, window))) return CGRectNull;
     return [badge convertRect:badge.bounds toLayer:window.layer];
 }
 
-AVPlayerLayer *VGBadgeLayerAtPoint(UIWindow *window, CGPoint point) {
-    if (!atomic_load(&gEnabled) || !atomic_load(&gBadgeOn)) return nil;
-    for (AVPlayerLayer *layer in VGKnownPlayerLayers()) {
+static CALayer *VGBadgeAmong(NSArray<CALayer *> *layers, UIWindow *window, CGPoint point) {
+    for (CALayer *layer in layers) {
         CGRect frame = VGBadgeFrameInWindow(layer, window);
         if (CGRectIsNull(frame)) continue;
         if (!CGRectContainsPoint(CGRectInset(frame, -kBadgeReach, -kBadgeReach), point)) continue;
@@ -260,6 +267,23 @@ AVPlayerLayer *VGBadgeLayerAtPoint(UIWindow *window, CGPoint point) {
         return layer;
     }
     return nil;
+}
+
+CALayer *VGBadgeLayerAtPoint(UIWindow *window, CGPoint point) {
+    if (!atomic_load(&gEnabled)) return nil;
+    CALayer *found = atomic_load(&gBadgeOn) ? VGBadgeAmong(VGKnownPlayerLayers(), window, point) : nil;
+    if (!found && [VGPrefs pictures]) found = VGBadgeAmong(VGKnownPictureLayers(), window, point);
+    return found;
+}
+
+VGSource *VGSourceForBadgeLayer(CALayer *layer) {
+    if (!layer) return nil;
+    if ([layer isKindOfClass:AVPlayerLayer.class]) return VGSourceForPlayerLayer((AVPlayerLayer *)layer);
+    return VGSourceForPictureLayer(layer);
+}
+
+BOOL VGButtonsWanted(void) {
+    return atomic_load(&gEnabled) && (atomic_load(&gBadgeOn) || [VGPrefs pictures]);
 }
 
 @interface VGFollower : NSObject
@@ -272,6 +296,7 @@ AVPlayerLayer *VGBadgeLayerAtPoint(UIWindow *window, CGPoint point) {
     for (AVPlayerLayer *layer in VGKnownPlayerLayers()) {
         if (objc_getAssociatedObject(layer, &kBadgeKey) || layer.player.rate != 0) VGLayoutBadge(layer);
     }
+    VGLayoutPictures();
     if (CACurrentMediaTime() > self.until) {
         [self.link invalidate];
         self.link = nil;
@@ -286,7 +311,7 @@ void VGFollowScrolling(void) {
     static VGFollower *follower;
     if (!follower) follower = [VGFollower new];
     follower.until = CACurrentMediaTime() + 3.0;
-    if (!follower.link && atomic_load(&gEnabled) && atomic_load(&gBadgeOn)) {
+    if (!follower.link && VGButtonsWanted()) {
         follower.link = [CADisplayLink displayLinkWithTarget:follower selector:@selector(tick:)];
         follower.link.preferredFramesPerSecond = 20;
         [follower.link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
@@ -365,6 +390,7 @@ void VGCaptureInstall(void) {
     [center addObserverForName:VGPrefsChangedNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
         VGReadSettings();
         VGRefreshBadgesSoon();
+        VGLayoutPictures();
     }];
     // Playback starting, looping or jumping is when a button may have to appear or go: no timers.
     for (NSNotificationName name in @[AVPlayerItemTimeJumpedNotification, AVPlayerItemNewAccessLogEntryNotification,

@@ -443,7 +443,7 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
     NSInteger action = [VGPrefs action];
     if (action == 1) { VGStartDownload(source, VGDeliverPhotos, nil, window); return; }
     if (action == 2) { VGStartDownload(source, VGDeliverShare, nil, window); return; }
-    if (action == 3 && VGStashInstalled()) { VGStartDownload(source, VGDeliverStash, nil, window); return; }
+    if (action == 3 && VGStashInstalled() && !source.isPicture) { VGStartDownload(source, VGDeliverStash, nil, window); return; }
 
     NSString *busy = VGDownloadRunning() || VGQueueCount()
         ? [NSString stringWithFormat:@"\n%@%lu waiting: a new one joins the queue", VGDownloadRunning() ? @"1 downloading, " : @"", (unsigned long)VGQueueCount()]
@@ -451,7 +451,14 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
     VGMenu *menu = [VGMenu menuWithTitle:@"VidGrab" message:[source.shortName stringByAppendingString:busy]];
     [menu add:@"Save to Photos" run:^{ VGStartDownload(source, VGDeliverPhotos, nil, window); }];
     [menu add:@"Share…" run:^{ VGStartDownload(source, VGDeliverShare, nil, window); }];
-    if (VGStashInstalled()) [menu add:@"Save to GIF Stash" run:^{ VGStartDownload(source, VGDeliverStash, nil, window); }];
+    if (source.isPicture) {
+        UIImage *picture = source.picture;
+        [menu add:@"Copy Picture" run:^{
+            UIPasteboard.generalPasteboard.image = picture;
+            [VGPill note:@"Picture copied" from:window];
+        }];
+    }
+    if (VGStashInstalled() && !source.isPicture) [menu add:@"Save to GIF Stash" run:^{ VGStartDownload(source, VGDeliverStash, nil, window); }];
     if (source.looksLikeHLS) [menu add:@"Choose Quality…" run:^{ VGShowQualities(source, VGDeliverPhotos, window, anchor); }];
     if (source.url && !source.url.isFileURL) {
         [menu add:@"Copy Link" run:^{
@@ -479,7 +486,7 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
 /// The tap on a download button. While it follows a touch, the app's own tap and hold recognizers
 /// under the finger are switched off, so the tap is VidGrab's alone; they come back when it is over.
 @interface VGBadgeTapRecognizer : UITapGestureRecognizer
-@property (nonatomic, weak) AVPlayerLayer *target;
+@property (nonatomic, weak) CALayer *target;                  // a video's layer or a picture's
 @property (nonatomic, strong) NSHashTable<UIGestureRecognizer *> *silenced;
 - (void)restoreOthers;
 @end
@@ -553,7 +560,7 @@ static char kAttachedKey;
         hold.delaysTouchesBegan = NO;
         hold.delaysTouchesEnded = NO;
     } else {
-        recognizer.enabled = on && [VGPrefs badge];
+        recognizer.enabled = on && ([VGPrefs badge] || [VGPrefs pictures]);
         recognizer.cancelsTouchesInView = YES;
         recognizer.delaysTouchesBegan = YES;                 // only for touches that begin on a button (see shouldReceiveTouch)
     }
@@ -596,7 +603,7 @@ static char kAttachedKey;
     UIWindow *window = (UIWindow *)recognizer.view;
     if (![window isKindOfClass:UIWindow.class]) return NO;
     CGPoint point = [touch locationInView:window];
-    AVPlayerLayer *layer = VGBadgeLayerAtPoint(window, point);
+    CALayer *layer = VGBadgeLayerAtPoint(window, point);
     tap.target = layer;
     if (!layer) return NO;                                   // not on a button: this touch is none of ours
     // After this touch has been handed out, quieten the app's own tap and hold recognizers under it.
@@ -660,9 +667,9 @@ static char kAttachedKey;
 - (void)tapped:(VGBadgeTapRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateEnded) return;
     UIWindow *window = (UIWindow *)recognizer.view;
-    AVPlayerLayer *layer = recognizer.target;
+    CALayer *layer = recognizer.target;
     if (!layer || ![window isKindOfClass:UIWindow.class]) return;
-    VGSource *source = VGSourceForPlayerLayer(layer);
+    VGSource *source = VGSourceForBadgeLayer(layer);
     if (!source) return;
     VGTrigger(source, window, VGBadgeFrameInWindow(layer, window));
 }
@@ -690,6 +697,10 @@ void VGGesturesInstall(void) {
 }
 
 #pragma mark - for the tests
+
+BOOL VGWindowIsWatched(UIWindow *window) {
+    return window && objc_getAssociatedObject(window, &kAttachedKey) != nil;
+}
 
 NSArray<UIWindow *> *VGAppWindows(void) {
     NSMutableArray<UIWindow *> *windows = [NSMutableArray new];

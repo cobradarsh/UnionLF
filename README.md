@@ -14,6 +14,12 @@ A small download button sits in a corner of every playing video. Tap it, or hold
 
 A bar at the top shows the progress and has a cancel button. Settings › VidGrab has the switches.
 
+Pictures get the same button (since 2.2.0): **Save to Photos**, **Share…**, **Copy Picture**, **Copy Link**.
+Where the picture's address leads to a larger original (Pinterest `i.pinimg.com/<size>/…` → `originals`,
+X `name=orig`, Reddit `preview.redd.it` → `i.redd.it`), the original is fetched; otherwise the picture is saved
+exactly as the app shows it. A hold on a picture stays the app's. The button's corner is Automatic by default:
+top right, and bottom right in Pinterest, whose sound button sits at the top right of its videos.
+
 ## What changed from 1.1.0
 
 `orig/VidGrab-1.1.0.m` is the source this started from. What was wrong or missing there, and what replaced it:
@@ -55,7 +61,8 @@ design avoids. Protected (encrypted) streams and live streams are refused with a
 | `VGJob.m` | One download from link to finished file |
 | `VGCapture.m` | The three hooks, what a layer plays, the download button |
 | `VGUI.m` | Recognizers, menu, progress bar, VidGrab's own window |
-| `VGDeliver.m` | Photos + album, share sheet, GIF Stash |
+| `VGDeliver.m` | Photos + album, share sheet, GIF Stash, the queue |
+| `VGPicture.m` | Pictures: which layers show one (`UIImageView`, Texture image nodes), their buttons, fetching the original |
 | `VGDebug.m` | Test commands (off without a marker file) |
 | `VidGrabSB.m` | SpringBoard part: moves a clip into GIF Stash's library |
 | `VGS*.{h,m,c}` | GIF encoder, from GIF Stash |

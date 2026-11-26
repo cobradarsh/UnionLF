@@ -129,7 +129,15 @@ static double VGPrefNumber(NSString *key, double fallback) {
     return VGPrefBool([@"app-" stringByAppendingString:known ?: name], YES);
 }
 + (BOOL)badge { return VGPrefBool(@"badge", YES); }
-+ (NSInteger)badgeCorner { return (NSInteger)VGPrefNumber(@"badgeCorner", 1); }
++ (BOOL)pictures { return VGPrefBool(@"pictures", YES); }
++ (NSInteger)badgeCorner {
+    NSInteger corner = (NSInteger)VGPrefNumber(@"badgeCorner", -1);
+    if (corner >= 0 && corner <= 3) return corner;
+    // Automatic: top right, except in apps that keep a control of their own there on every video
+    // (Pinterest: the sound button), where the bottom right is free
+    NSString *name = NSBundle.mainBundle.executablePath.lastPathComponent ?: @"";
+    return [@[@"Pinterest"] containsObject:name] ? 3 : 1;
+}
 + (NSInteger)holdFingers { return MAX(0, MIN(2, (NSInteger)VGPrefNumber(@"hold", 1))); }
 + (double)holdTime { return MAX(0.25, MIN(2.0, VGPrefNumber(@"holdTime", 0.55))); }
 + (BOOL)blockAppHold { return VGPrefBool(@"blockAppHold", YES); }

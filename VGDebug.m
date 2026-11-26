@@ -10,6 +10,9 @@
 //   layers [full]         every player layer: where, ready, playing, what it plays, its button
 //   press [x y]           what a hold at that point does (default: the middle of the first video)
 //   tap                   what a tap on the first download button does
+//   pictures              every picture with a button or a claim to one: what it is, where, its button
+//   pictap [n]            what a tap on the button of the n-th picture with a button does (default the first)
+//   scan                  everything on screen drawn as a large image, known to VidGrab or not
 //   hit [x y]             what a touch at the point (default: the first button) lands on in the app
 //   menu                  the entries of the open menu
 //   choose <title>        run the entry whose title starts so
@@ -38,6 +41,7 @@ static NSString *VGDebugOut(void) {
 
 static NSString *VGShort(VGSource *source, BOOL full) {
     if (!source) return @"nothing VidGrab can save";
+    if (source.isPicture) return full && source.url ? [NSString stringWithFormat:@"%@ from %@", source.shortName, source.url.absoluteString] : source.shortName;
     if (full) return [NSString stringWithFormat:@"%@ headers:%@", source.url.absoluteString ?: NSStringFromClass(source.asset.class), source.headers.allKeys ?: @[]];
     return [NSString stringWithFormat:@"%@ (%@%@)", source.shortName, source.url.path.lastPathComponent ?: NSStringFromClass(source.asset.class),
             source.headers.count ? @", with headers" : @""];
@@ -94,9 +98,9 @@ static void VGRunLine(NSString *line) {
         NSMutableArray<NSString *> *windows = [NSMutableArray new];
         for (UIWindow *window in VGAppWindows()) [windows addObject:[NSString stringWithFormat:@"%@%@", NSStringFromClass(window.class), window.isKeyWindow ? @" (key)" : @""]];
         UIWindow *overlay = [VGOverlay window];
-        VGLog(@"state: VidGrab %@, %@, enabled %d, button %d corner %ld, hold %ld fingers %.2f s, block app hold %d, action %ld, quality %ld, album %d; "
+        VGLog(@"state: VidGrab %@, %@, enabled %d, button %d pictures %d corner %ld, hold %ld fingers %.2f s, block app hold %d, action %ld, quality %ld, album %d; "
               @"windows: %@; overlay %@; pill %@; download %@; players known %lu",
-              VG_VERSION, VGCaptureHookSummary(), [VGPrefs enabled], [VGPrefs badge], (long)[VGPrefs badgeCorner], (long)[VGPrefs holdFingers],
+              VG_VERSION, VGCaptureHookSummary(), [VGPrefs enabled], [VGPrefs badge], [VGPrefs pictures], (long)[VGPrefs badgeCorner], (long)[VGPrefs holdFingers],
               [VGPrefs holdTime], [VGPrefs blockAppHold], (long)[VGPrefs action], (long)[VGPrefs maxHeight], [VGPrefs album],
               [windows componentsJoinedByString:@", "], overlay ? (overlay.isHidden ? @"hidden" : (overlay.isKeyWindow ? @"shown, key" : @"shown")) : @"none",
               [VGPill stateForLog], VGDownloadRunning() ? @"running" : @"idle", (unsigned long)VGKnownPlayerLayers().count);
@@ -144,10 +148,45 @@ static void VGRunLine(NSString *line) {
             VGLog(@"press %@: %@", NSStringFromCGPoint(point), layer ? VGShort(VGSourceForPlayerLayer(layer), NO) : @"no video there: VidGrab stays out of it");
             if (layer) VGTrigger(VGSourceForPlayerLayer(layer), window, CGRectMake(point.x, point.y, 1, 1));
         } else {
-            AVPlayerLayer *layer = VGBadgeLayerAtPoint(window, point);
-            VGLog(@"tap %@: %@", NSStringFromCGPoint(point), layer ? VGShort(VGSourceForPlayerLayer(layer), NO) : @"no download button there");
-            if (layer) VGTrigger(VGSourceForPlayerLayer(layer), window, VGBadgeFrameInWindow(layer, window));
+            CALayer *layer = VGBadgeLayerAtPoint(window, point);
+            VGLog(@"tap %@: %@", NSStringFromCGPoint(point), layer ? VGShort(VGSourceForBadgeLayer(layer), NO) : @"no download button there");
+            if (layer) VGTrigger(VGSourceForBadgeLayer(layer), window, VGBadgeFrameInWindow(layer, window));
         }
+    } else if ([command isEqualToString:@"pictures"] || [command isEqualToString:@"pictap"]) {
+        VGLayoutPictures();
+        NSMutableArray<CALayer *> *withButton = [NSMutableArray new];
+        NSMutableArray<UIWindow *> *homes = [NSMutableArray new];
+        NSUInteger listed = 0;
+        for (UIWindow *window in VGAppWindows()) {
+            for (CALayer *layer in VGKnownPictureLayers()) {
+                if (VGHostView(layer).window != window || CGRectIsNull(VGLayerFrameInWindow(layer, window))) continue;
+                if (!CGRectIsNull(VGBadgeFrameInWindow(layer, window))) {
+                    [withButton addObject:layer];
+                    [homes addObject:window];
+                }
+                if ([command isEqualToString:@"pictures"] && listed < 30) VGLog(@"    picture %lu: %@", (unsigned long)listed++, VGDescribePictureLayer(layer, window));
+            }
+        }
+        if ([command isEqualToString:@"pictures"]) {
+            VGLog(@"pictures: %lu known, %lu on screen, %lu with a button", (unsigned long)VGKnownPictureLayers().count, (unsigned long)listed,
+                  (unsigned long)withButton.count);
+        } else {
+            NSUInteger index = (NSUInteger)MAX(0, rest.integerValue);
+            if (index >= withButton.count) {
+                VGLog(@"pictap %lu: no such picture button (%lu on screen)", (unsigned long)index, (unsigned long)withButton.count);
+            } else {
+                CALayer *layer = withButton[index];
+                UIWindow *window = homes[index];
+                CGRect badge = VGBadgeFrameInWindow(layer, window);
+                CGPoint point = CGPointMake(CGRectGetMidX(badge), CGRectGetMidY(badge));
+                CALayer *hit = VGBadgeLayerAtPoint(window, point);
+                VGLog(@"pictap %lu at %@: %@", (unsigned long)index, NSStringFromCGPoint(point),
+                      hit ? VGShort(VGSourceForBadgeLayer(hit), YES) : @"the button takes no tap there");
+                if (hit) VGTrigger(VGSourceForBadgeLayer(hit), window, badge);
+            }
+        }
+    } else if ([command isEqualToString:@"scan"]) {
+        VGLogPictureScan(VGAppWindows().firstObject);
     } else if ([command isEqualToString:@"menu"]) {
         VGMenu *menu = [VGMenu current];
         VGLog(@"menu: %@", menu ? [menu.titles componentsJoinedByString:@" | "] : @"none open");
@@ -176,13 +215,14 @@ static void VGRunLine(NSString *line) {
             VGLog(@"photos: full access not given (status %ld), cannot count", (long)status);
         } else {
             NSUInteger videos = [PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeVideo options:nil].count;
+            NSUInteger pictures = [PHAsset fetchAssetsWithMediaType:PHAssetMediaTypeImage options:nil].count;
             PHFetchResult<PHAssetCollection *> *albums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
                                                                                                   subtype:PHAssetCollectionSubtypeAlbumRegular options:nil];
             __block NSInteger inAlbum = -1;
             [albums enumerateObjectsUsingBlock:^(PHAssetCollection *album, NSUInteger index, BOOL *stop) {
                 if ([album.localizedTitle isEqualToString:@"VidGrab"]) inAlbum = (NSInteger)[PHAsset fetchAssetsInAssetCollection:album options:nil].count;
             }];
-            VGLog(@"photos: %lu videos; VidGrab album %@", (unsigned long)videos,
+            VGLog(@"photos: %lu videos, %lu pictures; VidGrab album %@", (unsigned long)videos, (unsigned long)pictures,
                   inAlbum < 0 ? @"does not exist" : [NSString stringWithFormat:@"holds %ld", (long)inAlbum]);
         }
     } else if ([command isEqualToString:@"shot"]) {

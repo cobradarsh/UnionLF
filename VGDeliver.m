@@ -53,7 +53,7 @@ NSUInteger VGClearQueue(void) {
 }
 
 static NSString *VGQueueKey(VGSource *source, VGDelivery delivery, VGVariant *variant) {
-    NSString *what = source.url.absoluteString ?: [NSString stringWithFormat:@"%p", source.asset];
+    NSString *what = source.url.absoluteString ?: [NSString stringWithFormat:@"%p", source.asset ?: source.picture];
     return [NSString stringWithFormat:@"%ld|%@|%@", (long)delivery, variant.url.absoluteString ?: @"", what];
 }
 
@@ -133,6 +133,14 @@ static void VGEnd(VGJob *job, BOOL success, NSString *text) {
 
 #pragma mark - Photos
 
+static BOOL VGIsPictureFile(NSURL *file) {
+    return [@[@"jpg", @"jpeg", @"png", @"heic", @"heif", @"gif"] containsObject:file.pathExtension.lowercaseString];
+}
+
+static NSString *VGWhat(NSURL *file) {
+    return VGIsPictureFile(file) ? @"picture" : @"video";
+}
+
 static BOOL VGAllowed(PHAuthorizationStatus status) {
     return status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited;
 }
@@ -155,7 +163,7 @@ static void VGWriteToPhotos(VGJob *job, NSURL *file, BOOL intoAlbum, void (^done
     PHAssetCollection *album = intoAlbum ? VGFindAlbum() : nil;
     [PHPhotoLibrary.sharedPhotoLibrary performChanges:^{
         PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
-        [request addResourceWithType:PHAssetResourceTypeVideo fileURL:file options:nil];
+        [request addResourceWithType:VGIsPictureFile(file) ? PHAssetResourceTypePhoto : PHAssetResourceTypeVideo fileURL:file options:nil];
         if (!intoAlbum) return;
         PHAssetCollectionChangeRequest *change = album ? [PHAssetCollectionChangeRequest changeRequestForAssetCollection:album]
                                                        : [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:kAlbum];
@@ -174,7 +182,7 @@ static void VGSaveToPhotos(VGJob *job, NSURL *file, UIWindow *window) {
     BOOL mayRead = [main objectForInfoDictionaryKey:@"NSPhotoLibraryUsageDescription"] != nil;
     if (!mayAdd && !mayRead) {
         // iOS ends an app that asks for Photos without having declared it: hand the file over another way
-        VGShare(job, file, window, [NSString stringWithFormat:@"%@ cannot save to Photos itself. Choose Save Video here.", VGAppName()]);
+        VGShare(job, file, window, [NSString stringWithFormat:@"%@ cannot save to Photos itself. Choose %@ here.", VGAppName(), VGIsPictureFile(file) ? @"Save Image" : @"Save Video"]);
         return;
     }
     // An album can only be made or found with full access; adding alone goes without.
@@ -193,7 +201,7 @@ static void VGSaveToPhotos(VGJob *job, NSURL *file, UIWindow *window) {
                     }
                     VGWriteToPhotos(job, file, NO, ^(BOOL ok, BOOL inAlbum, NSError *error) {
                         if (ok) VGEnd(job, YES, @"Saved to Photos");
-                        else VGEnd(job, NO, [NSString stringWithFormat:@"Photos did not take the video (%@).", error.localizedDescription ?: @"no reason given"]);
+                        else VGEnd(job, NO, [NSString stringWithFormat:@"Photos did not take the %@ (%@).", VGWhat(file), error.localizedDescription ?: @"no reason given"]);
                     });
                 }];
                 return;
@@ -211,11 +219,11 @@ static void VGSaveToPhotos(VGJob *job, NSURL *file, UIWindow *window) {
                 VGLog(@"saving with the album failed (%@), saving without", error.localizedDescription);
                 VGWriteToPhotos(job, file, NO, ^(BOOL secondOK, BOOL secondAlbum, NSError *secondError) {
                     if (secondOK) VGEnd(job, YES, @"Saved to Photos");
-                    else VGEnd(job, NO, [NSString stringWithFormat:@"Photos did not take the video (%@).", secondError.localizedDescription ?: @"no reason given"]);
+                    else VGEnd(job, NO, [NSString stringWithFormat:@"Photos did not take the %@ (%@).", VGWhat(file), secondError.localizedDescription ?: @"no reason given"]);
                 });
                 return;
             }
-            VGEnd(job, NO, [NSString stringWithFormat:@"Photos did not take the video (%@).", error.localizedDescription ?: @"no reason given"]);
+            VGEnd(job, NO, [NSString stringWithFormat:@"Photos did not take the %@ (%@).", VGWhat(file), error.localizedDescription ?: @"no reason given"]);
         });
     }];
 }
@@ -377,9 +385,10 @@ void VGStartDownload(VGSource *source, VGDelivery delivery, VGVariant *variant, 
 static void VGRun(VGQueued *entry) {
     VGSource *source = entry.source;
     VGDelivery delivery = entry.delivery;
+    if (source.isPicture && delivery == VGDeliverStash) delivery = VGDeliverPhotos;      // GIF Stash keeps moving pictures only
     VGVariant *variant = entry.variant;
     UIWindow *window = entry.window ?: VGAppWindows().firstObject;
-    VGJob *job = [[VGJob alloc] initWithSource:source];
+    VGJob *job = source.isPicture ? VGMakePictureJob(source) : [[VGJob alloc] initWithSource:source];
     job.maxLines = [VGPrefs maxHeight];
     job.variant = variant;
     gJob = job;
@@ -419,7 +428,7 @@ static void VGRun(VGQueued *entry) {
                 });
                 return;
             }
-            VGEnd(job, NO, error.localizedDescription ?: @"The video could not be saved.");
+            VGEnd(job, NO, error.localizedDescription ?: (source.isPicture ? @"The picture could not be saved." : @"The video could not be saved."));
             return;
         }
         dispatch_sync(dispatch_get_main_queue(), ^{ objc_setAssociatedObject(job, &kDeliveringKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC); });

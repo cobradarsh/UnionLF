@@ -319,6 +319,35 @@ static void OldWayObservation(NSString *folder) {
            problem ? problem.localizedDescription.UTF8String : "");
 }
 
+#pragma mark - picture addresses
+
+static NSString *Joined(NSString *address) {
+    NSMutableArray<NSString *> *out = [NSMutableArray new];
+    for (NSURL *url in VGPictureCandidateURLs([NSURL URLWithString:address])) [out addObject:url.absoluteString];
+    return [out componentsJoinedByString:@" | "];
+}
+
+static void PictureAddressTests(void) {
+    printf("== picture addresses\n");
+    NSString *pin = Joined(@"https://i.pinimg.com/236x/1a/2b/3c/1a2b3cdeadbeef.jpg");
+    Check([pin isEqualToString:@"https://i.pinimg.com/originals/1a/2b/3c/1a2b3cdeadbeef.jpg | https://i.pinimg.com/1200x/1a/2b/3c/1a2b3cdeadbeef.jpg"
+                                @" | https://i.pinimg.com/736x/1a/2b/3c/1a2b3cdeadbeef.jpg | https://i.pinimg.com/236x/1a/2b/3c/1a2b3cdeadbeef.jpg"], pin);
+    NSString *pinBig = Joined(@"https://i.pinimg.com/1200x/1a/2b/3c/x.jpg");
+    Check([pinBig isEqualToString:@"https://i.pinimg.com/originals/1a/2b/3c/x.jpg | https://i.pinimg.com/1200x/1a/2b/3c/x.jpg"], pinBig);
+    NSString *x = Joined(@"https://pbs.twimg.com/media/GabcDEF?format=png&name=small");
+    Check([x hasPrefix:@"https://pbs.twimg.com/media/GabcDEF?format=png&name=orig | https://pbs.twimg.com/media/GabcDEF?format=png&name=4096x4096"]
+          && [x hasSuffix:@"name=small"], x);
+    NSString *xOld = Joined(@"https://pbs.twimg.com/media/GabcDEF.jpg:small");
+    Check([xOld hasPrefix:@"https://pbs.twimg.com/media/GabcDEF?format=jpg&name=orig"], xOld);
+    NSString *face = Joined(@"https://pbs.twimg.com/profile_images/123/abc_normal.jpg");
+    Check([face hasPrefix:@"https://pbs.twimg.com/profile_images/123/abc.jpg | "], face);
+    NSString *reddit = Joined(@"https://preview.redd.it/some-title-v0-q1w2e3.jpeg?width=640&crop=smart&auto=webp&s=abc");
+    Check([reddit hasPrefix:@"https://i.redd.it/q1w2e3.jpeg | "], reddit);
+    NSString *plain = Joined(@"https://example.com/a.jpg");
+    Check([plain isEqualToString:@"https://example.com/a.jpg"], plain);
+    Check(VGPictureCandidateURLs([NSURL URLWithString:@"data:image/png;base64,AAAA"]).count == 0, @"a data: address is not fetched");
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         setvbuf(stdout, NULL, _IONBF, 0);                   // every line at once: a run that stalls shows where
@@ -326,6 +355,7 @@ int main(int argc, const char *argv[]) {
         NSString *only = argc > 3 && strcmp(argv[2], "only") == 0 ? [NSString stringWithUTF8String:argv[3]] : nil;
         [NSFileManager.defaultManager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:NULL];
         PlaylistTests();
+        PictureAddressTests();
 
         NSString *apple = @"https://devstreaming-cdn.apple.com/videos/streaming/examples";
         NSArray *streams = @[
