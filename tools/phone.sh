@@ -41,7 +41,7 @@ case "${1:-}" in
     if [ "${2:-}" = "on" ]; then
       $SSH "mkdir -p $SHARED && touch $SHARED/diag && chown -R mobile:mobile $SHARED && chmod 755 $SHARED && ls -la $SHARED"
     else
-      $SSH "rm -f $SHARED/diag $SHARED/cmd*.txt; ls -la $SHARED 2>/dev/null; true"
+      $SSH "rm -f $SHARED/diag; find $SHARED -name 'cmd*.txt' -delete; ls -la $SHARED 2>/dev/null; true"
     fi ;;
   open)
     $SSH "uiopen --bundleid ${2:?usage: phone.sh open <bundle id>}" ;;
@@ -68,7 +68,7 @@ case "${1:-}" in
   clean)
     dir=$(container "${2:?usage: phone.sh clean <bundle id>}")
     [ -n "$dir" ] || { echo "no data folder found for $2"; exit 1; }
-    $SSH "rm -rf \"${dir}tmp/vidgrab.log\" \"${dir}tmp/vidgrab-cmd.last\" \"${dir}tmp/vidgrab-work\" \"${dir}tmp/vidgrab-outbox\"; rm -f \"${dir}tmp/\"vidgrab-*.jpg; echo cleaned" ;;
+    $SSH "rm -rf \"${dir}tmp/vidgrab.log\" \"${dir}tmp/vidgrab-cmd.last\" \"${dir}tmp/vidgrab-work\" \"${dir}tmp/vidgrab-outbox\"; find \"${dir}tmp\" -maxdepth 1 -name 'vidgrab-*.jpg' -delete; echo cleaned" ;;
   *)
     sed -n '2,17p' "$0" ;;
 esac
