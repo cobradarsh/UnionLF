@@ -296,6 +296,30 @@
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
+        case WMReplyModeCatch:
+            return @"CATCH! Make me the one man she remembers out of everyone in her inbox. First work out what I "
+                    "captured: her dating profile (photos, prompt answers, bio, no message bubbles) means this is "
+                    "my FIRST message to her, so ignore the ME/THEM labels and the left/right rule; a chat means "
+                    "it's my next message, and it has to stand out just the same. Most men send 'hey', a "
+                    "compliment on her looks, a pickup line or an interview question; do none of that. Hang it on "
+                    "ONE specific thing the other men will scroll past (a line in one of her prompts, a detail in "
+                    "the background of a photo, the way she worded something), so it could only ever have been "
+                    "sent to her. Then make it intriguing, with calm, amused confidence, like a man with a full "
+                    "life and standards of his own who is curious about her, not auditioning for her: a bold, "
+                    "playful read of who she is that she'll want to confirm or correct, an open loop she has to "
+                    "reply to close (a theory, a verdict or a story I start and hold back), or a light challenge "
+                    "she'll want to win. Plant one image or phrase that sticks with her (it can become our "
+                    "running joke), let a little of me show (a firm opinion, a playful stance, anything from my "
+                    "context), and leave her something fun and easy to answer. A read of her is a playful guess "
+                    "and sounds like one; never state made-up facts about her (places, what she did) or about me. "
+                    "Sound like a real guy texting, not a copywriter: short, one idea, no dashes, and don't quote "
+                    "her words back to her. BANNED: compliments on her looks (let the attraction stay implied), "
+                    "pickup lines, puns on her name, opening with 'hey' or her name, 'you had me at', 'on a scale "
+                    "of 1 to 10', bragging, neediness or anything that asks for her approval, anything sexual, "
+                    "and negging. Emoji: one at most, and only if it sharpens the tease (a smirk or a grin); no "
+                    "hearts, roses or fire, and none is fine. Make the three different angles: a bold read of "
+                    "her, an open loop she has to reply to close, and a playful challenge or a vivid little scene "
+                    "of the two of us where I take the lead.";
         case WMReplyModeReviver:
             return @"REVIVER. The conversation has cooled off or her interest dipped. Read the "
                     "WHOLE chat and find where her energy dropped (shorter or slower replies, "
@@ -477,11 +501,15 @@
             ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: the one fact or contradiction that settles it, said plainly.\n\n"
             : mode == WMReplyModeDefuse
             ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: name what they're feeling, then the one line that cools it and tilts it my way.\n\n"
+            : mode == WMReplyModeCatch
+            ? @"LENGTH: SHORT. One line, about 8 to 22 words: the hook and nothing else.\n\n"
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
-        [p appendString:@"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
-                         "words. Still reads like a chat message, not an email (unless the "
-                         "style is Formal).\n\n"];
+        [p appendString:mode == WMReplyModeCatch
+            ? @"LENGTH: LONG. Two or three short sentences, about 20 to 45 words: the hook, then one beat of my personality. Never a block of text.\n\n"
+            : @"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
+               "words. Still reads like a chat message, not an email (unless the "
+               "style is Formal).\n\n"];
     }
 
     [p appendFormat:@"Write exactly %ld different %@, separated by a line containing "
@@ -521,6 +549,7 @@
         case WMReplyModeDirty:         return @"Dirty / Sext";
         case WMReplyModeIcebreaker:    return @"Icebreaker";
         case WMReplyModePhotoOpener:   return @"Photo Opener";
+        case WMReplyModeCatch:         return @"Catch!";
         case WMReplyModeReviver:       return @"Reviver";
         case WMReplyModeAlphaPower:    return @"Alpha Power";
         case WMReplyModePhoneConvo:    return @"Phone Convo";
@@ -561,6 +590,7 @@
         case WMReplyModeDirty:         return @"\U0001F608"; // 😈
         case WMReplyModeIcebreaker:    return @"\U0001F9CA"; // 🧊
         case WMReplyModePhotoOpener:   return @"\U0001F4F8"; // 📸
+        case WMReplyModeCatch:         return @"\U0001F3A3"; // fishing pole
         case WMReplyModeReviver:       return @"\U0001F4AB"; // 💫
         case WMReplyModeAlphaPower:    return @"\U0001F451"; // 👑
         case WMReplyModePhoneConvo:    return @"\U0001F4DE"; // 📞

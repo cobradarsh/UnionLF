@@ -47,6 +47,7 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeDirty,
     WMReplyModeIcebreaker,   // opener written from a dating profile (not a chat)
     WMReplyModePhotoOpener,  // opener from HER PHOTOS (appreciate her in the moment)
+    WMReplyModeCatch,        // Catch!: the one message in her inbox she remembers (profile or chat)
     WMReplyModeReviver,      // re-ignite a cooled conversation (attraction principles)
     WMReplyModeAlphaPower,   // commanding alpha-male persona (Massimo / Christian Grey)
     WMReplyModePhoneConvo,   // talking points for a phone call (local news and events via web search)
