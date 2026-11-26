@@ -73,6 +73,23 @@ xcrun simctl terminate "$UDID" "$HOST" > /dev/null 2>&1 || true
 for service in photos photos-add; do
   xcrun simctl privacy "$UDID" grant "$service" "$HOST" && echo "granted $service" || echo "(could not grant $service)"
 done
+# The grant alone did not keep iOS 16.4 from asking (the question then held every save): the
+# permission is also written into the simulator's privacy database while it is shut down.
+TCCDB="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/TCC/TCC.db"
+if [ -f "$TCCDB" ]; then
+  echo "privacy database before: $(sqlite3 "$TCCDB" "SELECT service || '=' || auth_value FROM access WHERE client='$HOST';" 2>&1 | tr '\n' ' ')"
+  xcrun simctl shutdown "$UDID" > /dev/null 2>&1 || true
+  for service in kTCCServicePhotos kTCCServicePhotosAdd; do
+    sqlite3 "$TCCDB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags, last_modified) VALUES ('$service', '$HOST', 0, 2, 2, 1, 0, CAST(strftime('%s','now') AS INTEGER));" \
+      && echo "privacy database: $service allowed" || echo "privacy database: could not write $service"
+  done
+  echo "privacy database after: $(sqlite3 "$TCCDB" "SELECT service || '=' || auth_value FROM access WHERE client='$HOST';" 2>&1 | tr '\n' ' ')"
+  xcrun simctl boot "$UDID" 2>&1 | grep -v "current state: Booted" || true
+  xcrun simctl bootstatus "$UDID" -b > "$OUT/boot2.log" 2>&1 || { tail -5 "$OUT/boot2.log"; echo "simulator did not boot again"; exit 1; }
+  xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 > /dev/null 2>&1 || true
+else
+  echo "no privacy database at $TCCDB"
+fi
 defaults write com.apple.CrashReporter DialogType none > /dev/null 2>&1 || true
 
 REPORTS=~/Library/Logs/DiagnosticReports
