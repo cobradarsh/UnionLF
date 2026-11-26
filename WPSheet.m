@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.34";
+NSString *const kWPVersion = @"1.0.35";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -34,7 +34,7 @@ static CGFloat const kWPSheetTopPad = 14;
 // Two chip sections, like the Android sheet: dating & flirt first (this is a dating tool), then every
 // general vibe. A chip's tag is the WMReplyMode value itself.
 static WMReplyMode const kWPDatingModes[] = {
-    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeCatch, WMReplyModeReviver,  WMReplyModePhoneConvo,
+    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeCatch, WMReplyModeBanter, WMReplyModeReviver,  WMReplyModePhoneConvo,
     WMReplyModePlanDate,   WMReplyModeRomance,     WMReplyModeSeduce,   WMReplyModeStupidLove,
     WMReplyModeHilarify,   WMReplyModeAlphaPower,  WMReplyModeFlirty,   WMReplyModeSensual,
     WMReplyModeLustful,    WMReplyModeDirty
@@ -844,6 +844,7 @@ static void WPTakeKeyboardSoon(void) {
         else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeFactCheck) busy = @"Checking the facts…";
         else if (mode == WMReplyModeDefuse) busy = @"Cooling things down…";
         else if (mode == WMReplyModeCatch) busy = @"Finding the hook…";
+        else if (mode == WMReplyModeBanter) busy = @"Keeping it rolling…";
         self->_status.text = busy;
         @try {
             [[WMAPIClient shared] generateRepliesWithProvider:s.provider

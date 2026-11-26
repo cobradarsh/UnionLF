@@ -320,6 +320,29 @@
                     "hearts, roses or fire, and none is fine. Make the three different angles: a bold read of "
                     "her, an open loop she has to reply to close, and a playful challenge or a vivid little scene "
                     "of the two of us where I take the lead.";
+        case WMReplyModeBanter:
+            return @"BANTER. Keep the conversation alive and fun: the playful back-and-forth she enjoys most, "
+                    "never an interview. Read the chat for the thread worth pulling (something she mentioned in "
+                    "passing, a joke we started, a detail that hints at a story); if what I captured is her "
+                    "profile instead of a chat, start the conversation the same way from something on it. Each "
+                    "reply reacts to her last message in a few relaxed words (a light tease, a quick take, a "
+                    "callback, or a short playful answer if she asked me something, never made-up facts about "
+                    "me), then asks ONE deep, open-ended question she'll actually enjoy thinking about: one that "
+                    "gets her telling a story, defending a take or imagining something, and shows me who she is. "
+                    "Be genuinely creative, with questions she has never been asked on an app and an unexpected "
+                    "angle tied to what she said: a playful hypothetical with stakes, the story behind a small "
+                    "detail, a verdict or ranking she has to give, a time-travel or other-life question, a choice "
+                    "she has to defend, a memory hook (a smell, a song, a place), or a hot take she has to agree "
+                    "with or fight. Never a yes/no question, never two questions at once, and never a stock one "
+                    "(dinner with anyone dead or alive, love languages, the five-year plan, 'tell me about "
+                    "yourself', 'what do you do for fun'). Deep but light: curious, not a therapist; no exes, "
+                    "trauma, politics or anything sexual. Aloof and effortless: interested but unbothered, like "
+                    "I'm texting between other things. Short and relaxed, no gushing ('that's so interesting'), "
+                    "no pile of exclamation marks, no explaining why I'm asking, never chasing, and leave her "
+                    "room to carry some of it. Emoji: one at most, and none is often better; nothing eager. Make "
+                    "the three different: one that goes deeper into what we're already on, one that opens a fresh "
+                    "topic out of nowhere and still feels natural, and one that teases her into defending herself "
+                    "or telling the story.";
         case WMReplyModeReviver:
             return @"REVIVER. The conversation has cooled off or her interest dipped. Read the "
                     "WHOLE chat and find where her energy dropped (shorter or slower replies, "
@@ -503,10 +526,14 @@
             ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: name what they're feeling, then the one line that cools it and tilts it my way.\n\n"
             : mode == WMReplyModeCatch
             ? @"LENGTH: SHORT. One line, about 8 to 22 words: the hook and nothing else.\n\n"
+            : mode == WMReplyModeBanter
+            ? @"LENGTH: SHORT. One or two quick lines, about 8 to 25 words: the reaction, then the question.\n\n"
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:mode == WMReplyModeCatch
             ? @"LENGTH: LONG. Two or three short sentences, about 20 to 45 words: the hook, then one beat of my personality. Never a block of text.\n\n"
+            : mode == WMReplyModeBanter
+            ? @"LENGTH: LONG. Two or three relaxed sentences, about 20 to 45 words: a playful take, a beat of my own (an opinion or a stance), then the question. Never an essay.\n\n"
             : @"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
                "words. Still reads like a chat message, not an email (unless the "
                "style is Formal).\n\n"];
@@ -550,6 +577,7 @@
         case WMReplyModeIcebreaker:    return @"Icebreaker";
         case WMReplyModePhotoOpener:   return @"Photo Opener";
         case WMReplyModeCatch:         return @"Catch!";
+        case WMReplyModeBanter:        return @"Banter";
         case WMReplyModeReviver:       return @"Reviver";
         case WMReplyModeAlphaPower:    return @"Alpha Power";
         case WMReplyModePhoneConvo:    return @"Phone Convo";
@@ -591,6 +619,7 @@
         case WMReplyModeIcebreaker:    return @"\U0001F9CA"; // 🧊
         case WMReplyModePhotoOpener:   return @"\U0001F4F8"; // 📸
         case WMReplyModeCatch:         return @"\U0001F3A3"; // fishing pole
+        case WMReplyModeBanter:        return @"\U0001F3D3"; // ping pong
         case WMReplyModeReviver:       return @"\U0001F4AB"; // 💫
         case WMReplyModeAlphaPower:    return @"\U0001F451"; // 👑
         case WMReplyModePhoneConvo:    return @"\U0001F4DE"; // 📞
