@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.37";
+NSString *const kWPVersion = @"1.0.38";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -34,14 +34,15 @@ static CGFloat const kWPSheetTopPad = 14;
 // Two chip sections, like the Android sheet: dating & flirt first (this is a dating tool), then every
 // general vibe. A chip's tag is the WMReplyMode value itself.
 static WMReplyMode const kWPDatingModes[] = {
-    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModeCatch, WMReplyModeBanter, WMReplyModeReviver,  WMReplyModePhoneConvo,
+    WMReplyModeIcebreaker, WMReplyModePhotoOpener, WMReplyModePoetic, WMReplyModeCatch, WMReplyModeBanter, WMReplyModeReviver,
+    WMReplyModeUndead,     WMReplyModePhoneConvo,
     WMReplyModePlanDate,   WMReplyModeRomance,     WMReplyModeSeduce,   WMReplyModeStupidLove,
-    WMReplyModeHilarify,   WMReplyModeAlphaPower,  WMReplyModeFlirty,   WMReplyModeSensual,
+    WMReplyModeHilarify,   WMReplyModeAlphaPower,  WMReplyModeFlirty,   WMReplyModeHotInHere, WMReplyModeSensual,
     WMReplyModeLustful,    WMReplyModeDirty
 };
 static WMReplyMode const kWPGeneralModes[] = {
     WMReplyModeAggressive, WMReplyModeDecentRoast, WMReplyModeRoastedToHell,
-    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeFactCheck, WMReplyModeDefuse, WMReplyModeExcuse,   WMReplyModeFunny,
+    WMReplyModeInMyFavor,  WMReplyModeDefendMe,    WMReplyModeFactCheck, WMReplyModeFactsOnly, WMReplyModeDefuse, WMReplyModeExcuse,   WMReplyModeFunny,
     WMReplyModeGenZ,       WMReplyModeLyrical,     WMReplyModeExcited,  WMReplyModeThankful,
     WMReplyModeWishing,    WMReplyModeFormal,      WMReplyModeChill,    WMReplyModeEmojify,
     WMReplyModeRemix,      WMReplyModeFacts,       WMReplyModeBackhand
@@ -845,9 +846,13 @@ static void WPTakeKeyboardSoon(void) {
         if (s.provider == WMAPIProviderClaude && notes) busy = @"Checking what's on near you…";
         else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeHilarify) busy = @"Finding fresh local material…";
         else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeFactCheck) busy = @"Checking the facts…";
+        else if (s.provider == WMAPIProviderClaude && mode == WMReplyModeFactsOnly) busy = @"Pulling up the facts…";
         else if (mode == WMReplyModeDefuse) busy = @"Cooling things down…";
         else if (mode == WMReplyModeCatch) busy = @"Finding the hook…";
         else if (mode == WMReplyModeBanter) busy = @"Keeping it rolling…";
+        else if (mode == WMReplyModePoetic) busy = @"Finding the words…";
+        else if (mode == WMReplyModeHotInHere) busy = @"Turning up the heat…";
+        else if (mode == WMReplyModeUndead) busy = @"Raising the dead…";
         self->_status.text = busy;
         @try {
             [[WMAPIClient shared] generateRepliesWithProvider:s.provider

@@ -38,6 +38,7 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModeExcuse,       // a believable, warm way out of a plan or a tense moment
     WMReplyModeFactCheck,    // disprove an accusation with facts, logic and persuasion (web search on Claude)
     WMReplyModeDefuse,       // cool a heated chat down with empathy and quiet persuasion, so it ends my way
+    WMReplyModeFactsOnly,    // beat their argument with verified facts and named sources (web search on Claude)
     // dating / flirt styles (consenting adults)
     WMReplyModePlanDate,
     WMReplyModeRomance,
@@ -49,6 +50,9 @@ typedef NS_ENUM(NSInteger, WMReplyMode) {
     WMReplyModePhotoOpener,  // opener from HER PHOTOS (appreciate her in the moment)
     WMReplyModeCatch,        // Catch!: the one message in her inbox she remembers (profile or chat)
     WMReplyModeBanter,       // keep it going: a light reaction + one creative, deep, open-ended question
+    WMReplyModePoetic,       // how beautiful she is in her pictures, as one fresh image, never creepy
+    WMReplyModeHotInHere,    // bold, cheeky, raunchy heat about the effect she has on me (never graphic)
+    WMReplyModeUndead,       // bring a DEAD chat back (Reviver is for one that's cooling)
     WMReplyModeReviver,      // re-ignite a cooled conversation (attraction principles)
     WMReplyModeAlphaPower,   // commanding alpha-male persona (Massimo / Christian Grey)
     WMReplyModePhoneConvo,   // talking points for a phone call (local news and events via web search)

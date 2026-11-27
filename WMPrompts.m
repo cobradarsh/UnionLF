@@ -218,6 +218,25 @@
                     "the three different: one that leads with empathy and gently reframes it, one that walks them "
                     "through the facts so they come round on their own, and one that offers the way out on my "
                     "terms.";
+        case WMReplyModeFactsOnly: {
+            // One brief with or without search: only the look-it-up sentence differs (DeepSeek / Kimi can't search).
+            NSString *look = canSearch
+                ? @"First use web_search (one or two searches) to check the specifics and get current figures, "
+                  "and name where each fact comes from in a few words (the WHO, a 2025 study, the official "
+                  "stats), the way someone drops receipts in a debate."
+                : @"You can't look anything up, so use only well-established facts you are certain of: no recent "
+                  "news, no exact figure you're unsure of, and name a source only when you're sure of it.";
+            return [NSString stringWithFormat:
+                    @"FACTS ONLY. Facts, and only facts. Find the claims they've made in the chat (or the point I "
+                    "want to make in my context) and beat each one with verified facts: hard numbers, dates, "
+                    "names and findings, lined up so their argument falls over on its own. %@ No opinions, no "
+                    "feelings, no persuasion tricks and no insults: just the facts. If they're partly right, say "
+                    "so in a few words and correct the rest. Never invent a number, a quote, a source or a link; "
+                    "if something can't be confirmed, leave it out. Still reads like a text, not an essay: calm, "
+                    "precise, a little cold. Emoji: one at most (a receipt, a chart, a check mark) or none. Make "
+                    "the three different: one that leads with the single most damning fact, one that takes their "
+                    "claims apart one by one, and one that ends on a question they can't answer without agreeing.", look];
+        }
         case WMReplyModeExcuse:
             return @"EXCUSE. Get me out of this gracefully. Read the chat and my context to see exactly "
                     "what I need out of: an invite or event I can't or don't want to go to, a plan I want "
@@ -354,6 +373,56 @@
                     "the three different: one that goes deeper into what we're already on, one that opens a fresh "
                     "topic out of nowhere and still feels natural, and one that teases her into defending herself "
                     "or telling the story.";
+        case WMReplyModePoetic:
+            return @"POETIC. Tell her how beautiful she is in her pictures the way a poet would, without ever "
+                    "sounding creepy. If what I captured is her profile, this is my first message to her, built "
+                    "on her photos; if it's a chat (say she sent a picture), it's my reply to it. Look at HER "
+                    "first (her smile, her eyes, her expression, the light on her, the mood of the moment), then "
+                    "turn one detail into an image: a fresh metaphor or comparison drawn from light, music, "
+                    "seasons, weather, the sea, cities at night or old films, with a little rhythm, so it reads "
+                    "like a line she'll want to keep. Don't describe the photo back to her; the image does the "
+                    "praising, and it must still be plainly about how beautiful she is. Sound like a confident "
+                    "man who writes well, not a greeting card. Never creepy: nothing about her body or what I'd "
+                    "do with her, no staring ('I can't stop looking at your pictures'), no worshipping or "
+                    "possessive lines (goddess, angel, queen, my everything), no comments on her age, and nothing "
+                    "that assumes a relationship we don't have. A light rhyme only if it comes naturally; never a "
+                    "full poem, never flowery or old-fashioned (no thee or thou). Use only what is really in her "
+                    "photos: never invent a place, outfit or prop, and never name a landmark or city unless it's "
+                    "written on her profile. If no photo of her is visible, make it about the impression her "
+                    "words give instead. Emoji: one soft one at most (a flower, sparkles, the moon, a soft smile) "
+                    "or none. Make the three about three different photos or details, each with a different "
+                    "image, and let one end on a soft, easy question.";
+        case WMReplyModeHotInHere:
+            return @"HOT IN HERE. Bold heat. Tell her, in a cheeky, raunchy way, how good she looks and how "
+                    "irresistible she is, with a confident grin in every line. Build it on what's really there "
+                    "(her photos, her profile or what she just said) and make the heat about the effect she has "
+                    "on me (the temperature, my self-control, my concentration, the trouble she's causing), with "
+                    "playful innuendo and double meanings that let her fill in the rest. Confident, unapologetic, "
+                    "a little dangerous, never desperate. Read the room: on a first message, or in a chat that "
+                    "hasn't turned flirty yet, keep it to suggestive innuendo she can laugh at; if she's already "
+                    "flirting hot, match her heat and go one step further. Never graphic (no sex acts or body "
+                    "parts spelled out), nothing degrading (no rating her body, no names that talk down to her), "
+                    "no comments on her age, never pushy if she has said no or gone cold, and no song lyrics. "
+                    "Fresh lines only, no stock pickup lines ('is it hot in here or is it just you', 'did it hurt "
+                    "when you fell'). Emoji: one at most from the heat family (a hot face, fire, a smirk, a "
+                    "devil) or none. Make the three different: one cheeky innuendo, one bold confession of what "
+                    "she's doing to me, and one playful dare that turns the heat back on her.";
+        case WMReplyModeUndead:
+            return @"UNDEAD. The chat is dead: she went quiet, it ended on a dead end, or days or weeks have "
+                    "passed since anyone wrote. Bring it back from the dead with ONE message she actually wants "
+                    "to answer. Read the whole chat for something to resurrect: an inside joke, a plan we never "
+                    "made, a question she never answered, something she told me. Then break the pattern with "
+                    "something light, unexpected and confident that makes the silence feel like nothing: a "
+                    "playful callback, a fresh hook out of nowhere, a 'settle this for me' question, a bold "
+                    "little update or a confident plan, or a funny self-aware nod to the chat rising from the "
+                    "dead (about the chat, never blaming her, once at most). Zero pressure, easy to answer in one "
+                    "line. Never complain about or point at her silence: no guilt trips, no 'hey stranger', 'long "
+                    "time no see', 'you still alive?' or 'did I do something wrong?', no apologising for texting, "
+                    "no sarcasm, nothing needy. Usually she's a match; if the chat is clearly with a friend or "
+                    "family, the same idea without the flirting. Emoji: one at most, playful (a grin, a smirk, a "
+                    "zombie only if it's part of the joke) or none. Make the three different: one callback to "
+                    "something from our chat, one fresh hook out of nowhere, and one confident plan or invitation "
+                    "that gives her an easy yes.";
         case WMReplyModeReviver:
             return @"REVIVER. The conversation has cooled off or her interest dipped. Read the "
                     "WHOLE chat and find where her energy dropped (shorter or slower replies, "
@@ -540,12 +609,28 @@
             ? @"LENGTH: SHORT. One line, about 8 to 22 words: the hook and nothing else.\n\n"
             : mode == WMReplyModeBanter
             ? @"LENGTH: SHORT. One or two quick lines, about 8 to 25 words: the reaction, then the question.\n\n"
+            : mode == WMReplyModePoetic
+            ? @"LENGTH: SHORT. One or two lines, about 10 to 25 words: one image that lands on her.\n\n"
+            : mode == WMReplyModeHotInHere
+            ? @"LENGTH: SHORT. One line, about 6 to 18 words: bold and hot, landed in one go.\n\n"
+            : mode == WMReplyModeUndead
+            ? @"LENGTH: SHORT. One line, about 6 to 18 words: light, unexpected and easy to answer.\n\n"
+            : mode == WMReplyModeFactsOnly
+            ? @"LENGTH: SHORT. One or two sentences, about 12 to 30 words: the fact that sinks their claim, and where it's from.\n\n"
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:mode == WMReplyModeCatch
             ? @"LENGTH: LONG. Two or three short sentences, about 20 to 45 words: the hook, then one beat of my personality. Never a block of text.\n\n"
             : mode == WMReplyModeBanter
             ? @"LENGTH: LONG. Two or three relaxed sentences, about 20 to 45 words: a playful take, a beat of my own (an opinion or a stance), then the question. Never an essay.\n\n"
+            : mode == WMReplyModePoetic
+            ? @"LENGTH: LONG. Two to four short lines, about 25 to 55 words, with a little rhythm. Still a text, never a poem on a page.\n\n"
+            : mode == WMReplyModeHotInHere
+            ? @"LENGTH: LONG. Two or three short, confident sentences, about 20 to 45 words.\n\n"
+            : mode == WMReplyModeUndead
+            ? @"LENGTH: LONG. Two or three short sentences, about 20 to 40 words: the hook, then an easy way back in. Never a paragraph.\n\n"
+            : mode == WMReplyModeFactsOnly
+            ? @"LENGTH: LONG. Two to four sentences, about 30 to 70 words: their claims answered one by one with checked facts and where each comes from.\n\n"
             : @"LENGTH: LONG. A fuller text of 2 to 4 sentences, about 25 to 60 "
                "words. Still reads like a chat message, not an email (unless the "
                "style is Formal).\n\n"];
@@ -580,6 +665,7 @@
         case WMReplyModeExcuse:        return @"Excuse";
         case WMReplyModeFactCheck:     return @"Fact Check";
         case WMReplyModeDefuse:        return @"Defuse";
+        case WMReplyModeFactsOnly:     return @"FactsOnly";
         case WMReplyModePlanDate:      return @"Plan a Date";
         case WMReplyModeRomance:       return @"Romance Her";
         case WMReplyModeSeduce:        return @"Seduce (Bond)";
@@ -590,6 +676,9 @@
         case WMReplyModePhotoOpener:   return @"Photo Opener";
         case WMReplyModeCatch:         return @"Catch!";
         case WMReplyModeBanter:        return @"Banter";
+        case WMReplyModePoetic:        return @"Poetic";
+        case WMReplyModeHotInHere:     return @"HotinHere";
+        case WMReplyModeUndead:        return @"Undead";
         case WMReplyModeReviver:       return @"Reviver";
         case WMReplyModeAlphaPower:    return @"Alpha Power";
         case WMReplyModePhoneConvo:    return @"Phone Convo";
@@ -622,6 +711,7 @@
         case WMReplyModeExcuse:        return @"\U0001F6AA"; // 🚪
         case WMReplyModeFactCheck:     return @"\U0001F50E"; // magnifying glass
         case WMReplyModeDefuse:        return @"\U0001F54A\U0000FE0F"; // dove
+        case WMReplyModeFactsOnly:     return @"\U0001F9FE"; // receipt
         case WMReplyModePlanDate:      return @"\U0001F4C5"; // 📅
         case WMReplyModeRomance:       return @"\U0001F339"; // 🌹
         case WMReplyModeSeduce:        return @"\U0001F576"; // 🕶
@@ -632,6 +722,9 @@
         case WMReplyModePhotoOpener:   return @"\U0001F4F8"; // 📸
         case WMReplyModeCatch:         return @"\U0001F3A3"; // fishing pole
         case WMReplyModeBanter:        return @"\U0001F3D3"; // ping pong
+        case WMReplyModePoetic:        return @"\U0001F58B\U0000FE0F"; // fountain pen
+        case WMReplyModeHotInHere:     return @"\U0001F975"; // hot face
+        case WMReplyModeUndead:        return @"\U0001F9DF"; // zombie
         case WMReplyModeReviver:       return @"\U0001F4AB"; // 💫
         case WMReplyModeAlphaPower:    return @"\U0001F451"; // 👑
         case WMReplyModePhoneConvo:    return @"\U0001F4DE"; // 📞
