@@ -111,6 +111,7 @@ static NSInteger const kWMQuickReplyCount = 5;
 @property (nonatomic, readonly, copy) NSString *myCity;         // optional: where Phone Convo looks for local news
 @property (nonatomic, copy) NSString *photoStyleExtra;   // transient: Photo Opener sub-style brief
 @property (nonatomic, readonly) BOOL autoDetectApps;
+@property (nonatomic, readonly) BOOL autoScroll;              // hold the bubble on a profile: it scrolls itself
 @property (nonatomic, readonly, copy) NSArray<NSString *> *manualApps;
 @property (nonatomic, readonly) BOOL bubbleOnRight;
 @property (nonatomic, readonly) CGFloat bubbleAlpha;

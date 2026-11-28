@@ -48,7 +48,17 @@
 
 // ── synthesize touch so the app under SpringBoard scrolls itself ──
 @interface WPScroll : NSObject
-+ (void)swipeUp;    // one swipe-up (content scrolls ~one screen down); best-effort, private HID
++ (BOOL)available;                  // the private HID functions resolved (says nothing about whether the app moves)
+// A synthetic one-finger swipe in normalized portrait coordinates (0..1). Blocks for about duration + hold:
+// call it off the main thread. hold = how long the finger stays still before lifting (no fling).
++ (BOOL)swipeFrom:(CGPoint)a to:(CGPoint)b duration:(NSTimeInterval)duration hold:(NSTimeInterval)hold;
++ (void)watchForRealTouch;          // for a few seconds, take the touchscreen's sender ID from a real touch
++ (NSString *)diagnostics;          // one line for the self-test log
+@end
+
+// ── on-device checks run over USB SSH (see WPSelfTest.m) ──
+@interface WPSelfTest : NSObject
++ (void)start;
 @end
 
 // ── keyboard focus: a SpringBoard overlay only gets the keyboard if SpringBoard takes focus ──

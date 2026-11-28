@@ -386,7 +386,8 @@ static NSString *WMClaudeAnswerText(NSArray *blocks) {
         return;
     }
     if (transcript.length == 0 && context.length == 0) {
-        done(nil, [self _err:@"Couldn't read the chat on this screen. Type the context, or switch to Claude (it can read the screenshot)."]);
+        done(nil, [self _err:@"Couldn't read any text on this screen, and DeepSeek can only read text. Type what's going on in the box, "
+                              "or switch to Claude or Kimi, which see the screenshot."]);
         return;
     }
 

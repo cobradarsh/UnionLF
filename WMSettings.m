@@ -271,6 +271,7 @@ static NSString *WMModelKey(WMAPIProvider p) {
 #pragma mark - apps
 
 - (BOOL)autoDetectApps { id v = _prefs[@"autoDetectApps"]; return v ? [v boolValue] : YES; }
+- (BOOL)autoScroll { id v = _prefs[@"autoScroll"]; return v ? [v boolValue] : YES; }
 
 - (NSArray<NSString *> *)manualApps {
     NSMutableOrderedSet *out = [NSMutableOrderedSet orderedSet];

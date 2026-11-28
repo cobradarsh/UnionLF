@@ -45,6 +45,12 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 @property (nonatomic, strong) NSTimer *scrollTimer;
 @property (nonatomic) CFAbsoluteTime scrollStart;    // when the scroll-capture session began
 @property (nonatomic, weak) WPSheet *pendingSheet;   // set while adding screens to an open sheet
+@property (nonatomic) BOOL autoScroll;               // the bubble scrolls the profile by itself (dating apps)
+@property (nonatomic) BOOL swiping;                  // one of our swipes is in flight
+@property (nonatomic) NSInteger swipes;              // swipes sent this session
+@property (nonatomic) NSInteger autoKept;            // frames kept after one of our swipes
+@property (nonatomic) NSInteger misses;              // swipes in a row that brought nothing new
+@property (nonatomic) CFAbsoluteTime swipeDone;      // when the last swipe finished (0 = none yet)
 @end
 
 @implementation WPBubble
@@ -156,6 +162,7 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 - (void)_longPress:(UILongPressGestureRecognizer *)g {
     if (g.state != UIGestureRecognizerStateBegan) return;
     if (_capturing || _scrolling) return;
+    [WPScroll watchForRealTouch];        // this finger tells auto-scroll which touchscreen to speak for
     [self _startScrollCapture];
 }
 
@@ -172,8 +179,18 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
                                             restore:^{ ws.window.hidden = NO; }];
     if (first) [_scrollFrames addObject:first];
     _judge = [[WPScrollJudge alloc] initWithFirst:(first ? [WPCapture signatureOf:first] : nil) now:now];
-    [self _toast:@"Capturing — scroll the profile, tap 🪽 to finish."];
+    // In a dating app the bubble scrolls the profile itself; if the app doesn't move, it hands over to you.
+    _autoScroll = [WMSettings shared].autoScroll && [WMApps currentKind] == WMAppKindDating && [WPScroll available];
+    _swiping = NO; _swipes = 0; _autoKept = 0; _misses = 0; _swipeDone = 0;
+    [self _toast:_autoScroll ? @"Scrolling the profile for you. Tap 🪽 to stop."
+                             : @"Capturing — scroll the profile, tap 🪽 to finish."];
     [self _updateCount];
+    if (_autoScroll) {
+        __weak typeof(self) ws = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [ws _autoSwipe];
+        });
+    }
     _scrollTimer = [NSTimer scheduledTimerWithTimeInterval:0.35 target:self
                                                   selector:@selector(_scrollTick) userInfo:nil repeats:YES];
 }
@@ -198,6 +215,10 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     // Only a forgotten session ends by itself. Reaching the frame limit used to end it too: a video filled the
     // limit with repeats of one screen, and the capture stopped in the middle of the profile.
     if (now - _lastKeep > kScrollIdleSeconds || now - _scrollStart > kScrollMaxSeconds) { [self _finishScrollCapture]; return; }
+    if (_autoScroll) {
+        if (_scrollFrames.count >= kScrollMaxFrames) { [self _finishScrollCapture]; return; }   // full: stop here
+        if (_swiping || _swipeDone == 0 || now - _swipeDone < 0.6) return;                    // let the page land
+    }
     _busy = YES;
     NSData *sig = [WPCapture probeSignature];   // fingerprint only; no frame is kept for a probe
     if (sig && [_judge wantsFrame:sig mask:[self _probeMask] now:now]) {
@@ -218,17 +239,55 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
                 [_scrollFrames removeObjectAtIndex:(NSUInteger)drop];
             [_scrollFrames addObject:clean];
             _lastKeep = now;
+            if (_autoScroll && _swipeDone > 0) _autoKept++;
             [self _updateCount];
             [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
         }
         if (clean || !keep) [_judge settleKept:(clean != nil) replacing:drop now:now];   // a failed shot is tried again
     }
     _busy = NO;
+    if (_autoScroll && _scrolling) {
+        if (_lastKeep >= _swipeDone) {                        // that swipe brought a new screen: the next one
+            _misses = 0;
+            if (now - _lastKeep >= 0.3) [self _autoSwipe];
+        } else if (now - _swipeDone > 2.4) {                  // nothing new since the swipe
+            _misses++;
+            if (_autoKept == 0) [self _autoHandOver];         // never moved: this app ignores our swipes
+            else if (_misses >= 2) [self _finishScrollCapture];   // the end of the profile
+            else [self _autoSwipe];                           // once more (a slow page, a sticky card)
+        }
+    }
+}
+
+// One swipe up the middle of the screen, about two thirds of its height, with no fling: the page moves a
+// fixed amount, so consecutive screens overlap a little and nothing is skipped.
+- (void)_autoSwipe {
+    if (!_scrolling || !_autoScroll || _swiping) return;
+    _swiping = YES; _swipes++;
+    __weak typeof(self) ws = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        BOOL sent = [WPScroll swipeFrom:CGPointMake(0.5, 0.76) to:CGPointMake(0.5, 0.12) duration:0.38 hold:0.12];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            WPBubble *ss = ws;
+            if (!ss) return;
+            ss.swiping = NO;
+            ss.swipeDone = CFAbsoluteTimeGetCurrent();
+            if (!sent) [ss _autoHandOver];
+        });
+    });
+}
+
+// The app didn't move for our swipes: carry on as a normal hold-and-scroll capture.
+- (void)_autoHandOver {
+    if (!_autoScroll) return;
+    _autoScroll = NO;
+    [self _toast:@"This app didn't scroll by itself. Scroll it yourself, tap 🪽 to finish."];
 }
 
 - (void)_finishScrollCapture {
     [_scrollTimer invalidate]; _scrollTimer = nil;
     _scrolling = NO; _busy = NO;
+    _autoScroll = NO; _swiping = NO;
     _judge = nil;
     [self _setRecordingLook:NO];
     NSArray<UIImage *> *frames = [_scrollFrames copy]; _scrollFrames = nil;
@@ -262,11 +321,12 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     t.font = [UIFont systemFontOfSize:14]; t.textAlignment = NSTextAlignmentCenter;
     t.numberOfLines = 0; t.layer.cornerRadius = 10; t.clipsToBounds = YES;
     t.frame = CGRectMake(40, b.size.height - 160, b.size.width - 80, 44);
-    _toastRect = t.frame;                                              // its window fills the screen
+    _toastRect = t.frame;                                              // the hint, in screen points
     _toastUntil = CFAbsoluteTimeGetCurrent() + kToastSeconds + 0.5;    // a little past its removal
     UIWindowScene *scene = [WPHost mainScene];
     UIWindow *w = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:b];
-    w.frame = b;
+    w.frame = t.frame;                    // only as big as the hint: touches beside it go to the app
+    t.frame = (CGRect){CGPointZero, t.frame.size};
     w.windowLevel = kBubbleLevel + 1; w.backgroundColor = UIColor.clearColor;
     w.userInteractionEnabled = NO;
     w.rootViewController = [UIViewController new];

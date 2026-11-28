@@ -16,6 +16,7 @@ static void WPStart(void) {
     if (![bid isEqualToString:@"com.apple.springboard"]) return;
     @try {
         [[WPBubble shared] start];
+        [WPSelfTest start];                                   // on-device checks over USB SSH
         // Show over enabled apps, hide elsewhere; re-checked once a second.
         gVisTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
             @try { [[WPBubble shared] evaluateVisibility]; } @catch (__unused id e) {}

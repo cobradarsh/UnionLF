@@ -1,18 +1,20 @@
-/*  WPScroll.m — make the app UNDER SpringBoard scroll itself, without touching it.
+/*  WPScroll.m — auto-scroll: the app under SpringBoard scrolls itself; nothing is injected into it.
 
-    We synthesize a finger swipe as a digitizer HID event and dispatch it through
-    IOHIDEventSystemClient. SpringBoard is privileged, so backboardd routes the
-    synthetic touch to whatever app is frontmost (Hinge) - exactly like a real finger -
-    which lets "hold the bubble" auto-scroll a long profile. Nothing is injected into
-    the dating app.
+    A finger swipe is built as IOHIDEvents and dispatched through an IOHIDEventSystemClient. SpringBoard holds
+    com.apple.private.hid.client.event-dispatch, so backboardd routes the touch to whatever is under the finger,
+    like a real one.
 
-    Modeled on libSimulateTouch (iolate): the two things a synthetic touch MUST carry
-    or the system drops it are a non-zero senderID and the display-integrated flag.
-    Coordinates ride the finger sub-event (normalized 0..1); the hand event is zeroed.
-
-    All private API, resolved with dlsym (IOKit is already loaded in SpringBoard) so the
-    build never depends on the stub. A one-line status is written to
-    /var/mobile/wingman_scroll.txt so we can tell resolution from routing failures.   */
+    1.0.13 / 1.0.14 tried this and the swipes never moved anything. 1.0.39 follows the recipe of a touch
+    injector known to work (ZXTouch / IOS13-SimulateTouch), which differed from ours in four ways:
+      - the parent event is a HAND transducer (3; we sent 2, a finger) with index 99, identity 1 and no mask,
+        and it carries IsDisplayIntegrated (0xB0019) and IsBuiltIn (0x4);
+      - its event mask, range and touch (0xB0007 / 8 / 9 = 0x23, 1, 1) are set AFTER the finger is appended,
+        and the finger has identity 3 and radii of 0.04;
+      - the sender ID is the REAL touchscreen's (we used a made-up constant): read from the touchscreen
+        service's registry ID, or caught from the next real touch;
+      - integer fields are passed as CFIndex (64 bit; an int left the upper half of the register undefined).
+    Every private function is resolved with dlsym, so a missing one only turns auto-scroll off.
+    WPSelfTest can run a swipe on demand and log whether the screen moved.                                  */
 
 #import "WPlus.h"
 #import <mach/mach_time.h>
@@ -20,86 +22,190 @@
 
 typedef struct __IOHIDEvent *IOHIDEventRef;
 typedef struct __IOHIDEventSystemClient *IOHIDEventSystemClientRef;
+typedef struct __IOHIDServiceClient *IOHIDServiceClientRef;
 typedef double IOHIDFloat;
+typedef void (*WPEventCallback)(void *target, void *refcon, void *service, IOHIDEventRef event);
 
-typedef IOHIDEventSystemClientRef (*ClientCreateFn)(CFAllocatorRef);
-typedef void          (*DispatchFn)(IOHIDEventSystemClientRef, IOHIDEventRef);
-typedef IOHIDEventRef (*DigitizerFn)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t,
-    uint32_t, uint32_t, IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat,
-    boolean_t, boolean_t, uint32_t);
-typedef IOHIDEventRef (*FingerFn)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t,
-    IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat, boolean_t, boolean_t, uint32_t);
-typedef void (*AppendFn)(IOHIDEventRef, IOHIDEventRef, uint32_t);
-typedef void (*SetSenderFn)(IOHIDEventRef, uint64_t);
-typedef void (*SetIntFn)(IOHIDEventRef, uint32_t, int);
+typedef IOHIDEventSystemClientRef (*WPClientCreateFn)(CFAllocatorRef);
+typedef void          (*WPDispatchFn)(IOHIDEventSystemClientRef, IOHIDEventRef);
+typedef CFArrayRef    (*WPCopyServicesFn)(IOHIDEventSystemClientRef);
+typedef CFTypeRef     (*WPServicePropertyFn)(IOHIDServiceClientRef, CFStringRef);
+typedef CFTypeRef     (*WPServiceRegistryFn)(IOHIDServiceClientRef);
+typedef IOHIDEventRef (*WPDigitizerFn)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+                                       IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat,
+                                       Boolean, Boolean, uint32_t);
+typedef IOHIDEventRef (*WPFingerFn)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t,
+                                    IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat, IOHIDFloat,
+                                    Boolean, Boolean, uint32_t);
+typedef void          (*WPAppendFn)(IOHIDEventRef, IOHIDEventRef, uint32_t);
+typedef void          (*WPSetSenderFn)(IOHIDEventRef, uint64_t);
+typedef void          (*WPSetIntFn)(IOHIDEventRef, uint32_t, CFIndex);
+typedef void          (*WPSetFloatFn)(IOHIDEventRef, uint32_t, IOHIDFloat);
+typedef uint32_t      (*WPGetTypeFn)(IOHIDEventRef);
+typedef uint64_t      (*WPGetSenderFn)(IOHIDEventRef);
+typedef void          (*WPScheduleFn)(IOHIDEventSystemClientRef, CFRunLoopRef, CFStringRef);
+typedef void          (*WPRegisterFn)(IOHIDEventSystemClientRef, WPEventCallback, void *, void *);
 
-// digitizer event-mask bits
-static const uint32_t MRange = 1, MTouch = 2, MPosition = 4, MIdentity = 32;
-static const uint32_t kHandType              = 2;         // kIOHIDDigitizerTransducerTypeHand
-static const uint32_t kFieldDisplayIntegrated = 0xB0019;  // kIOHIDEventFieldDigitizerIsDisplayIntegrated
-static const uint64_t kSenderID              = 0x000000010000027FULL;  // any non-zero digitizer sender
+static WPClientCreateFn pClientCreate; static WPDispatchFn pDispatch; static WPCopyServicesFn pCopyServices;
+static WPServicePropertyFn pServiceProperty; static WPServiceRegistryFn pServiceRegistry;
+static WPDigitizerFn pDigitizer; static WPFingerFn pFinger; static WPAppendFn pAppend;
+static WPSetSenderFn pSetSender; static WPSetIntFn pSetInt; static WPSetFloatFn pSetFloat;
+static WPGetTypeFn pGetType; static WPGetSenderFn pGetSender;
+static WPScheduleFn pSchedule, pUnschedule; static WPRegisterFn pRegister, pUnregister;
 
-static ClientCreateFn pClientCreate; static DispatchFn pDispatch;
-static DigitizerFn pDigitizer; static FingerFn pFinger; static AppendFn pAppend;
-static SetSenderFn pSetSender; static SetIntFn pSetInt;
-static IOHIDEventSystemClientRef gClient; static BOOL gOK;
+static IOHIDEventSystemClientRef gClient;     // dispatches our events
+static IOHIDEventSystemClientRef gWatcher;    // briefly sees real touches, for the touchscreen's sender ID
+static uint64_t gSender;                      // the touchscreen's sender ID (0 = not found yet)
+static NSString *gSenderSource = @"none";
+static NSString *gServices = @"not listed yet";
+
+static const uint64_t kWPFallbackSender  = 0x000000010000027FULL;   // what 1.0.14 used; only if nothing better
+static const uint32_t kWPDigitizerEvents = 11;                      // kIOHIDEventTypeDigitizer
+
+@interface WPScroll ()
++ (void)_senderFromServices;
++ (void)_stopWatching;
+@end
 
 @implementation WPScroll
 
-+ (void)_diag:(NSString *)s {
-    @try { [s writeToFile:@"/var/mobile/wingman_scroll.txt" atomically:YES
-                 encoding:NSUTF8StringEncoding error:nil]; } @catch (__unused id e) {}
-}
-
 + (BOOL)_resolve {
+    static BOOL ok;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        pClientCreate = (ClientCreateFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientCreate");
-        pDispatch     = (DispatchFn)    dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientDispatchEvent");
-        pDigitizer    = (DigitizerFn)   dlsym(RTLD_DEFAULT, "IOHIDEventCreateDigitizerEvent");
-        pFinger       = (FingerFn)      dlsym(RTLD_DEFAULT, "IOHIDEventCreateDigitizerFingerEvent");
-        pAppend       = (AppendFn)      dlsym(RTLD_DEFAULT, "IOHIDEventAppendEvent");
-        pSetSender    = (SetSenderFn)   dlsym(RTLD_DEFAULT, "IOHIDEventSetSenderID");
-        pSetInt       = (SetIntFn)      dlsym(RTLD_DEFAULT, "IOHIDEventSetIntegerValue");
-        BOOL haveFns = pClientCreate && pDispatch && pDigitizer && pFinger && pAppend;
-        if (haveFns) { @try { gClient = pClientCreate(kCFAllocatorDefault); } @catch (__unused id e) {} }
-        gOK = haveFns && gClient;
-        [self _diag:[NSString stringWithFormat:@"resolve fns=%d client=%d setSender=%d setInt=%d",
-                     haveFns, (gClient != NULL), (pSetSender != NULL), (pSetInt != NULL)]];
+        pClientCreate    = (WPClientCreateFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientCreate");
+        pDispatch        = (WPDispatchFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientDispatchEvent");
+        pCopyServices    = (WPCopyServicesFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientCopyServices");
+        pServiceProperty = (WPServicePropertyFn)dlsym(RTLD_DEFAULT, "IOHIDServiceClientCopyProperty");
+        pServiceRegistry = (WPServiceRegistryFn)dlsym(RTLD_DEFAULT, "IOHIDServiceClientGetRegistryID");
+        pDigitizer       = (WPDigitizerFn)dlsym(RTLD_DEFAULT, "IOHIDEventCreateDigitizerEvent");
+        pFinger          = (WPFingerFn)dlsym(RTLD_DEFAULT, "IOHIDEventCreateDigitizerFingerEvent");
+        pAppend          = (WPAppendFn)dlsym(RTLD_DEFAULT, "IOHIDEventAppendEvent");
+        pSetSender       = (WPSetSenderFn)dlsym(RTLD_DEFAULT, "IOHIDEventSetSenderID");
+        pSetInt          = (WPSetIntFn)dlsym(RTLD_DEFAULT, "IOHIDEventSetIntegerValue");
+        pSetFloat        = (WPSetFloatFn)dlsym(RTLD_DEFAULT, "IOHIDEventSetFloatValue");
+        pGetType         = (WPGetTypeFn)dlsym(RTLD_DEFAULT, "IOHIDEventGetType");
+        pGetSender       = (WPGetSenderFn)dlsym(RTLD_DEFAULT, "IOHIDEventGetSenderID");
+        pSchedule        = (WPScheduleFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientScheduleWithRunLoop");
+        pUnschedule      = (WPScheduleFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientUnscheduleWithRunLoop");
+        pRegister        = (WPRegisterFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientRegisterEventCallback");
+        pUnregister      = (WPRegisterFn)dlsym(RTLD_DEFAULT, "IOHIDEventSystemClientUnregisterEventCallback");
+        BOOL fns = pClientCreate && pDispatch && pDigitizer && pFinger && pAppend && pSetSender && pSetInt;
+        if (fns) gClient = pClientCreate(kCFAllocatorDefault);
+        ok = fns && gClient != NULL;
+        if (ok) [self _senderFromServices];
     });
-    return gOK;
+    return ok;
 }
 
-// One finger sample: coords on the finger sub-event, flags on the hand event.
-+ (void)_sendX:(IOHIDFloat)x y:(IOHIDFloat)y handMask:(uint32_t)hm fingerMask:(uint32_t)fm
-         range:(boolean_t)range touch:(boolean_t)touch {
+// The touchscreen's events carry its service's registry ID as their sender ID.
++ (void)_senderFromServices {
+    if (!pCopyServices || !pServiceProperty || !pServiceRegistry) { gServices = @"service functions missing"; return; }
+    CFArrayRef services = pCopyServices(gClient);
+    if (!services) { gServices = @"no services visible"; return; }
+    NSMutableString *list = [NSMutableString string];
+    uint64_t touch = 0, integrated = 0;
+    for (CFIndex i = 0; i < CFArrayGetCount(services); i++) {
+        IOHIDServiceClientRef svc = (IOHIDServiceClientRef)CFArrayGetValueAtIndex(services, i);
+        if (!svc) continue;
+        id page = CFBridgingRelease(pServiceProperty(svc, CFSTR("PrimaryUsagePage")));
+        if (![page isKindOfClass:[NSNumber class]] || [page integerValue] != 0x0D) continue;   // digitizers only
+        id usage = CFBridgingRelease(pServiceProperty(svc, CFSTR("PrimaryUsage")));
+        id disp  = CFBridgingRelease(pServiceProperty(svc, CFSTR("DisplayIntegrated")));
+        id name  = CFBridgingRelease(pServiceProperty(svc, CFSTR("Product")));
+        uint64_t reg = 0;
+        CFTypeRef rid = pServiceRegistry(svc);                       // a Get: not ours to release
+        if (rid && CFGetTypeID(rid) == CFNumberGetTypeID()) CFNumberGetValue((CFNumberRef)rid, kCFNumberSInt64Type, &reg);
+        NSInteger u = [usage isKindOfClass:[NSNumber class]] ? [usage integerValue] : -1;
+        BOOL onScreen = [disp isKindOfClass:[NSNumber class]] && [disp boolValue];
+        [list appendFormat:@"[%@ usage=%ld integrated=%d id=0x%llx] ",
+                           [name isKindOfClass:[NSString class]] ? name : @"?", (long)u, onScreen, reg];
+        if (u == 0x04 && reg && !touch) touch = reg;                 // usage 4 = touch screen
+        if (onScreen && reg && !integrated) integrated = reg;
+    }
+    CFRelease(services);
+    gServices = list.length ? [list copy] : @"no digitizer services";
+    uint64_t pick = touch ?: integrated;
+    if (pick && !gSender) {
+        gSender = pick;
+        gSenderSource = touch ? @"touchscreen service" : @"display-integrated service";
+    }
+}
+
+static void WPRealTouch(void *target, void *refcon, void *service, IOHIDEventRef event) {
+    if (!event || !pGetType || !pGetSender || pGetType(event) != kWPDigitizerEvents) return;
+    uint64_t s = pGetSender(event);
+    if (!s || [gSenderSource isEqualToString:@"real touch"]) return;
+    gSender = s;
+    gSenderSource = @"real touch";
+    dispatch_async(dispatch_get_main_queue(), ^{ [WPScroll _stopWatching]; });
+}
+
++ (void)watchForRealTouch {
+    if (![self _resolve] || gWatcher || !pSchedule || !pRegister) return;
+    if ([gSenderSource isEqualToString:@"real touch"]) return;
+    gWatcher = pClientCreate(kCFAllocatorDefault);
+    if (!gWatcher) return;
+    pSchedule(gWatcher, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+    pRegister(gWatcher, WPRealTouch, NULL, NULL);
+    // Never left listening: the finger that is on the bubble right now is all it needs.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [WPScroll _stopWatching];
+    });
+}
+
++ (void)_stopWatching {
+    if (!gWatcher) return;
+    if (pUnregister) pUnregister(gWatcher, WPRealTouch, NULL, NULL);
+    if (pUnschedule) pUnschedule(gWatcher, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+    CFRelease(gWatcher);
+    gWatcher = NULL;
+}
+
+// One finger sample: a hand event with the finger appended, as the real touchscreen sends them.
+static void WPSend(IOHIDFloat x, IOHIDFloat y, uint32_t mask, Boolean range, Boolean touch) {
     uint64_t ts = mach_absolute_time();
-    IOHIDEventRef hand = pDigitizer(kCFAllocatorDefault, ts, kHandType, 0, 1, hm, 0,
-                                    0, 0, 0, 0, 0, range, touch, 0);
+    IOHIDEventRef hand = pDigitizer(kCFAllocatorDefault, ts, 3, 99, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     if (!hand) return;
-    if (pSetSender) pSetSender(hand, kSenderID);
-    if (pSetInt)    pSetInt(hand, kFieldDisplayIntegrated, 1);   // <- real touchscreen touch
-    IOHIDEventRef finger = pFinger(kCFAllocatorDefault, ts, 1, 2, fm, x, y, 0, 0, 0, range, touch, 0);
-    if (finger) { pAppend(hand, finger, 0); CFRelease(finger); }
-    @try { pDispatch(gClient, hand); } @catch (__unused id e) {}
+    pSetInt(hand, 0xB0019, 1);        // IsDisplayIntegrated: a touch on the screen itself
+    pSetInt(hand, 0x4, 1);            // IsBuiltIn
+    IOHIDEventRef finger = pFinger(kCFAllocatorDefault, ts, 1, 3, mask, x, y, 0, 0, 0, range, touch, 0);
+    if (finger) {
+        if (pSetFloat) { pSetFloat(finger, 0xB0014, 0.04); pSetFloat(finger, 0xB0015, 0.04); }   // major / minor radius
+        pAppend(hand, finger, 0);
+        CFRelease(finger);
+    }
+    pSetInt(hand, 0xB0007, 0x23);     // event mask: range | touch | identity
+    pSetInt(hand, 0xB0008, 1);        // range
+    pSetInt(hand, 0xB0009, 1);        // touch
+    pSetSender(hand, gSender ? gSender : kWPFallbackSender);
+    pDispatch(gClient, hand);
     CFRelease(hand);
 }
 
-// Swipe UP through the middle => content scrolls ~one screen DOWN. Flick-like so scroll
-// views actually fling. Call OFF the main thread (it uses usleep).
-+ (void)swipeUp {
-    if (![self _resolve]) return;
-    const IOHIDFloat x = 0.5, y0 = 0.80, y1 = 0.18;
-    [self _sendX:x y:y0 handMask:(MRange|MTouch|MIdentity) fingerMask:(MRange|MTouch) range:1 touch:1];  // down
-    usleep(12000);
-    const int steps = 14;
++ (BOOL)available { return [self _resolve]; }
+
++ (BOOL)swipeFrom:(CGPoint)a to:(CGPoint)b duration:(NSTimeInterval)duration hold:(NSTimeInterval)hold {
+    if (![self _resolve]) return NO;
+    WPSend(a.x, a.y, 3, 1, 1);                                        // down: range + touch
+    int steps = MAX(8, (int)(duration / 0.012));
+    useconds_t gap = (useconds_t)(duration / steps * 1e6);
     for (int i = 1; i <= steps; i++) {
-        IOHIDFloat y = y0 + (y1 - y0) * ((IOHIDFloat)i / steps);
-        [self _sendX:x y:y handMask:MPosition fingerMask:MPosition range:1 touch:1];                     // move
-        usleep(8000);
+        usleep(gap);
+        double t = (double)i / steps;
+        double e = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);   // ease in and out: slows to a stop
+        WPSend(a.x + (b.x - a.x) * e, a.y + (b.y - a.y) * e, 4, 1, 1); // move: position
     }
-    [self _sendX:x y:y1 handMask:(MRange|MTouch|MPosition) fingerMask:(MRange|MTouch) range:0 touch:0];  // up
-    [self _diag:@"swipeUp dispatched (sender+displayIntegrated set)"];
+    // Hold still before lifting, so the scroll view stops with the finger instead of flinging on.
+    for (NSTimeInterval held = 0; held < hold; held += 0.03) { usleep(30000); WPSend(b.x, b.y, 4, 1, 1); }
+    WPSend(b.x, b.y, 2, 0, 0);                                        // up: touch changed, out of range
+    return YES;
+}
+
++ (NSString *)diagnostics {
+    BOOL ok = [self _resolve];
+    return [NSString stringWithFormat:@"resolved=%d sender=0x%llx (%@) digitizers: %@", ok,
+            gSender ? gSender : kWPFallbackSender, gSender ? gSenderSource : @"fallback constant", gServices];
 }
 
 @end

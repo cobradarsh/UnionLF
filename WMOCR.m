@@ -94,7 +94,11 @@ typedef struct { CGFloat minX, maxX, top, bottom; } WMBox;
     req.usesLanguageCorrection = NO;            // keep Hinglish as typed
     req.recognitionLanguages = @[@"en-US"];
     VNImageRequestHandler *h = [[VNImageRequestHandler alloc] initWithCGImage:cg options:@{}];
-    if (![h performRequests:@[req] error:nil]) return @[];
+    BOOL ok = [h performRequests:@[req] error:nil];
+    // The accurate reader can fail inside SpringBoard where the fast one works. A text-only model (DeepSeek)
+    // then got an empty transcript and said it couldn't read the screen, so fall back to the fast one.
+    if (!fast && (!ok || req.results.count == 0)) return [self _messagesInImage:img fast:YES];
+    if (!ok) return @[];
 
     // collect lines (Vision boxes are normalized, origin bottom-left)
     NSMutableArray *lines = [NSMutableArray array];

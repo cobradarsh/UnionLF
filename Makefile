@@ -14,11 +14,9 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = WingmanPlus
 
-# WPScroll.m (HID swipe synthesis) is intentionally left OUT: cross-process touch
-# injection from SpringBoard doesn't drive the app's scroll views on iOS 16, so we use
-# user-driven scroll-capture instead (hold to start, flick, tap to finish). The file is
-# kept in the tree for reference only.
-WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPFocus.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m
+# WPScroll.m synthesizes the auto-scroll swipe (back in the build since 1.0.39, rebuilt on a working injector's
+# recipe); WPSelfTest.m runs on-device checks written to /var/mobile/Library/WingmanPlus/cmd over USB SSH.
+WingmanPlus_FILES  = Tweak.x WPBubble.m WPCapture.m WPFocus.m WPHost.m WPSheet.m WMAPIClient.m WMPrompts.m WMSettings.m WMApps.m WMOCR.m WMModels.m WPScroll.m WPSelfTest.m
 WingmanPlus_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 WingmanPlus_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Vision
 

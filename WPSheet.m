@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.38";
+NSString *const kWPVersion = @"1.0.39";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -178,6 +178,64 @@ static void WPTakeKeyboardSoon(void) {
 
 #pragma mark - settings
 
+// The models this key can use, for the provider picked in Settings. Opens any time from "Choose model",
+// not only after Save & verify (that one-off action sheet was the only way to change it before 1.0.39).
+@interface WPModelPickerVC : UITableViewController
+- (instancetype)initWithProvider:(WMAPIProvider)p;
+@end
+@implementation WPModelPickerVC {
+    WMAPIProvider _p;
+    NSArray<NSDictionary *> *_models;
+    NSString *_note;
+}
+- (instancetype)initWithProvider:(WMAPIProvider)p {
+    if ((self = [super initWithStyle:UITableViewStyleInsetGrouped])) { _p = p; _note = @"Loading the models your key can use…"; }
+    return self;
+}
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Model";
+    NSString *cur = [[WMSettings shared] modelForProvider:_p];
+    _models = @[ @{ @"id": cur, @"name": cur } ];                 // until the list arrives
+    __weak typeof(self) ws = self;
+    [WMModels fetchForProvider:_p force:NO completion:^(NSArray<NSDictionary *> *models, NSError *err) {
+        WPModelPickerVC *ss = ws;
+        if (!ss) return;
+        if (models.count) {
+            ss->_models = models;
+            ss->_note = [NSString stringWithFormat:@"%lu models on this key. Tap one to use it.", (unsigned long)models.count];
+        } else {
+            ss->_note = err.localizedDescription ?: @"Couldn't load the model list.";
+        }
+        [ss.tableView reloadData];
+    }];
+}
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
+}
+- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return (NSInteger)_models.count; }
+- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s { return _note; }
+- (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
+    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"m"]
+        ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"m"];
+    NSDictionary *m = _models[(NSUInteger)ip.row];
+    BOOL old = [m[@"lifecycle"] isEqual:@"deprecated"];
+    c.textLabel.text = m[@"name"];
+    c.detailTextLabel.text = old ? [m[@"id"] stringByAppendingString:@"   ·  deprecated"] : m[@"id"];
+    c.detailTextLabel.textColor = WP_SUBTEXT;
+    c.accessoryType = [m[@"id"] isEqual:[[WMSettings shared] modelForProvider:_p]]
+        ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    c.tintColor = WP_ACCENT;
+    return c;
+}
+- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip {
+    [[WMSettings shared] saveModel:_models[(NSUInteger)ip.row][@"id"] forProvider:_p];
+    [t reloadData];
+    [self.navigationController popViewControllerAnimated:YES];
+}
+@end
+
 @interface WPSettingsVC : UIViewController <UITextFieldDelegate, UITextViewDelegate>
 @end
 @implementation WPSettingsVC {
@@ -234,7 +292,15 @@ static void WPTakeKeyboardSoon(void) {
     _model = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
     _model.font = [UIFont systemFontOfSize:13]; _model.textColor = WP_SUBTEXT;
     _model.text = [NSString stringWithFormat:@"Model: %@", [s modelForProvider:s.provider]];
-    [sc addSubview:_model]; y += 28;
+    [sc addSubview:_model]; y += 24;
+
+    UIButton *pick = [UIButton buttonWithType:UIButtonTypeSystem];
+    pick.frame = CGRectMake(m, y, W-2*m, 36);
+    pick.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    pick.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    [pick setTitle:@"Choose model…" forState:UIControlStateNormal];
+    [pick addTarget:self action:@selector(_chooseModel) forControlEvents:UIControlEventTouchUpInside];
+    [sc addSubview:pick]; y += 42;
 
     _status = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m, 20)];
     _status.font = [UIFont systemFontOfSize:13]; _status.textColor = WP_SUBTEXT;
@@ -259,6 +325,16 @@ static void WPTakeKeyboardSoon(void) {
     _city.text = s.myCity;
     [sc addSubview:_city]; y += 52;
 
+    UILabel *al = [[UILabel alloc] initWithFrame:CGRectMake(m, y, W-2*m-64, 44)];
+    al.text = @"Hold 🪽 on a profile to scroll it for me"; al.font = [UIFont systemFontOfSize:15]; al.numberOfLines = 2;
+    [sc addSubview:al];
+    UISwitch *auto_ = [[UISwitch alloc] init];
+    CGSize sw = auto_.intrinsicContentSize;
+    auto_.frame = CGRectMake(W - m - sw.width, y + (44 - sw.height) / 2, sw.width, sw.height);
+    auto_.on = s.autoScroll; auto_.onTintColor = WP_ACCENT;
+    [auto_ addTarget:self action:@selector(_autoScrollChanged:) forControlEvents:UIControlEventValueChanged];
+    [sc addSubview:auto_]; y += 52;
+
     UIButton *apps = [UIButton buttonWithType:UIButtonTypeSystem];
     apps.frame = CGRectMake(m, y, W-2*m, 40);
     [apps setTitle:@"Choose apps that show the bubble…" forState:UIControlStateNormal];
@@ -275,7 +351,16 @@ static void WPTakeKeyboardSoon(void) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.navigationController setNavigationBarHidden:NO animated:animated];   // the sheet hides it
+    if (_provider) _model.text = [NSString stringWithFormat:@"Model: %@", [[WMSettings shared] modelForProvider:[self _p]]];
 }
+- (void)_chooseModel {
+    WMAPIProvider p = [self _p];
+    WMSettings *s = [WMSettings shared];
+    NSString *typed = [_key.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (typed.length && ![typed isEqualToString:[s keyForProvider:p]]) [s saveKey:typed forProvider:p];   // list needs the key
+    [self.navigationController pushViewController:[[WPModelPickerVC alloc] initWithProvider:p] animated:YES];
+}
+- (void)_autoScrollChanged:(UISwitch *)sw { [[WMSettings shared] setValue:@(sw.on) forSettingKey:@"autoScroll"]; }
 - (void)_providerChanged {
     WMSettings *s = [WMSettings shared];
     WMAPIProvider p = [self _p];
@@ -316,24 +401,8 @@ static void WPTakeKeyboardSoon(void) {
         self->_status.textColor = WP_OK;
         self->_status.text = [NSString stringWithFormat:@"Key OK — %lu models.", (unsigned long)models.count];
         self->_model.text = [NSString stringWithFormat:@"Model: %@", [s modelForProvider:p]];
-        [self _pickModel:models provider:p];
+        [self _chooseModel];
     }];
-}
-- (void)_pickModel:(NSArray<NSDictionary *> *)models provider:(WMAPIProvider)p {
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Choose model" message:nil
-                                                        preferredStyle:UIAlertControllerStyleActionSheet];
-    NSInteger n = 0;
-    for (NSDictionary *mdl in models) {
-        if (n++ > 12) break;
-        [ac addAction:[UIAlertAction actionWithTitle:mdl[@"name"] style:UIAlertActionStyleDefault
-                                             handler:^(UIAlertAction *a) {
-            [[WMSettings shared] saveModel:mdl[@"id"] forProvider:p];
-            self->_model.text = [NSString stringWithFormat:@"Model: %@", mdl[@"id"]];
-        }]];
-    }
-    [ac addAction:[UIAlertAction actionWithTitle:@"Keep current" style:UIAlertActionStyleCancel handler:nil]];
-    ac.popoverPresentationController.sourceView = _model;
-    [self presentViewController:ac animated:YES completion:nil];
 }
 - (void)_pickApps { [self.navigationController pushViewController:[WPAppPickerVC new] animated:YES]; }
 - (void)_save {
