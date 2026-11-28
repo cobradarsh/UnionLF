@@ -79,15 +79,11 @@ xcrun simctl terminate "$UDID" com.apple.Preferences > /dev/null 2>&1 || true
 xcrun simctl terminate "$UDID" com.apple.mobilesafari > /dev/null 2>&1 || true
 ls -la "$OUT/clip.mp4" 2> /dev/null || echo "(no clip recorded)"
 
-echo "== Photos once without Guest Mode (lets the library settle), then the video goes in"
-xcrun simctl launch "$UDID" "$APP" > /dev/null 2>&1 || true
-sleep 12
+echo "== the video goes into the library"
 if [ -s "$OUT/clip.mp4" ]; then
   xcrun simctl addmedia "$UDID" "$OUT/clip.mp4" && echo "video added to the library" || echo "(the video could not be added)"
-  sleep 5
+  sleep 8
 fi
-xcrun simctl io "$UDID" screenshot "$OUT/00-photos-without-guest-mode.png" > /dev/null 2>&1 || true
-xcrun simctl terminate "$UDID" "$APP" > /dev/null 2>&1 || true
 
 REPORTS=~/Library/Logs/DiagnosticReports
 mkdir -p "$REPORTS"
@@ -111,7 +107,8 @@ launch() {                                            # launch <n>: start Photos
     xcrun simctl launch "$UDID" "$APP" > "$OUT/launch.txt" 2>&1 || { cat "$OUT/launch.txt"; return 1; }
   for i in $(seq 1 60); do
     sleep 1
-    [ "$(grep -c 'Guest Mode 1\.' "$LOG" 2>/dev/null || true)" -ge "${1:-1}" ] && { sleep 4; return 0; }
+    seen=$(grep -c 'Guest Mode 1\.' "$LOG" 2>/dev/null || true)
+    [ "${seen:-0}" -ge "${1:-1}" ] && { sleep 4; return 0; }
   done
   return 1
 }
@@ -195,7 +192,7 @@ shot "04-guest-gallery"
 check "Guest Mode is on" "state: phase" "phase GUEST, 4 chosen"
 check "the gallery covers Photos" "gallery:" "gallery: UP"
 check "the gallery shows the grid with 4 items" "gallery:" "4 item(s)"
-[ -f "$RUN/state.plist" ] && { PASSED=$((PASSED + 1)); echo "  ok    the state is on disk"; } || { FAILED=$((FAILED + 1)); echo "  FAIL  no state file"; }
+check "the state is saved" "state: Guest Mode ON" "4 item(s), saved"
 cmd "menu"
 check "hold menu in Guest Mode offers only the way out" "menu:" "menu: End Guest Mode"
 cmd "pick" "state"
@@ -241,7 +238,7 @@ cmd "auth pass" "tap" "wait 2" "state"
 shot "09-normal-again"
 check "Guest Mode is off, the selection forgotten" "state: phase" "phase idle, 0 chosen"
 check "the gallery is down" "gallery:" "gallery: down"
-[ ! -f "$RUN/state.plist" ] && { PASSED=$((PASSED + 1)); echo "  ok    the state file is gone"; } || { FAILED=$((FAILED + 1)); echo "  FAIL  the state file is still there"; }
+check "nothing is saved any more" "state: Guest Mode OFF" "nothing saved any more"
 
 echo "== 10. one item: shown straight away"
 cmd "select 1" "tap" "wait 2" "state"
@@ -249,6 +246,15 @@ shot "10-single-item"
 check "a single item opens full screen" "gallery:" "showing item 0"
 cmd "tap" "wait 2" "state"
 check "and out again" "state: phase" "phase idle"
+
+echo "== 10b. Photos closed and opened again after Guest Mode ended: normal"
+if launch 3; then
+  cmd "state"
+  check "no Guest Mode at the start" "Guest Mode 1." "saved state: normal"
+  check "the gallery is down" "gallery:" "gallery: down"
+else
+  FAILED=$((FAILED + 1)); echo "  FAIL  Photos did not come back with Guest Mode loaded"
+fi
 
 echo "== 11. the real Face ID sheet in the simulator (told, not judged)"
 xcrun simctl spawn "$UDID" notifyutil -s com.apple.BiometricKit.enrollmentChanged 1 > /dev/null 2>&1 || true

@@ -104,15 +104,11 @@ static UIWindow *GMPhotosWindow(UIWindow *notThis) {
 
 #pragma mark - where the button sits
 
-static NSString *GMButtonPath(void) {
-    NSString *test = GMTestFolder();
-    if (test) return [test stringByAppendingPathComponent:@"button.plist"];
-    NSString *library = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject;
-    return [[library stringByAppendingPathComponent:@"GuestMode"] stringByAppendingPathComponent:@"button.plist"];
-}
+static NSString *const GMButtonKey = @"GuestModeButton";    // in Photos' own preferences, see GMStore
 
 - (void)loadPlace {
-    NSDictionary *saved = [NSDictionary dictionaryWithContentsOfFile:GMButtonPath()];
+    NSDictionary *saved = GMStored(GMButtonKey);
+    if (![saved isKindOfClass:NSDictionary.class]) saved = nil;
     _onRight = YES;
     if ([saved[@"fraction"] respondsToSelector:@selector(doubleValue)]) {
         _fraction = MAX(0, MIN(1, [saved[@"fraction"] doubleValue]));
@@ -122,10 +118,7 @@ static NSString *GMButtonPath(void) {
 }
 
 - (void)savePlace {
-    NSString *path = GMButtonPath();
-    [NSFileManager.defaultManager createDirectoryAtPath:path.stringByDeletingLastPathComponent
-                            withIntermediateDirectories:YES attributes:nil error:nil];
-    [@{@"fraction": @(_fraction), @"left": @(!_onRight)} writeToFile:path atomically:YES];
+    GMStore(GMButtonKey, @{@"fraction": @(_fraction), @"left": @(!_onRight)});
 }
 
 // The stretch of the screen the button's top edge may be in.
@@ -469,7 +462,12 @@ static NSString *GMButtonPath(void) {
 - (void)presentPicker {
     if (!_window || GMState.shared.phase == GMPhaseGuest || _root.presentedViewController) return;
     [self hideHint];
-    PHPickerConfiguration *config = [[PHPickerConfiguration alloc] initWithPhotoLibrary:PHPhotoLibrary.sharedPhotoLibrary];
+    PHPhotoLibrary *library = GMLibrary();
+    if (!library) {
+        [self showHint:@"Photos' library is not ready yet"];
+        return;
+    }
+    PHPickerConfiguration *config = [[PHPickerConfiguration alloc] initWithPhotoLibrary:library];
     config.selectionLimit = GM_MAX_ITEMS;
     config.selection = PHPickerConfigurationSelectionOrdered;
     config.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeCurrent;

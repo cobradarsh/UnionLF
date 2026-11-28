@@ -11,7 +11,7 @@
 #   close             end Photos, so that its next start loads the installed library
 #   run <line>…       run test command lines in Photos (see the top of GMDebug.m); none gets past Face ID
 #   log [n]           the last n lines of guestmode.log (default 40)
-#   saved             is a Guest Mode state file in Photos' data folder (= Guest Mode is on)
+#   saved             the saved Guest Mode state in Photos' preferences (there = Guest Mode is on)
 #   prefs             the settings as stored
 #   clean             delete guestmode.log and leftover command files
 #
@@ -19,12 +19,8 @@
 set -u
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=20 iphone-root"
 SHARED=/var/mobile/Library/GuestMode                  # in the jailbreak root: Photos can read it
-APPS=/rootfs/var/mobile/Containers/Data/Application
-ID=com.apple.mobileslideshow
-
-container() {                                         # Photos' data folder (exactly that id, not an extension's)
-  $SSH "for d in $APPS/*/; do m=\"\$d.com.apple.mobile_container_manager.metadata.plist\"; if grep -a -o '$ID[A-Za-z0-9._-]*' \"\$m\" 2>/dev/null | grep -q -x -F '$ID'; then echo \"\$d\"; fi; done | head -1"
-}
+# Photos runs without a data folder of its own; the log is in the first of these it may write to
+LOGS="/rootfs/var/mobile/tmp/guestmode.log /rootfs/private/var/tmp/guestmode.log /rootfs/var/tmp/guestmode.log /rootfs/var/mobile/Media/PhotoData/Caches/guestmode.log /rootfs/var/mobile/Library/Caches/guestmode.log"
 
 case "${1:-}" in
   status)
@@ -54,19 +50,13 @@ case "${1:-}" in
     [ $# -gt 0 ] || { echo "usage: phone.sh run <line>…"; exit 1; }
     { echo "token-$(date +%s)-$$"; printf '%s\n' "$@"; } | $SSH "cat > $SHARED/cmd.tmp && chown mobile:mobile $SHARED/cmd.tmp && chmod 644 $SHARED/cmd.tmp && mv $SHARED/cmd.tmp $SHARED/cmd.txt" ;;
   log)
-    dir=$(container)
-    [ -n "$dir" ] || { echo "no data folder found for Photos"; exit 1; }
-    $SSH "tail -n ${2:-40} \"${dir}tmp/guestmode.log\" 2>/dev/null || echo 'no guestmode.log yet'" ;;
+    $SSH "f=\$(ls -t $LOGS 2>/dev/null | head -1); if [ -n \"\$f\" ]; then echo \"\$f\"; tail -n ${2:-40} \"\$f\"; else echo 'no guestmode.log yet'; fi" ;;
   saved)
-    dir=$(container)
-    [ -n "$dir" ] || { echo "no data folder found for Photos"; exit 1; }
-    $SSH "ls -la \"${dir}Library/GuestMode/\" 2>/dev/null || echo 'no GuestMode folder in Photos yet (never switched on, button never moved)'" ;;
+    $SSH "cat /rootfs/var/mobile/Library/Preferences/com.apple.mobileslideshow.plist" | python -c "import plistlib,sys; d=plistlib.loads(sys.stdin.buffer.read()); print('Guest Mode state:', d.get('GuestModeState', 'none saved (Guest Mode is off)')); print('button place:', d.get('GuestModeButton', 'default'))" ;;
   prefs)
     $SSH "plutil -p /var/mobile/Library/Preferences/com.adarsh.guestmode.plist 2>/dev/null || echo 'no settings stored yet (everything at its default)'" ;;
   clean)
-    dir=$(container)
-    [ -n "$dir" ] || { echo "no data folder found for Photos"; exit 1; }
-    $SSH "rm -f \"${dir}tmp/guestmode.log\"; find $SHARED -name 'cmd*' -delete 2>/dev/null; echo cleaned" ;;
+    $SSH "rm -f $LOGS; find $SHARED -name 'cmd*' -delete 2>/dev/null; echo cleaned" ;;
   *)
     sed -n '2,17p' "$0" ;;
 esac

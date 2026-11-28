@@ -2,6 +2,7 @@
 #import "GuestMode.h"
 #include <dlfcn.h>
 #include <notify.h>
+#import <objc/message.h>
 
 NSNotificationName const GMStateChangedNotification = @"GMStateChangedNotification";
 NSNotificationName const GMSettingsChangedNotification = @"GMSettingsChangedNotification";
@@ -107,8 +108,22 @@ void GMLog(NSString *format, ...) {
         stamp = [NSDateFormatter new];
         stamp.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
         stamp.dateFormat = @"MM-dd HH:mm:ss.SSS";
-        path = [(GMTestFolder() ?: NSTemporaryDirectory()) stringByAppendingPathComponent:@"guestmode.log"];
+        // Photos has no data folder of its own (it runs without a container, under a tight sandbox):
+        // the log goes to the first place that takes a file.
+        NSMutableArray<NSString *> *places = [NSMutableArray new];
+        if (GMTestFolder()) [places addObject:GMTestFolder()];
+        [places addObject:NSTemporaryDirectory()];
+        [places addObject:[NSHomeDirectory() stringByAppendingPathComponent:@"Media/PhotoData/Caches"]];
+        [places addObject:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"]];
+        for (NSString *place in places) {
+            NSString *probe = [place stringByAppendingPathComponent:@"guestmode.log"];
+            if ([NSFileManager.defaultManager isWritableFileAtPath:probe] || [NSData.data writeToFile:probe atomically:NO]) {
+                path = probe;
+                break;
+            }
+        }
     });
+    if (!path) return;
     NSDate *now = [NSDate date];
     dispatch_async(queue, ^{
         NSString *line = [NSString stringWithFormat:@"%@  %@\n", [stamp stringFromDate:now], text];
@@ -125,6 +140,49 @@ void GMLog(NSString *format, ...) {
         }
         [handle closeFile];
     });
+}
+
+#pragma mark - the library
+
+PHPhotoLibrary *GMLibrary(void) {
+    static PHPhotoLibrary *library;
+    if (library) return library;
+    NSString *from = nil;
+    // PhotosUICore's own way to the library the app shows; the public call is for every other app
+    for (NSString *name in @[@"px_deprecated_appPhotoLibrary", @"px_systemPhotoLibrary"]) {
+        SEL sel = NSSelectorFromString(name);
+        if (![PHPhotoLibrary respondsToSelector:sel]) continue;
+        @try {
+            id found = ((id (*)(id, SEL))objc_msgSend)(PHPhotoLibrary.class, sel);
+            if ([found isKindOfClass:PHPhotoLibrary.class]) library = found;
+        } @catch (NSException *e) {
+            GMLog(@"library: +%@ threw %@", name, e.reason);
+        }
+        if (library) { from = name; break; }
+    }
+    if (!library) {
+        @try {
+            library = PHPhotoLibrary.sharedPhotoLibrary;
+            from = @"sharedPhotoLibrary";
+        } @catch (NSException *e) {
+            GMLog(@"library: +sharedPhotoLibrary threw %@", e.reason);
+        }
+    }
+    GMLog(@"library: %@", library ? [NSString stringWithFormat:@"from +%@", from] : @"NONE FOUND");
+    return library;
+}
+
+PHFetchOptions *GMFetchOptions(void) {
+    PHPhotoLibrary *library = GMLibrary();
+    SEL sel = NSSelectorFromString(@"librarySpecificFetchOptions");
+    PHFetchOptions *options = nil;
+    if ([library respondsToSelector:sel]) {
+        @try {
+            options = ((id (*)(id, SEL))objc_msgSend)(library, sel);
+        } @catch (NSException *e) {
+        }
+    }
+    return [options isKindOfClass:PHFetchOptions.class] ? options : [PHFetchOptions new];
 }
 
 #pragma mark - symbols
@@ -152,18 +210,27 @@ UIImage *GMSymbol(NSArray<NSString *> *names, CGFloat pointSize, UIImageSymbolWe
     return shared;
 }
 
-// Inside Photos' own data folder: nothing outside the app can switch Guest Mode off by editing it.
-static NSString *GMStatePath(void) {
-    NSString *test = GMTestFolder();
-    if (test) return [test stringByAppendingPathComponent:@"state.plist"];
-    NSString *library = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject;
-    return [[library stringByAppendingPathComponent:@"GuestMode"] stringByAppendingPathComponent:@"state.plist"];
+// Kept in Photos' own preferences: the one place Photos can always write (it has no data folder
+// of its own), and nothing outside the app can switch Guest Mode off there without being root.
+static NSString *const GMStateKey = @"GuestModeState";
+
+id GMStored(NSString *key) {
+    return [NSUserDefaults.standardUserDefaults objectForKey:key];
+}
+
+BOOL GMStore(NSString *key, id value) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if (value) [defaults setObject:value forKey:key]; else [defaults removeObjectForKey:key];
+    [defaults synchronize];
+    id now = [defaults objectForKey:key];
+    return value ? now != nil : now == nil;
 }
 
 - (instancetype)init {
     if ((self = [super init])) {
         _identifiers = @[];
-        NSDictionary *saved = [NSDictionary dictionaryWithContentsOfFile:GMStatePath()];
+        NSDictionary *saved = GMStored(GMStateKey);
+        if (![saved isKindOfClass:NSDictionary.class]) saved = nil;
         NSArray *ids = saved[@"identifiers"];
         if ([saved[@"guest"] respondsToSelector:@selector(boolValue)] && [saved[@"guest"] boolValue] && [ids isKindOfClass:NSArray.class]) {
             NSMutableArray<NSString *> *clean = [NSMutableArray new];
@@ -181,15 +248,8 @@ static NSString *GMStatePath(void) {
 - (NSArray<NSString *> *)identifiers { return _identifiers; }
 
 - (BOOL)save {
-    NSString *path = GMStatePath();
-    if (_phase != GMPhaseGuest) {
-        [NSFileManager.defaultManager removeItemAtPath:path error:nil];
-        return ![NSFileManager.defaultManager fileExistsAtPath:path];
-    }
-    [NSFileManager.defaultManager createDirectoryAtPath:path.stringByDeletingLastPathComponent
-                            withIntermediateDirectories:YES attributes:nil error:nil];
-    NSDictionary *state = @{@"guest": @YES, @"identifiers": _identifiers, @"since": [NSDate date]};
-    return [state writeToFile:path atomically:YES];
+    if (_phase != GMPhaseGuest) return GMStore(GMStateKey, nil);
+    return GMStore(GMStateKey, @{@"guest": @YES, @"identifiers": _identifiers, @"since": [NSDate date]});
 }
 
 - (void)changed {
@@ -212,7 +272,7 @@ static NSString *GMStatePath(void) {
     if (_phase != GMPhaseChosen) return;
     _phase = GMPhaseGuest;
     BOOL saved = [self save];
-    GMLog(@"state: Guest Mode ON with %d item(s)%@", (int)_identifiers.count, saved ? @"" : @" (the state file could not be written: a restart of Photos would end it)");
+    GMLog(@"state: Guest Mode ON with %d item(s)%@", (int)_identifiers.count, saved ? @", saved" : @" (could NOT be saved: a restart of Photos would end it)");
     [self changed];
 }
 
@@ -221,20 +281,24 @@ static NSString *GMStatePath(void) {
     _phase = GMPhaseIdle;
     _identifiers = @[];
     BOOL saved = [self save];
-    GMLog(@"state: Guest Mode OFF%@", saved ? @"" : @" (the state file could not be removed)");
+    GMLog(@"state: Guest Mode OFF%@", saved ? @", nothing saved any more" : @" (the saved state could NOT be removed)");
     [self changed];
 }
 
 - (NSArray<PHAsset *> *)assets {
     if (!_identifiers.count) return @[];
-    PHFetchOptions *options = [PHFetchOptions new];
-    options.includeHiddenAssets = YES;
-    options.includeAllBurstAssets = YES;
-    PHFetchResult<PHAsset *> *found = [PHAsset fetchAssetsWithLocalIdentifiers:_identifiers options:options];
     NSMutableDictionary<NSString *, PHAsset *> *byId = [NSMutableDictionary new];
-    [found enumerateObjectsUsingBlock:^(PHAsset *asset, NSUInteger index, BOOL *stop) {
-        if (asset.localIdentifier) byId[asset.localIdentifier] = asset;
-    }];
+    @try {
+        PHFetchOptions *options = GMFetchOptions();
+        options.includeHiddenAssets = YES;
+        options.includeAllBurstAssets = YES;
+        PHFetchResult<PHAsset *> *found = [PHAsset fetchAssetsWithLocalIdentifiers:_identifiers options:options];
+        [found enumerateObjectsUsingBlock:^(PHAsset *asset, NSUInteger index, BOOL *stop) {
+            if (asset.localIdentifier) byId[asset.localIdentifier] = asset;
+        }];
+    } @catch (NSException *e) {
+        GMLog(@"assets: the fetch threw %@", e.reason);
+    }
     NSMutableArray<PHAsset *> *ordered = [NSMutableArray new];
     for (NSString *one in _identifiers) {
         PHAsset *asset = byId[one];

@@ -21,6 +21,21 @@
 //   bars             what a tap on a photo does: hide or show the bars and the button
 //   wait <seconds>, mark <text>
 #import "GuestMode.h"
+#ifdef GM_TEST
+#import <objc/runtime.h>
+
+// Tests only: a fresh simulator's Photos asks to send notifications, and that system alert would sit
+// over every picture the test takes (nothing can tap it away). The question is answered "no" unasked.
+static void GMQuietNotificationQuestion(void) {
+    Class center = NSClassFromString(@"UNUserNotificationCenter");
+    SEL sel = NSSelectorFromString(@"requestAuthorizationWithOptions:completionHandler:");
+    Method method = center ? class_getInstanceMethod(center, sel) : NULL;
+    if (!method) return;
+    method_setImplementation(method, imp_implementationWithBlock(^(id me, NSUInteger options, void (^done)(BOOL, NSError *)) {
+        if (done) done(NO, nil);
+    }));
+}
+#endif
 
 static NSMutableArray<NSString *> *gLines;
 static BOOL gRunning;
@@ -70,7 +85,7 @@ static void GMRunLine(NSString *line) {
         [button dismissPresented];
         pause = 1.0;
     } else if ([verb isEqualToString:@"select"]) {
-        PHFetchOptions *options = [PHFetchOptions new];
+        PHFetchOptions *options = GMFetchOptions();
         options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
         options.fetchLimit = MAX(1, rest.integerValue);
         PHFetchResult<PHAsset *> *found = [PHAsset fetchAssetsWithOptions:options];
@@ -154,6 +169,9 @@ static void GMPoll(void) {
 }
 
 void GMDebugStart(void) {
+#ifdef GM_TEST
+    GMQuietNotificationQuestion();
+#endif
     if (!GMDiag()) return;
     // the token of a command file that was already there is remembered, not run again
     NSString *path = [GMDebugFolder() stringByAppendingPathComponent:@"cmd.txt"];

@@ -28,6 +28,13 @@ BOOL GMDiag(void);                                          // the marker file e
 BOOL GMEnabled(void);
 NSInteger GMButtonSize(void);                               // points
 double GMButtonDim(void);                                   // the button's opacity while nothing is chosen
+// Small values kept in Photos' own preferences (they survive a restart of Photos). nil removes.
+id GMStored(NSString *key);
+BOOL GMStore(NSString *key, id value);
+// The library Photos itself shows. Photos runs PhotoKit in "multi library mode", where
+// +sharedPhotoLibrary and fetches without a library throw: every fetch goes through these.
+PHPhotoLibrary *GMLibrary(void);
+PHFetchOptions *GMFetchOptions(void);
 // The first of these SF Symbols that this iOS has.
 UIImage *GMSymbol(NSArray<NSString *> *names, CGFloat pointSize, UIImageSymbolWeight weight);
 
