@@ -29,6 +29,7 @@
 //   photos                how many videos Photos holds, and whether the VidGrab album exists
 //   shot <name>           picture of the screen as the app draws it → vidgrab-<name>.jpg
 //   set <key> <value>     tests only: change a setting
+//   override <key> <v>    change a setting in this app's memory only, also on the phone (override clear: all back)
 //   wait <seconds>, mark <text>
 #import "VidGrabUI.h"
 #import <Photos/Photos.h>
@@ -148,10 +149,10 @@ static void VGRunLine(NSString *line) {
         NSMutableArray<NSString *> *windows = [NSMutableArray new];
         for (UIWindow *window in VGAppWindows()) [windows addObject:[NSString stringWithFormat:@"%@%@", NSStringFromClass(window.class), window.isKeyWindow ? @" (key)" : @""]];
         UIWindow *overlay = [VGOverlay window];
-        VGLog(@"state: VidGrab %@, %@, enabled %d, button %d pictures %d corner %ld, hold %ld fingers %.2f s, block app hold %d, action %ld, quality %ld, album %d; "
+        VGLog(@"state: VidGrab %@, %@, enabled %d, button %d pictures %d corner %ld, hold %ld fingers %.2f s, block app hold %d, action %ld, tap %ld, quality %ld, album %d; "
               @"windows: %@; overlay %@; pill %@; download %@; players known %lu",
               VG_VERSION, VGCaptureHookSummary(), [VGPrefs enabled], [VGPrefs badge], [VGPrefs pictures], (long)[VGPrefs badgeCorner], (long)[VGPrefs holdFingers],
-              [VGPrefs holdTime], [VGPrefs blockAppHold], (long)[VGPrefs action], (long)[VGPrefs maxHeight], [VGPrefs album],
+              [VGPrefs holdTime], [VGPrefs blockAppHold], (long)[VGPrefs action], (long)[VGPrefs tapAction], (long)[VGPrefs maxHeight], [VGPrefs album],
               [windows componentsJoinedByString:@", "], overlay ? (overlay.isHidden ? @"hidden" : (overlay.isKeyWindow ? @"shown, key" : @"shown")) : @"none",
               [VGPill stateForLog], VGDownloadRunning() ? @"running" : @"idle", (unsigned long)VGKnownPlayerLayers().count);
     } else if ([command isEqualToString:@"layers"]) {
@@ -324,6 +325,14 @@ static void VGRunLine(NSString *line) {
         }
     } else if ([command isEqualToString:@"shot"]) {
         VGShot(rest.length ? rest : @"shot");
+    } else if ([command isEqualToString:@"override"] && words.count >= 2) {
+        if ([words[1] isEqualToString:@"clear"]) {
+            VGOverridePref(nil, nil);
+            VGLog(@"override: cleared, the settings file counts again");
+        } else if (words.count >= 3) {
+            VGOverridePref(words[1], @(words[2].doubleValue));
+            VGLog(@"override %@ = %@ (this app, until cleared or restarted)", words[1], words[2]);
+        }
     } else if ([command isEqualToString:@"set"] && VGTestFolder() && words.count >= 3) {
         NSString *path = [VGTestFolder() stringByAppendingPathComponent:@"prefs.plist"];
         NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary new];

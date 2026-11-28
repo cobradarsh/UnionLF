@@ -15,7 +15,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-#define VG_VERSION @"2.2.5"
+#define VG_VERSION @"2.2.6"
 
 #pragma mark - core (VGCore.m)
 
@@ -58,6 +58,8 @@ typedef NS_ENUM(NSInteger, VGErrorCode) {
 + (BOOL)haptic;
 @end
 extern NSString *const VGPrefsChangedNotification;      // in this process, on the main queue
+/// Tests: a setting changed in this app's memory only (the settings file is not touched); key nil clears them all.
+void VGOverridePref(NSString *_Nullable key, id _Nullable value);
 
 #pragma mark - playlists (VGPlaylist.m)
 

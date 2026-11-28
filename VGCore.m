@@ -81,8 +81,24 @@ static NSString *VGPrefsPath(void) {
     return [VGRoot() stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.adarsh.vidgrab.plist"];
 }
 
+static NSMutableDictionary *gOverrides;                     // tests: settings changed in this app's memory only
+
 static id VGPref(NSString *key) {
-    @synchronized (gPrefsLock()) { return gPrefs[key]; }
+    @synchronized (gPrefsLock()) { return gOverrides[key] ?: gPrefs[key]; }
+}
+
+void VGOverridePref(NSString *key, id value) {
+    @synchronized (gPrefsLock()) {
+        if (!key) {
+            [gOverrides removeAllObjects];
+        } else {
+            if (!gOverrides) gOverrides = [NSMutableDictionary new];
+            gOverrides[key] = value;
+        }
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [NSNotificationCenter.defaultCenter postNotificationName:VGPrefsChangedNotification object:nil];
+    });
 }
 static BOOL VGPrefBool(NSString *key, BOOL fallback) {
     id value = VGPref(key);

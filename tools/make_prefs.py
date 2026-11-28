@@ -18,7 +18,7 @@ import sys
 
 D = "com.adarsh.vidgrab"
 NOTE = "com.adarsh.vidgrab/prefs"
-VERSION = "2.2.5"
+VERSION = "2.2.6"
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 OUT = args[0] if args else "layout/Library/PreferenceLoader/Preferences"
