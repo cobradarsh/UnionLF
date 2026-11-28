@@ -6,7 +6,7 @@
 #   remove            dpkg -r com.adarsh.guestmode, close Photos
 #   facekey           whether Photos' entitlements let it ask for Face ID (it has no usage description)
 #   diag on|off       make / remove the marker that switches the log and the test commands on
-#                     (Photos notices "on" at its next start, "off" at once)
+#                     (Photos reads it when it starts, SpringBoard at a respring: close Photos and respring after either)
 #   open              bring Photos to the front (the phone must be unlocked)
 #   close             end Photos, so that its next start loads the installed library
 #   run <line>…       run test command lines in Photos (see the top of GMDebug.m); none gets past Face ID
