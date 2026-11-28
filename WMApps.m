@@ -84,12 +84,14 @@
 + (WMAppKind)kindForBundleID:(NSString *)bid {
     if (bid.length == 0) return WMAppKindNone;
     WMSettings *s = [WMSettings shared];
+    // What an app IS comes first: a dating app you also ticked yourself is still a dating app (1.0.43 called a
+    // ticked Hinge "picked by you", so auto-scroll, which is for dating apps, stayed off).
+    if ([[self _datingApps] containsObject:bid] || [self _looksLikeDating:bid]) return WMAppKindDating;
+    if ([[self _chatApps] containsObject:bid] || [self _looksLikeChat:bid]) return WMAppKindChat;
     // Apps you picked yourself are ADDED to the built-in lists. (They used to REPLACE them: tapping Done in
     // the picker switched auto-detection off, so one extra pick silently hid the bubble everywhere else.)
     for (NSString *m in s.manualApps)
         if ([m caseInsensitiveCompare:bid] == NSOrderedSame) return WMAppKindManual;
-    if ([[self _datingApps] containsObject:bid] || [self _looksLikeDating:bid]) return WMAppKindDating;
-    if ([[self _chatApps] containsObject:bid] || [self _looksLikeChat:bid]) return WMAppKindChat;
     return WMAppKindNone;
 }
 
