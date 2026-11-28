@@ -74,6 +74,9 @@
 - (void)evaluateVisibility;    // show over enabled apps, hide elsewhere
 - (void)beginAppendTo:(WPSheet *)sheet;  // hide the sheet; next tap adds a screen to it
 @property (nonatomic, strong) UIWindow *window;
+// Self-test only: one auto-scroll capture of the screen in front, forced on whatever the app; reports how it
+// went instead of opening the sheet. Ignored if a capture is already running.
+- (void)selfTestAutoCapture:(void (^)(NSUInteger frames, NSInteger swipes, NSString *ended))done;
 @end
 
 // ── reply sheet (another SpringBoard overlay window) ──

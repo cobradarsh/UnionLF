@@ -6,6 +6,8 @@
       ocr      read the current screen with Vision (fast and accurate), then through the reply pipeline
       scroll   one synthetic swipe up the middle of the screen, logs whether the screen moved; only runs
                while Settings is in front, so a test swipe can never land in someone's chat
+      autocapture  one whole auto-scroll capture (swipe, keep, repeat, stop at the end); logs how many
+               screens and swipes and why it ended; Settings only, and no sheet opens
       hid      list the touch digitizers and the sender ID auto-scroll will use                              */
 
 #import "WPlus.h"
@@ -22,6 +24,7 @@ static dispatch_source_t gWatch;
 + (void)_check;
 + (void)_ocr;
 + (void)_scroll;
++ (void)_autocapture;
 + (void)_log:(NSString *)line;
 @end
 
@@ -69,8 +72,9 @@ static dispatch_source_t gWatch;
     @try {
         if ([cmd isEqualToString:@"ocr"]) [self _ocr];
         else if ([cmd isEqualToString:@"scroll"]) [self _scroll];
+        else if ([cmd isEqualToString:@"autocapture"]) [self _autocapture];
         else if ([cmd isEqualToString:@"hid"]) [self _log:[@"hid: " stringByAppendingString:[WPScroll diagnostics]]];
-        else [self _log:@"unknown command (use ocr, scroll or hid)"];
+        else [self _log:@"unknown command (use ocr, scroll, autocapture or hid)"];
     } @catch (NSException *e) {
         [self _log:[@"failed: " stringByAppendingString:e.reason ?: @"exception"]];
     }
@@ -129,6 +133,20 @@ static dispatch_source_t gWatch;
                         (unsigned long)diff, (unsigned long)n, diff > n / 20 ? @"THE SCREEN MOVED" : @"no movement"]];
         });
     });
+}
+
++ (void)_autocapture {
+    NSString *front = [WPHost frontmostBundleID] ?: @"(none)";
+    if (![front isEqualToString:@"com.apple.Preferences"]) {
+        [self _log:[NSString stringWithFormat:@"autocapture: skipped, %@ is in front (open Settings first)", front]];
+        return;
+    }
+    CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent();
+    [self _log:@"autocapture: started"];
+    [[WPBubble shared] selfTestAutoCapture:^(NSUInteger frames, NSInteger swipes, NSString *ended) {
+        [WPSelfTest _log:[NSString stringWithFormat:@"autocapture: %lu screens, %ld swipes, ended by: %@, in %.1f s",
+                          (unsigned long)frames, (long)swipes, ended, CFAbsoluteTimeGetCurrent() - t0]];
+    }];
 }
 
 @end

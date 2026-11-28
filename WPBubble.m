@@ -51,6 +51,9 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 @property (nonatomic) NSInteger autoKept;            // frames kept after one of our swipes
 @property (nonatomic) NSInteger misses;              // swipes in a row that brought nothing new
 @property (nonatomic) CFAbsoluteTime swipeDone;      // when the last swipe finished (0 = none yet)
+@property (nonatomic) BOOL forceAuto;                // self-test: auto-scroll whatever the app
+@property (nonatomic, copy) NSString *endReason;     // why the capture ended (self-test log)
+@property (nonatomic, copy) void (^testDone)(NSUInteger, NSInteger, NSString *);   // self-test: report, no sheet
 @end
 
 @implementation WPBubble
@@ -180,7 +183,9 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     if (first) [_scrollFrames addObject:first];
     _judge = [[WPScrollJudge alloc] initWithFirst:(first ? [WPCapture signatureOf:first] : nil) now:now];
     // In a dating app the bubble scrolls the profile itself; if the app doesn't move, it hands over to you.
-    _autoScroll = [WMSettings shared].autoScroll && [WMApps currentKind] == WMAppKindDating && [WPScroll available];
+    _autoScroll = (_forceAuto || ([WMSettings shared].autoScroll && [WMApps currentKind] == WMAppKindDating))
+                  && [WPScroll available];
+    _forceAuto = NO; _endReason = @"tap";
     _swiping = NO; _swipes = 0; _autoKept = 0; _misses = 0; _swipeDone = 0;
     [self _toast:_autoScroll ? @"Scrolling the profile for you. Tap 🪽 to stop."
                              : @"Capturing — scroll the profile, tap 🪽 to finish."];
@@ -214,9 +219,13 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
     // Only a forgotten session ends by itself. Reaching the frame limit used to end it too: a video filled the
     // limit with repeats of one screen, and the capture stopped in the middle of the profile.
-    if (now - _lastKeep > kScrollIdleSeconds || now - _scrollStart > kScrollMaxSeconds) { [self _finishScrollCapture]; return; }
+    if (now - _lastKeep > kScrollIdleSeconds || now - _scrollStart > kScrollMaxSeconds) {
+        _endReason = @"idle or time limit"; [self _finishScrollCapture]; return;
+    }
     if (_autoScroll) {
-        if (_scrollFrames.count >= kScrollMaxFrames) { [self _finishScrollCapture]; return; }   // full: stop here
+        if (_scrollFrames.count >= kScrollMaxFrames) {                                         // full: stop here
+            _endReason = @"frame limit"; [self _finishScrollCapture]; return;
+        }
         if (_swiping || _swipeDone == 0 || now - _swipeDone < 0.6) return;                    // let the page land
     }
     _busy = YES;
@@ -253,7 +262,7 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
         } else if (now - _swipeDone > 2.4) {                  // nothing new since the swipe
             _misses++;
             if (_autoKept == 0) [self _autoHandOver];         // never moved: this app ignores our swipes
-            else if (_misses >= 2) [self _finishScrollCapture];   // the end of the profile
+            else if (_misses >= 2) { _endReason = @"end of the page"; [self _finishScrollCapture]; }   // the end
             else [self _autoSwipe];                           // once more (a slow page, a sticky card)
         }
     }
@@ -277,10 +286,18 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     });
 }
 
+- (void)selfTestAutoCapture:(void (^)(NSUInteger, NSInteger, NSString *))done {
+    if (_capturing || _scrolling || !done) return;
+    _testDone = done;
+    _forceAuto = YES;
+    [self _startScrollCapture];
+}
+
 // The app didn't move for our swipes: carry on as a normal hold-and-scroll capture.
 - (void)_autoHandOver {
     if (!_autoScroll) return;
     _autoScroll = NO;
+    if (_testDone) { _endReason = @"handed over: the page never moved"; [self _finishScrollCapture]; return; }
     [self _toast:@"This app didn't scroll by itself. Scroll it yourself, tap 🪽 to finish."];
 }
 
@@ -291,6 +308,11 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     _judge = nil;
     [self _setRecordingLook:NO];
     NSArray<UIImage *> *frames = [_scrollFrames copy]; _scrollFrames = nil;
+    if (_testDone) {                                     // self-test: report, keep nothing, open nothing
+        void (^done)(NSUInteger, NSInteger, NSString *) = _testDone; _testDone = nil;
+        done(frames.count, _swipes, _endReason ?: @"?");
+        return;
+    }
     if (frames.count == 0) { [self _toast:@"Nothing captured. Try again."]; return; }
     WPSheet *sheet = [[WPSheet alloc] initWithImage:frames.firstObject];
     for (NSUInteger k = 1; k < frames.count; k++) [sheet appendImage:frames[k]];
