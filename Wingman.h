@@ -156,7 +156,6 @@ static NSInteger const kWMQuickReplyCount = 5;
 + (WMAppKind)kindForBundleID:(NSString *)bundleID;   // reads settings
 + (WMAppKind)currentKind;
 + (NSString *)currentAppName;
-+ (BOOL)currentAppIsHinge;                        // Hinge caps a comment at 255 characters
 @end
 
 // ── per-app quick replies (stored in each app's own defaults) ─

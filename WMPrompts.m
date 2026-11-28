@@ -68,14 +68,14 @@
          "my context. If something is unclear or doesn't add up (a name, who they are to me), "
          "go with the most sensible reading of the chat and still write the three. Plain "
          "text only, no markdown (no ** or #).\n"
-      "9. Emojis, the way a real person texts: every reply carries ONE emoji that fits what "
-         "it says (two at the very most), placed where a person would naturally put it, "
-         "usually at the end or right after the punchline, and a different one in each of the "
-         "three. Never a row of them and never an emoji in place of a word. In a genuinely "
-         "heavy moment (grief, illness, an emergency) use only a gentle one such as folded "
-         "hands or a heart, or none. If the STYLE gives its own emoji instructions (Formal "
-         "uses none; Emojify, call cards and Photo Opener have their own), follow those "
-         "instead.\n\n"
+      "9. Be a bit expressive, the way a real person texts when they mean it, with emojis "
+         "that fit what it says: one to three per reply, never more than three, placed where a "
+         "person would naturally put them (right after the phrase they colour, or at the end), "
+         "not the same ones in all three replies. Never a row of the same emoji and never an "
+         "emoji in place of a word. In a genuinely heavy moment (grief, illness, an emergency) "
+         "use only a gentle one such as folded hands or a heart, or none. If the STYLE gives "
+         "its own emoji instructions (Formal uses none; Emojify, call cards and Photo Opener "
+         "have their own), follow those instead.\n\n"
 
       "OUTPUT FORMAT:\n"
       "Output EXACTLY three replies. Put a line containing only ~~~ between them (not "
@@ -213,9 +213,9 @@
                     "in a few words (it disarms more than any defence would) and steer to what happens next. "
                     "Never invent facts or excuses that aren't in the chat or my context. No gaslighting ('that "
                     "never happened', 'you're overreacting', 'calm down'), no guilt trips, no grovelling, no "
-                    "'sorry you feel that way', no lecturing or therapy-speak. Emoji: only a soft, warm one (a "
-                    "heart, folded hands, a hug, a small smile) or none, never a laughing or smirking one. Make "
-                    "the three different: one that leads with empathy and gently reframes it, one that walks them "
+                    "'sorry you feel that way', no lecturing or therapy-speak. Emoji: up to three soft, warm ones "
+                    "(a heart, folded hands, a hug, a small smile), never a laughing or smirking one. Make the "
+                    "three different: one that leads with empathy and gently reframes it, one that walks them "
                     "through the facts so they come round on their own, and one that offers the way out on my "
                     "terms.";
         case WMReplyModeFactsOnly: {
@@ -233,9 +233,10 @@
                     "feelings, no persuasion tricks and no insults: just the facts. If they're partly right, say "
                     "so in a few words and correct the rest. Never invent a number, a quote, a source or a link; "
                     "if something can't be confirmed, leave it out. Still reads like a text, not an essay: calm, "
-                    "precise, a little cold. Emoji: one at most (a receipt, a chart, a check mark) or none. Make "
-                    "the three different: one that leads with the single most damning fact, one that takes their "
-                    "claims apart one by one, and one that ends on a question they can't answer without agreeing.", look];
+                    "precise, a little cold. Emoji: up to three (a receipt, a chart, a check mark), used "
+                    "sparingly. Make the three different: one that leads with the single most damning fact, one "
+                    "that takes their claims apart one by one, and one that ends on a question they can't answer "
+                    "without agreeing.", look];
         }
         case WMReplyModeExcuse:
             return @"EXCUSE. Get me out of this gracefully. Read the chat and my context to see exactly "
@@ -306,11 +307,11 @@
                     "goddess or angel lines, no stock phrases like 'should be illegal'. Use only what is really "
                     "in her photos or written on her profile: never invent an outfit, a colour, a place or a "
                     "prop, never name a landmark, city or venue unless that name is written on her profile (call "
-                    "it by what it looks like instead), and never claim what she did there. Emojis, the way a "
-                    "real guy texts: ONE that fits the photo or the mood (sparkles, a sun, a smiling face, heart "
-                    "eyes, a flower), two at the very most, at the end or right after a compliment, and a "
-                    "different one in each of the three. Make the three about THREE DIFFERENT photos, each with "
-                    "its own details and its own wording for all three steps.";
+                    "it by what it looks like instead), and never claim what she did there. Emojis, the way an "
+                    "expressive guy texts: one to three that fit the photo or the mood (sparkles, a sun, a "
+                    "smiling face, heart eyes, a flower), never more than three, right after the compliment they "
+                    "colour or at the end, and not the same ones in all three replies. Make the three about THREE "
+                    "DIFFERENT photos, each with its own details and its own wording for all three steps.";
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
@@ -334,10 +335,10 @@
                     "her words back to her. BANNED: compliments on her looks (let the attraction stay implied), "
                     "pickup lines, puns on her name, opening with 'hey' or her name, 'you had me at', 'on a scale "
                     "of 1 to 10', bragging, neediness or anything that asks for her approval, anything sexual, "
-                    "and negging. Emoji: one at most, and only if it sharpens the tease (a smirk or a grin); no "
-                    "hearts, roses or fire, and none is fine. Make the three different angles: a bold read of "
-                    "her, an open loop she has to reply to close, and a playful challenge or a vivid little scene "
-                    "of the two of us where I take the lead.";
+                    "and negging. Emoji: up to three that sharpen the tease (a smirk, a grin, a wink, eyes); no "
+                    "hearts, roses or fire. Make the three different angles: a bold read of her, an open loop she "
+                    "has to reply to close, and a playful challenge or a vivid little scene of the two of us "
+                    "where I take the lead.";
         case WMReplyModeBanter:
             return @"BANTER. Keep the conversation alive and fun: the playful back-and-forth she enjoys most, "
                     "never an interview. Read the chat for the thread worth pulling (something she mentioned in "
@@ -357,8 +358,8 @@
                     "trauma, politics or anything sexual. Aloof and effortless: interested but unbothered, like "
                     "I'm texting between other things. Short and relaxed, no gushing ('that's so interesting'), "
                     "no pile of exclamation marks, no explaining why I'm asking, never chasing, and leave her "
-                    "room to carry some of it. Emoji: one at most, and none is often better; nothing eager. Make "
-                    "the three different: one that goes deeper into what we're already on, one that opens a fresh "
+                    "room to carry some of it. Emoji: up to three, playful and relaxed, never eager. Make the "
+                    "three different: one that goes deeper into what we're already on, one that opens a fresh "
                     "topic out of nowhere and still feels natural, and one that teases her into defending herself "
                     "or telling the story.";
         case WMReplyModePoetic:
@@ -377,9 +378,9 @@
                     "full poem, never flowery or old-fashioned (no thee or thou). Use only what is really in her "
                     "photos: never invent a place, outfit or prop, and never name a landmark or city unless it's "
                     "written on her profile. If no photo of her is visible, make it about the impression her "
-                    "words give instead. Emoji: one soft one at most (a flower, sparkles, the moon, a soft smile) "
-                    "or none. Make the three about three different photos or details, each with a different "
-                    "image, and let one end on a soft, easy question.";
+                    "words give instead. Emoji: up to three soft ones (a flower, sparkles, the moon, a soft "
+                    "smile). Make the three about three different photos or details, each with a different image, "
+                    "and let one end on a soft, easy question.";
         case WMReplyModeHotInHere:
             return @"HOT IN HERE. Bold heat. Tell her, in a cheeky, raunchy way, how good she looks and how "
                     "irresistible she is, with a confident grin in every line. Build it on what's really there "
@@ -392,9 +393,9 @@
                     "parts spelled out), nothing degrading (no rating her body, no names that talk down to her), "
                     "no comments on her age, never pushy if she has said no or gone cold, and no song lyrics. "
                     "Fresh lines only, no stock pickup lines ('is it hot in here or is it just you', 'did it hurt "
-                    "when you fell'). Emoji: one at most from the heat family (a hot face, fire, a smirk, a "
-                    "devil) or none. Make the three different: one cheeky innuendo, one bold confession of what "
-                    "she's doing to me, and one playful dare that turns the heat back on her.";
+                    "when you fell'). Emoji: up to three from the heat family (a hot face, fire, a smirk, a "
+                    "devil). Make the three different: one cheeky innuendo, one bold confession of what she's "
+                    "doing to me, and one playful dare that turns the heat back on her.";
         case WMReplyModeUndead:
             return @"UNDEAD. The chat is dead: she went quiet, it ended on a dead end, or days or weeks have "
                     "passed since anyone wrote. Bring it back from the dead with ONE message she actually wants "
@@ -407,10 +408,10 @@
                     "line. Never complain about or point at her silence: no guilt trips, no 'hey stranger', 'long "
                     "time no see', 'you still alive?' or 'did I do something wrong?', no apologising for texting, "
                     "no sarcasm, nothing needy. Usually she's a match; if the chat is clearly with a friend or "
-                    "family, the same idea without the flirting. Emoji: one at most, playful (a grin, a smirk, a "
-                    "zombie only if it's part of the joke) or none. Make the three different: one callback to "
-                    "something from our chat, one fresh hook out of nowhere, and one confident plan or invitation "
-                    "that gives her an easy yes.";
+                    "family, the same idea without the flirting. Emoji: up to three, playful (a grin, a smirk, a "
+                    "zombie only if it's part of the joke). Make the three different: one callback to something "
+                    "from our chat, one fresh hook out of nowhere, and one confident plan or invitation that "
+                    "gives her an easy yes.";
         case WMReplyModeReviver:
             return @"REVIVER. The conversation has cooled off or her interest dipped. Read the "
                     "WHOLE chat and find where her energy dropped (shorter or slower replies, "
@@ -587,7 +588,7 @@
                "still reading like a text.\n\n"];
     } else if (length == WMReplyLengthShort) {
         [p appendString:mode == WMReplyModePhotoOpener
-            ? @"LENGTH: SHORT. Two or three sentences, about 25 to 45 words, still all three steps: her beauty, how she outshines the scene, the warm close.\n\n"
+            ? @"LENGTH: SHORT. Two or three short sentences, still all three steps: her beauty, how she outshines the scene, the warm close.\n\n"
             : mode == WMReplyModeFactCheck
             ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: the one fact or contradiction that settles it, said plainly.\n\n"
             : mode == WMReplyModeDefuse
@@ -607,7 +608,7 @@
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
         [p appendString:mode == WMReplyModePhotoOpener
-            ? @"LENGTH: LONG. Three to five sentences, about 45 to 80 words, all three steps, with more detail on her.\n\n"
+            ? @"LENGTH: LONG. Three or four sentences, all three steps, with a little more detail on her.\n\n"
             : mode == WMReplyModeCatch
             ? @"LENGTH: LONG. Two or three short sentences, about 20 to 45 words: the hook, then one beat of my personality. Never a block of text.\n\n"
             : mode == WMReplyModeBanter
@@ -625,9 +626,14 @@
                "style is Formal).\n\n"];
     }
 
-    // Measured by the user on 2026-11-28: Hinge stops a like comment at 255 characters.
-    if ([WMApps currentAppIsHinge])
-        [p appendString:@"HINGE LIMIT: Hinge stops a comment at 255 characters, so every reply must be at most 230 characters, counting spaces and emoji. Whatever the length above says, fit it all (for Photo Opener, all three steps) within 230 characters.\n\n"];
+    // The user's rule (2026-11-28): in a dating app a Long reply is at most 245 characters and a Short one at most
+    // 170 (Hinge itself stops a like comment at 255). Phone Convo's cards are notes for a call, not messages.
+    if (!notes && kind == WMAppKindDating) {
+        BOOL shortOne = (length == WMReplyLengthShort);
+        [p appendFormat:@"CHARACTER LIMIT (dating app): each reply must be at most %d characters, counting spaces "
+                         "and emoji (aim for about %d). Get straight to the point and keep it sounding natural, like a real person's text, never clipped. "
+                         "This overrides any word count above.\n\n", shortOne ? 170 : 245, shortOne ? 150 : 220];
+    }
 
     [p appendFormat:@"Write exactly %ld different %@, separated by a line containing "
                      "only ~~~ as described above.", (long)kWMRepliesPerCall, notes ? @"cards" : @"replies"];

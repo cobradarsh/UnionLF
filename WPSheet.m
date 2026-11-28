@@ -8,7 +8,7 @@
 
 #import "WPlus.h"
 
-NSString *const kWPVersion = @"1.0.45";
+NSString *const kWPVersion = @"1.0.46";
 
 // ── palette: the Android Wingman look (purple accent, deep-night sheet / clean light sheet)
 static UIColor *WPHex(uint32_t rgb) {
@@ -930,7 +930,16 @@ static void WPTakeKeyboardSoon(void) {
                 }
                 if (notes) [self->_noteReplies addObjectsFromArray:replies];
                 self->_status.textColor = WP_SUBTEXT;
-                self->_status.text = notes ? @"Tap a card to copy it for the call." : @"Tap a reply to copy it.";
+                // Dating apps: Short at most 170 characters, Long at most 245. Say so if a reply still runs over.
+                NSInteger cap = (!notes && [WMApps currentKind] == WMAppKindDating)
+                    ? (self->_length == WMReplyLengthShort ? 170 : 245) : 0;
+                NSUInteger over = 0;
+                if (cap) for (NSString *r in replies) if ((NSInteger)r.length > cap) over++;
+                self->_status.text = notes ? @"Tap a card to copy it for the call."
+                    : over ? [NSString stringWithFormat:@"Tap a reply to copy it. %@ over %ld characters.",
+                              over == 1 ? @"One reply is" : [NSString stringWithFormat:@"%lu replies are", (unsigned long)over],
+                              (long)cap]
+                    : @"Tap a reply to copy it.";
                 if (!self->_allReplies) self->_allReplies = [NSMutableArray array];
                 // newest batch on top, older replies kept below
                 [self->_allReplies insertObjects:replies
