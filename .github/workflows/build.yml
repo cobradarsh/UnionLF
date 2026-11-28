@@ -2,7 +2,7 @@
 #
 #   syntax     every source compiled on Linux against the iOS 16.5 SDK (a minute; nothing is linked)
 #   build      the .deb with RootHide's Theos and Xcode's clang, then the gate on what was built
-#   simulator  the library inside the real Photos app of an iOS 16.4 simulator, photographed
+#   simulator  both libraries inside the real Photos app and SpringBoard of an iOS 16.4 simulator, photographed
 #
 # The macOS jobs run on two kinds of runner at once: the hosted arm64 runners have been out of
 # capacity before; whichever frees up first does the work, the other is the spare.
@@ -123,17 +123,21 @@ jobs:
 
       - name: Gate (arm64 + versioned arm64e slices, system libraries only, no test answers)
         run: |
-          DY=$(find . -path "*DynamicLibraries/GuestMode.dylib" | head -1)
-          [ -n "$DY" ] || DY=.theos/obj/GuestMode.dylib
-          echo "dylib under test: $DY"
-          lipo -detailed_info "$DY" || true
-          python3 tools/verify_dylib.py "$DY"
-          for arch in arm64 arm64e; do
-            echo "--- $arch: links against ---"
-            otool -arch $arch -L "$DY" || true
-            echo "--- $arch: size ---"
-            size -arch $arch "$DY" || true
+          # GuestMode goes into Photos, GuestModeSB into SpringBoard: both arm64e processes
+          for name in GuestMode GuestModeSB; do
+            DY=$(find . -path "*DynamicLibraries/$name.dylib" | head -1)
+            [ -n "$DY" ] || DY=.theos/obj/$name.dylib
+            echo "dylib under test: $DY"
+            lipo -detailed_info "$DY" || true
+            python3 tools/verify_dylib.py "$DY"
+            for arch in arm64 arm64e; do
+              echo "--- $arch: links against ---"
+              otool -arch $arch -L "$DY" || true
+              echo "--- $arch: size ---"
+              size -arch $arch "$DY" || true
+            done
           done
+          DY=$(find . -path "*DynamicLibraries/GuestMode.dylib" | head -1)
           # the Face ID answer that tests can set must not be in the package
           if strings -a "$DY" | grep -E "test answer|GMAuthSetTestAnswer"; then
             echo "FAIL: the packaged library contains the test-only Face ID answer"; exit 1
@@ -195,6 +199,8 @@ jobs:
             sim-out
             !sim-out/GuestMode.dylib
             !sim-out/GuestMode.dylib.dSYM
+            !sim-out/GuestModeSB.dylib
+            !sim-out/GuestModeSB.dylib.dSYM
             !sim-out/clip.mp4
             !sim-out/run
           if-no-files-found: ignore

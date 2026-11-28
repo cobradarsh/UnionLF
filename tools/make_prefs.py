@@ -18,7 +18,7 @@ import sys
 
 D = "com.adarsh.guestmode"
 NOTE = "com.adarsh.guestmode/prefs"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 OUT = args[0] if args else "layout/Library/PreferenceLoader/Preferences"
@@ -47,7 +47,7 @@ def choice(key, label, default, options):
 items = [
     group(None,
           "Guest Mode lets someone look at a few photos on your iPhone without the rest of "
-          "your library within reach.\n\n"
+          "your library, or the rest of your iPhone, within reach.\n\n"
           "1. In Photos, tap the round Guest Mode button and choose up to 10 photos or videos. "
           "The button turns blue and shows how many.\n"
           "2. Tap the button again. After Face ID, Photos shows only what you chose: a small "
@@ -56,10 +56,22 @@ items = [
           "3. Tap the button (now a lock) once more. After Face ID, Photos is back to normal "
           "and the selection is forgotten.\n\n"
           "Hold the button to change or clear the selection. Drag it to move it.\n\n"
-          "Guest Mode stays on when Photos is closed and opened again. It covers the Photos "
-          "app only: for a guest who might leave Photos, add Guided Access (Settings > "
-          "Accessibility)."),
+          "Guest Mode stays on when Photos is closed and opened again."),
     switch("enabled", "Guest Mode Button", True),
+
+    group("While Guest Mode Is On",
+          "Stay in Photos switches off the Home gesture, the App Switcher, Control Centre, "
+          "Notification Centre, Siri, screenshots and the double click for Wallet, and brings "
+          "Photos straight back if anything else gets in front. Only Face ID on the Guest Mode "
+          "button ends it.\n\n"
+          "Held notifications make no sound and show nowhere; they all arrive when Guest Mode "
+          "ends. A declined call lands in Recents as a missed call.\n\n"
+          "The side button still locks the iPhone; unlocking it leads back to the same photos. "
+          "Emergency SOS keeps working. Should Photos itself fail while Guest Mode is on, the "
+          "iPhone locks its screen and lets go, so you are never shut out of it."),
+    switch("lockdown", "Stay in Photos", True),
+    switch("holdNotifications", "Hold Notifications", True),
+    switch("declineCalls", "Decline Calls", True),
 
     group("Button",
           "Switching the button off does not end a Guest Mode that is on: only Face ID does.\n\n"
@@ -96,7 +108,7 @@ if "--dump" in sys.argv:
         if "validTitles" in row:
             extra += " [" + " | ".join(str(t) for t in row["validTitles"]) + "]"
         default = row.get("default", "")
-        print(f"     {kind:15s} {row.get('label', '(no label)'):26s} key {row.get('key', '-'):12s} default {default!r}{extra}")
+        print(f"     {kind:15s} {row.get('label', '(no label)'):26s} key {row.get('key', '-'):18s} default {default!r}{extra}")
 
 if "--icons" in sys.argv:
     from PIL import Image, ImageDraw  # only needed for the pictures

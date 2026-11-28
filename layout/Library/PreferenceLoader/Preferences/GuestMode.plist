@@ -17,7 +17,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Guest Mode lets someone look at a few photos on your iPhone without the rest of your library within reach.
+			<string>Guest Mode lets someone look at a few photos on your iPhone without the rest of your library, or the rest of your iPhone, within reach.
 
 1. In Photos, tap the round Guest Mode button and choose up to 10 photos or videos. The button turns blue and shows how many.
 2. Tap the button again. After Face ID, Photos shows only what you chose: a small gallery to swipe through, zoom and play. There is nothing else to scroll to, and nothing to share, edit or delete.
@@ -25,7 +25,7 @@
 
 Hold the button to change or clear the selection. Drag it to move it.
 
-Guest Mode stays on when Photos is closed and opened again. It covers the Photos app only: for a guest who might leave Photos, add Guided Access (Settings &gt; Accessibility).</string>
+Guest Mode stays on when Photos is closed and opened again.</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -45,9 +45,63 @@ Guest Mode stays on when Photos is closed and opened again. It covers the Photos
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
+			<string>Stay in Photos switches off the Home gesture, the App Switcher, Control Centre, Notification Centre, Siri, screenshots and the double click for Wallet, and brings Photos straight back if anything else gets in front. Only Face ID on the Guest Mode button ends it.
+
+Held notifications make no sound and show nowhere; they all arrive when Guest Mode ends. A declined call lands in Recents as a missed call.
+
+The side button still locks the iPhone; unlocking it leads back to the same photos. Emergency SOS keeps working. Should Photos itself fail while Guest Mode is on, the iPhone locks its screen and lets go, so you are never shut out of it.</string>
+			<key>label</key>
+			<string>While Guest Mode Is On</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.guestmode/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.guestmode</string>
+			<key>key</key>
+			<string>lockdown</string>
+			<key>label</key>
+			<string>Stay in Photos</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.guestmode/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.guestmode</string>
+			<key>key</key>
+			<string>holdNotifications</string>
+			<key>label</key>
+			<string>Hold Notifications</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.guestmode/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.guestmode</string>
+			<key>key</key>
+			<string>declineCalls</string>
+			<key>label</key>
+			<string>Decline Calls</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
 			<string>Switching the button off does not end a Guest Mode that is on: only Face ID does.
 
-Guest Mode 1.0.0</string>
+Guest Mode 1.1.0</string>
 			<key>label</key>
 			<string>Button</string>
 		</dict>

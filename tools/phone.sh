@@ -2,7 +2,7 @@
 # tools/phone.sh — Guest Mode on the phone, over USB SSH (host "iphone-root", RootHide).
 #
 #   status            is the package installed, is the library there, is Photos running with it
-#   install <deb>     copy the package over and dpkg -i (its postinst closes Photos; no respring needed)
+#   install <deb>     copy the package over, dpkg -i (its postinst closes Photos), respring for the part in SpringBoard
 #   remove            dpkg -r com.adarsh.guestmode, close Photos
 #   facekey           whether Photos' entitlements let it ask for Face ID (it has no usage description)
 #   diag on|off       make / remove the marker that switches the log and the test commands on
@@ -11,6 +11,8 @@
 #   close             end Photos, so that its next start loads the installed library
 #   run <line>…       run test command lines in Photos (see the top of GMDebug.m); none gets past Face ID
 #   log [n]           the last n lines of guestmode.log (default 40)
+#   sbrun <line>…     test command lines for the part in SpringBoard (see GMSpringBoard.m): state, testlock <s>, release
+#   sblog [n]         the last n lines of SpringBoard's GuestMode.log (default 30)
 #   saved             the saved Guest Mode state in Photos' preferences (there = Guest Mode is on)
 #   prefs             the settings as stored
 #   clean             delete guestmode.log and leftover command files
@@ -30,7 +32,9 @@ case "${1:-}" in
     deb="${2:?usage: phone.sh install <deb>}"
     [ -f "$deb" ] || { echo "no such file: $deb"; exit 1; }
     $SSH 'cat > /tmp/guestmode.deb' < "$deb" || exit 1
-    $SSH 'dpkg -i /tmp/guestmode.deb; rc=$?; rm -f /tmp/guestmode.deb; echo "dpkg exit $rc"; dpkg -s com.adarsh.guestmode | grep -E "^(Version|Status)"; exit $rc' || exit 1 ;;
+    $SSH 'dpkg -i /tmp/guestmode.deb; rc=$?; rm -f /tmp/guestmode.deb; echo "dpkg exit $rc"; dpkg -s com.adarsh.guestmode | grep -E "^(Version|Status)"; exit $rc' || exit 1
+    echo "respringing…"
+    $SSH 'sbreload' || true ;;
   remove)
     $SSH 'dpkg -r com.adarsh.guestmode; killall -9 MobileSlideShow 2>/dev/null; true' ;;
   facekey)
@@ -40,7 +44,7 @@ case "${1:-}" in
     if [ "${2:-}" = "on" ]; then
       $SSH "mkdir -p $SHARED && touch $SHARED/diag && chown -R mobile:mobile $SHARED && chmod 755 $SHARED && ls -la $SHARED"
     else
-      $SSH "rm -f $SHARED/diag; find $SHARED -name 'cmd*' -delete; ls -la $SHARED 2>/dev/null; true"
+      $SSH "rm -f $SHARED/diag; find $SHARED -name '*cmd*' -delete; ls -la $SHARED 2>/dev/null; true"
     fi ;;
   open)
     $SSH "uiopen --bundleid $ID" ;;
@@ -50,6 +54,12 @@ case "${1:-}" in
     shift
     [ $# -gt 0 ] || { echo "usage: phone.sh run <line>…"; exit 1; }
     { echo "token-$(date +%s)-$$"; printf '%s\n' "$@"; } | $SSH "cat > $SHARED/cmd.tmp && chown mobile:mobile $SHARED/cmd.tmp && chmod 644 $SHARED/cmd.tmp && mv $SHARED/cmd.tmp $SHARED/cmd.txt" ;;
+  sbrun)
+    shift
+    [ $# -gt 0 ] || { echo "usage: phone.sh sbrun <line>…"; exit 1; }
+    { echo "token-$(date +%s)-$$"; printf '%s\n' "$@"; } | $SSH "cat > $SHARED/sbcmd.tmp && chown mobile:mobile $SHARED/sbcmd.tmp && chmod 644 $SHARED/sbcmd.tmp && mv $SHARED/sbcmd.tmp $SHARED/sbcmd.txt" ;;
+  sblog)
+    $SSH "tail -n ${2:-30} /rootfs/var/mobile/Library/Logs/GuestMode.log 2>/dev/null || echo 'no GuestMode.log yet'" ;;
   log)
     $SSH "f=\$(ls -t $LOGS 2>/dev/null | head -1); if [ -n \"\$f\" ]; then echo \"\$f\"; tail -n ${2:-40} \"\$f\"; else echo 'no guestmode.log yet'; fi" ;;
   saved)
@@ -57,7 +67,7 @@ case "${1:-}" in
   prefs)
     $SSH "plutil -p /var/mobile/Library/Preferences/com.adarsh.guestmode.plist 2>/dev/null || echo 'no settings stored yet (everything at its default)'" ;;
   clean)
-    $SSH "rm -f $LOGS; find $SHARED -name 'cmd*' -delete 2>/dev/null; echo cleaned" ;;
+    $SSH "rm -f $LOGS /rootfs/var/mobile/Library/Logs/GuestMode.log; find $SHARED -name '*cmd*' -delete 2>/dev/null; echo cleaned" ;;
   *)
-    sed -n '2,17p' "$0" ;;
+    sed -n '2,19p' "$0" ;;
 esac

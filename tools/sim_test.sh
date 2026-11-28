@@ -9,6 +9,8 @@
 # over Photos, the picker opening inside Photos, a selection, a failed Face ID changing nothing,
 # Guest Mode coming up with the gallery over Photos, a photo and a video full screen, Guest Mode
 # surviving a restart of Photos, a failed Face ID keeping it on, and Photos back to normal.
+# The lock-down part runs in the simulator's SpringBoard at the same time: it must lock down when
+# Guest Mode starts, send another app back to Photos, and let go when Guest Mode ends.
 # The test build (-DGM_TEST) can answer the Face ID question itself; the package cannot.
 # It cannot send touches: what a finger does (the picker, dragging, swiping) is tried on the phone.
 #
@@ -33,10 +35,13 @@ echo "== build for the simulator ($ARCH)"
   xcrun --sdk iphonesimulator clang $FLAGS -DGM_TEST -fobjc-arc -dynamiclib $FRAMEWORKS \
     -install_name /usr/lib/GuestMode.dylib -o "$OUT/GuestMode.dylib" $SOURCES || exit 1
   codesign -f -s - "$OUT/GuestMode.dylib" || exit 1
+  xcrun --sdk iphonesimulator clang $FLAGS -fobjc-arc -dynamiclib -framework UIKit -framework Foundation -framework CoreFoundation \
+    -install_name /usr/lib/GuestModeSB.dylib -o "$OUT/GuestModeSB.dylib" GMSpringBoard.m || exit 1
+  codesign -f -s - "$OUT/GuestModeSB.dylib" || exit 1
 ) > "$OUT/build.log" 2>&1
 status=$?
 cat "$OUT/build.log"
-[ "$status" = "0" ] && [ -f "$OUT/GuestMode.dylib" ] || { echo "simulator build FAILED"; exit 1; }
+[ "$status" = "0" ] && [ -f "$OUT/GuestMode.dylib" ] && [ -f "$OUT/GuestModeSB.dylib" ] || { echo "simulator build FAILED"; exit 1; }
 
 echo "== pick a simulator (wanted iOS: ${WANT:-the oldest there is})"
 PICK=$(xcrun simctl list -j | python3 tools/pick_sim.py "$WANT")
@@ -99,8 +104,40 @@ collect_crashes() {
 CRASHED=""
 
 LOG="$RUN/guestmode.log"
+SBLOG="$RUN/guestmode-sb.log"
 touch "$RUN/diag"
+
+echo "== the lock-down part goes into SpringBoard"
+# Through launchd's environment: set DYLD_INSERT_LIBRARIES, restart SpringBoard, and take the
+# variable away again so that nothing started later carries the library.
+sb_pid() { xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | awk '$3 == "com.apple.SpringBoard" { print $1 }'; }
+xcrun simctl spawn "$UDID" launchctl setenv DYLD_INSERT_LIBRARIES "$OUT/GuestModeSB.dylib"
+xcrun simctl spawn "$UDID" launchctl setenv GUESTMODE_DIR "$RUN"
+xcrun simctl spawn "$UDID" launchctl setenv GUESTMODE_NO_GUARD 1
+OLD=$(sb_pid)
+echo "SpringBoard pid $OLD: restarting it"
+if [ -n "$OLD" ] && [ "$OLD" != "-" ]; then kill -9 "$OLD" 2>/dev/null || true
+else xcrun simctl spawn "$UDID" launchctl stop com.apple.SpringBoard || true; fi
+SBUP=""
+for i in $(seq 1 90); do
+  sleep 2
+  if grep -q "started:" "$SBLOG" 2>/dev/null; then SBUP=yes; break; fi
+done
+xcrun simctl spawn "$UDID" launchctl unsetenv DYLD_INSERT_LIBRARIES || true
+echo "SpringBoard pid now: $(sb_pid)"
+cat "$SBLOG" 2>/dev/null || echo "(no log: the library was not loaded into SpringBoard)"
+if [ -z "$SBUP" ]; then
+  echo "the lock-down part did NOT start inside SpringBoard"
+  collect_crashes
+  xcrun simctl spawn "$UDID" log show --last 4m --style compact --predicate 'process == "SpringBoard" AND (eventMessage CONTAINS[c] "guestmode" OR eventMessage CONTAINS[c] "dyld")' 2>/dev/null | tail -40
+  exit 1
+fi
+SBPID=$(sb_pid)
+sleep 12                                              # let SpringBoard finish starting
 launch() {                                            # launch <n>: start Photos with Guest Mode in it; n-th start
+  # Photos started by SpringBoard's guard would not carry the library (only simctl gives it): the guard waits
+  printf '%s\n' "token-pause-$RANDOM-$$" "guardpause 12" > "$RUN/sbcmd.tmp"; mv "$RUN/sbcmd.tmp" "$RUN/sbcmd.txt"
+  sleep 2
   xcrun simctl terminate "$UDID" "$APP" > /dev/null 2>&1 || true
   sleep 2
   SIMCTL_CHILD_DYLD_INSERT_LIBRARIES="$OUT/GuestMode.dylib" SIMCTL_CHILD_GUESTMODE_DIR="$RUN" \
@@ -131,7 +168,18 @@ shot() {
   sips -s format jpeg -s formatOptions 80 -Z 1500 "$OUT/$1.png" --out "$OUT/$1.jpg" > /dev/null 2>&1 && rm -f "$OUT/$1.png"
   echo "  shot $1"
 }
-last() { grep -F "$1" "$LOG" 2>/dev/null | tail -1 | cut -c21-; }
+last() { grep -h -F "$1" "$LOG" "$SBLOG" 2>/dev/null | sort | grep -F "$1" | tail -1 | cut -c21-; }
+SBMARKS=0
+sbcmd() {                                             # command lines for the part in SpringBoard; returns when they are done
+  local waited=0 mark
+  SBMARKS=$((SBMARKS + 1)); mark="sbdone$SBMARKS-$$"
+  printf '%s\n' "token-$mark" "$@" "mark $mark" > "$RUN/sbcmd.tmp"
+  mv "$RUN/sbcmd.tmp" "$RUN/sbcmd.txt"
+  while ! grep -q -F "mark: $mark" "$SBLOG" 2>/dev/null && [ "$waited" -lt 40 ]; do sleep 1; waited=$((waited + 1)); done
+  [ "$waited" -ge 40 ] && echo "  SpringBoard did not answer: $*"
+  cp "$SBLOG" "$OUT/guestmode-sb.log" 2>/dev/null || true
+  return 0
+}
 FAILED=0
 PASSED=0
 check() {                                             # check <what> <the last log line starting so> <text it must hold>
@@ -143,6 +191,12 @@ check() {                                             # check <what> <the last l
     FAILED=$((FAILED + 1)); echo "  FAIL  $1"; echo "        wanted \"$3\" in: ${line:-(no line starting \"$2\")}"
   fi
 }
+
+echo "== 0. the part in SpringBoard"
+sbcmd "state"
+check "it started in SpringBoard" "started: Guest Mode lock-down" "hook(s) in place"
+if last "started: Guest Mode lock-down" | grep -q "NOT on this iOS"; then echo "  note  $(last 'started: Guest Mode lock-down' | sed 's/.*; //')"; fi
+check "no lock-down without Guest Mode" "state: lock-down" "lock-down off, system gestures off 0"
 
 echo "== 1. Photos with Guest Mode loaded"
 if ! launch 1; then
@@ -193,6 +247,26 @@ check "Guest Mode is on" "state: phase" "phase GUEST, 4 chosen"
 check "the gallery covers Photos" "gallery:" "gallery: UP"
 check "the gallery shows the grid with 4 items" "gallery:" "4 item(s)"
 check "the state is saved" "state: Guest Mode ON" "4 item(s), saved"
+sbcmd "state"
+check "SpringBoard locked the iPhone down" "lock-down ON (" "lock-down ON (Photos said so)"
+check "system gestures are off" "state: lock-down" "lock-down ON, system gestures off 1"
+check "SpringBoard sees the gallery's process" "state: lock-down" "Photos says guest 1"
+
+echo "== 5b. another app is sent back to Photos"
+xcrun simctl launch "$UDID" com.apple.Preferences > /dev/null 2>&1 || true
+sleep 5
+sbcmd "state"
+shot "04b-after-opening-settings"
+check "the guard saw Settings in front" "guard: com.apple.Preferences" "Photos brought back"
+check "Photos is in front again" "state: lock-down" "front com.apple.mobileslideshow"
+xcrun simctl spawn "$UDID" launchctl list > /dev/null 2>&1
+echo "== 5c. a notification while locked down (told, not judged: needs an app allowed to notify)"
+printf '%s' '{ "aps": { "alert": { "title": "Guest Mode test", "body": "held until Guest Mode ends" }, "sound": "default" } }' > "$RUN/push.json"
+for target in com.apple.MobileSMS com.apple.mobilecal; do xcrun simctl push "$UDID" "$target" "$RUN/push.json" > /dev/null 2>&1 || true; done
+sleep 4
+sbcmd "state"
+echo "  $(last 'notification held' || true)"
+echo "  $(last 'state: settings')"
 cmd "menu"
 check "hold menu in Guest Mode offers only the way out" "menu:" "menu: End Guest Mode"
 cmd "pick" "state"
@@ -239,6 +313,16 @@ shot "09-normal-again"
 check "Guest Mode is off, the selection forgotten" "state: phase" "phase idle, 0 chosen"
 check "the gallery is down" "gallery:" "gallery: down"
 check "nothing is saved any more" "state: Guest Mode OFF" "nothing saved any more"
+sbcmd "state"
+check "SpringBoard let go" "lock-down OFF (" "lock-down OFF (Guest Mode ended in Photos)"
+check "system gestures are back" "state: lock-down" "lock-down off, system gestures off 0"
+xcrun simctl launch "$UDID" com.apple.Preferences > /dev/null 2>&1 || true
+sleep 4
+sbcmd "state"
+check "another app can be opened again" "state: lock-down" "front com.apple.Preferences"
+xcrun simctl terminate "$UDID" com.apple.Preferences > /dev/null 2>&1 || true
+xcrun simctl launch "$UDID" "$APP" > /dev/null 2>&1 || true
+sleep 3
 
 echo "== 10. one item: shown straight away"
 cmd "select 1" "tap" "wait 2" "state"
@@ -271,11 +355,21 @@ shot "12-after-real-face-id"
 echo "  real check said: $(last 'button: start →')"
 echo "  $(last 'state: phase')"
 
+echo "== 12. SpringBoard after it all"
+sbcmd "state"
+echo "  $(last 'state: lock-down')"
+echo "  $(last 'state: settings')"
+[ "$(sb_pid)" = "$SBPID" ] && { PASSED=$((PASSED + 1)); echo "  ok    SpringBoard ran through the whole test (pid $SBPID)"; } || { FAILED=$((FAILED + 1)); echo "  FAIL  SpringBoard restarted during the test (pid $SBPID, now $(sb_pid))"; }
+
 collect_crashes
 cp "$LOG" "$OUT/guestmode.log" 2>/dev/null || true
+cp "$SBLOG" "$OUT/guestmode-sb.log" 2>/dev/null || true
 xcrun simctl terminate "$UDID" "$APP" > /dev/null 2>&1 || true
 echo
-echo "== log"
+echo "== SpringBoard's log"
+cat "$OUT/guestmode-sb.log" 2> /dev/null | tail -120
+echo
+echo "== Photos' log"
 cat "$OUT/guestmode.log" 2> /dev/null | tail -150
 echo
 echo "== result: $PASSED passed, $FAILED failed${CRASHED:+, Photos CRASHED}${DEAD:+, Photos stopped answering}"

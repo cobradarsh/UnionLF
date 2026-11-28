@@ -625,6 +625,9 @@ static UIWindow *GMWindowUnderneath(UIWindowScene *scene) {
     }
     _window.rootViewController = _nav;
     [_window makeKeyAndVisible];
+    // SpringBoard's part checks that the process in front is the one with the gallery up
+    GMStore(@"GuestModeAlive", @(getpid()));
+    GMTellSpringBoard();
     GMLog(@"gallery: up over Photos with %d of %d item(s): %@", (int)assets.count, (int)GMState.shared.identifiers.count, GMCountText(assets));
     if (animated) {
         _window.alpha = 0;
@@ -639,6 +642,7 @@ static UIWindow *GMWindowUnderneath(UIWindowScene *scene) {
     _nav = nil;
     _grid = nil;
     UIWindowScene *scene = window.windowScene;
+    GMStore(@"GuestModeAlive", nil);
     void (^gone)(void) = ^{
         window.hidden = YES;
         window.rootViewController = nil;

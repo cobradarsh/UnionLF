@@ -142,6 +142,15 @@ void GMLog(NSString *format, ...) {
     });
 }
 
+#pragma mark - SpringBoard
+
+// The part in SpringBoard (GMSpringBoard.m) keeps the iPhone in Photos while Guest Mode is on. It
+// reads GuestModeState and GuestModeAlive from Photos' preferences when it hears this.
+void GMTellSpringBoard(void) {
+    uint32_t result = notify_post("com.adarsh.guestmode/state");
+    if (result != NOTIFY_STATUS_OK) GMLog(@"SpringBoard could not be told (notify_post said %u)", result);
+}
+
 #pragma mark - the library
 
 PHPhotoLibrary *GMLibrary(void) {
@@ -248,8 +257,10 @@ BOOL GMStore(NSString *key, id value) {
 - (NSArray<NSString *> *)identifiers { return _identifiers; }
 
 - (BOOL)save {
-    if (_phase != GMPhaseGuest) return GMStore(GMStateKey, nil);
-    return GMStore(GMStateKey, @{@"guest": @YES, @"identifiers": _identifiers, @"since": [NSDate date]});
+    BOOL saved = _phase != GMPhaseGuest ? GMStore(GMStateKey, nil)
+                                        : GMStore(GMStateKey, @{@"guest": @YES, @"identifiers": _identifiers, @"since": [NSDate date]});
+    GMTellSpringBoard();
+    return saved;
 }
 
 - (void)changed {
@@ -334,7 +345,7 @@ static void GMBringUp(void) {
 __attribute__((constructor)) static void GMInit(void) {
     @autoreleasepool {
         NSString *bundle = NSBundle.mainBundle.bundleIdentifier;
-        if (!GMTestFolder() && ![bundle isEqualToString:@"com.apple.mobileslideshow"]) return;
+        if (![bundle isEqualToString:@"com.apple.mobileslideshow"]) return;
         GMReloadSettings();
         int token = 0;
         notify_register_dispatch("com.adarsh.guestmode/prefs", &token, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^(int t) {

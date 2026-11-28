@@ -1,5 +1,7 @@
 #!/bin/sh
 # Photos that is open still runs without Guest Mode (or with the previous one): closing it makes its
 # next start load the new library. Guest Mode that was on is on again when Photos opens.
+# The part that keeps the iPhone in Photos lives in SpringBoard and needs a respring; that is left
+# to you (or to the package manager's "Respring" button).
 killall -9 MobileSlideShow 2>/dev/null
 exit 0

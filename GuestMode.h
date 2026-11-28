@@ -5,12 +5,14 @@
 //   GMButton.m   the round button that floats over Photos, and what a tap or a hold on it does
 //   GMGallery.m  the locked gallery that covers Photos while Guest Mode is on
 //   GMDebug.m    test commands (only while a marker file exists)
+//   GMSpringBoard.m   a second library, in SpringBoard: while Guest Mode is on the iPhone stays in
+//                Photos (no other app, no notifications, no calls)
 //
 // Nothing in Photos is hooked: the tweak adds two windows of its own to the app.
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
 
-#define GM_VERSION "1.0.0"
+#define GM_VERSION "1.1.0"
 #define GM_MAX_ITEMS 10
 
 typedef NS_ENUM(NSInteger, GMPhase) {
@@ -35,6 +37,8 @@ BOOL GMStore(NSString *key, id value);
 // +sharedPhotoLibrary and fetches without a library throw: every fetch goes through these.
 PHPhotoLibrary *GMLibrary(void);
 PHFetchOptions *GMFetchOptions(void);
+// Tell the part in SpringBoard that the saved state changed (it locks the iPhone to Photos).
+void GMTellSpringBoard(void);
 // The first of these SF Symbols that this iOS has.
 UIImage *GMSymbol(NSArray<NSString *> *names, CGFloat pointSize, UIImageSymbolWeight weight);
 

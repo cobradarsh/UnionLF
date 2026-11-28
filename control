@@ -1,8 +1,8 @@
 Package: com.adarsh.guestmode
 Name: Guest Mode for Photos
-Version: 1.0.0
+Version: 1.1.0
 Architecture: iphoneos-arm64e
-Description: Hand your iPhone over without handing over your library. A round button floats in Photos: tap it and choose up to 10 photos or videos, tap it again and, after Face ID, Photos shows only those, in a gallery of their own with nothing else to scroll to. Tap the button once more and, after Face ID, Photos is back to normal. Guest Mode stays on when Photos is closed and opened again. Settings > Guest Mode.
+Description: Hand your iPhone over without handing over your library. A round button floats in Photos: tap it and choose up to 10 photos or videos, tap it again and, after Face ID, Photos shows only those, in a gallery of their own with nothing else to scroll to, and the iPhone stays in Photos: no Home gesture, no other app, no notifications, no calls, no Siri, until you tap the button once more and Face ID lets you out. Guest Mode stays on when Photos is closed and opened again. Settings > Guest Mode.
 Maintainer: Adarsh
 Author: Adarsh
 Section: Tweaks
