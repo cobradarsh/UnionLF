@@ -625,6 +625,12 @@
                "style is Formal).\n\n"];
     }
 
+    // Measured by the user on 2026-11-28: Hinge stops a like comment at 255 characters.
+    if ([WMApps currentAppIsHinge])
+        [p appendString:@"HINGE LIMIT: Hinge stops a comment at 255 characters, so every reply must be at most 230 characters, counting spaces and emoji. Whatever the length above says, fit it all (for Photo Opener, all three steps) within 230 characters.
+
+"];
+
     [p appendFormat:@"Write exactly %ld different %@, separated by a line containing "
                      "only ~~~ as described above.", (long)kWMRepliesPerCall, notes ? @"cards" : @"replies"];
     return [p copy];

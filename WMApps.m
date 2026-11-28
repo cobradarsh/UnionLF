@@ -106,6 +106,11 @@
     return [self kindForBundleID:[NSBundle mainBundle].bundleIdentifier];
 }
 
++ (BOOL)currentAppIsHinge {
+    NSString *bid = [self _inSpringBoard] ? [WPHost frontmostBundleID] : [NSBundle mainBundle].bundleIdentifier;
+    return [bid.lowercaseString containsString:@"hinge"];
+}
+
 + (NSString *)currentAppName {
     if ([self _inSpringBoard]) {
         NSString *name = [WPHost frontmostAppName];
