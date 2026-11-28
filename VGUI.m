@@ -457,8 +457,18 @@ void VGTrigger(VGSource *source, UIWindow *window, CGRect anchor) {
     VGTriggerAction(source, window, anchor, [VGPrefs action]);
 }
 
+static NSMutableArray<NSNumber *> *gTriggers;                 // tests: what each trigger was asked to do
+
+NSArray<NSNumber *> *VGTakeTriggers(void) {
+    NSArray<NSNumber *> *taken = gTriggers ? [gTriggers copy] : @[];
+    [gTriggers removeAllObjects];
+    return taken;
+}
+
 void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSInteger action) {
     if (!source) return;
+    if (!gTriggers) gTriggers = [NSMutableArray new];
+    [gTriggers addObject:@(action)];
     if ([VGPrefs haptic]) [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
     VGLog(@"trigger: %@ in %@ (action %ld)", source.shortName, NSStringFromClass(window.class), (long)action);
     if (action == 1) { VGStartDownload(source, VGDeliverPhotos, nil, window); return; }
@@ -497,14 +507,26 @@ void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSIntege
 
 #pragma mark - recognizers
 
+/// A hold on a video (not on its download button): what Settings say a hold does.
 @interface VGHoldRecognizer : UILongPressGestureRecognizer
 @property (nonatomic, weak) AVPlayerLayer *target;
-@property (nonatomic, weak) CALayer *button;                   // held on a download button: the menu
 @end
-
-static CFTimeInterval gButtonHeldAt;                          // a hold on a button: the tap that ends it is no tap
 @implementation VGHoldRecognizer
 @end
+
+/// A hold on a download button: the menu. The button's tap waits for this one to fail, so a press
+/// is either a tap (saves) or a hold (menu), never both, however long the finger stays down.
+@interface VGButtonHoldRecognizer : UILongPressGestureRecognizer
+@property (nonatomic, weak) CALayer *button;                  // the button the finger came down on
+@end
+@implementation VGButtonHoldRecognizer
+- (void)reset {
+    [super reset];
+    self.button = nil;
+}
+@end
+
+static const NSTimeInterval kButtonHoldTime = 0.45;           // as long as iOS's own menus take; "Hold For" is for videos
 
 /// The tap on a download button. While it follows a touch, the app's own tap and hold recognizers
 /// under the finger are switched off, so the tap is VidGrab's alone; they come back when it is over.
@@ -522,6 +544,7 @@ static CFTimeInterval gButtonHeldAt;                          // a hold on a but
 - (void)reset {
     [super reset];
     [self restoreOthers];
+    self.target = nil;
 }
 - (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)other { return NO; }
 - (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)other { return YES; }
@@ -538,12 +561,17 @@ static BOOL VGIsMovement(UIGestureRecognizer *recognizer) {
     return [name hasPrefix:@"UI"] || [name hasPrefix:@"_UI"] || [name hasPrefix:@"_"];
 }
 
+static BOOL VGIsOurs(UIGestureRecognizer *recognizer) {
+    return [recognizer isKindOfClass:VGHoldRecognizer.class] || [recognizer isKindOfClass:VGButtonHoldRecognizer.class]
+        || [recognizer isKindOfClass:VGBadgeTapRecognizer.class];
+}
+
 /// The app's tap and hold recognizers on the views under a point (scrolling and zooming are left alone).
 static NSArray<UIGestureRecognizer *> *VGAppRecognizersAt(UIWindow *window, CGPoint point) {
     NSMutableArray<UIGestureRecognizer *> *found = [NSMutableArray new];
     for (UIView *view = [window hitTest:point withEvent:nil]; view; view = view.superview) {
         for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
-            if ([recognizer isKindOfClass:VGHoldRecognizer.class] || [recognizer isKindOfClass:VGBadgeTapRecognizer.class]) continue;
+            if (VGIsOurs(recognizer)) continue;
             if (!recognizer.isEnabled || VGIsMovement(recognizer)) continue;
             [found addObject:recognizer];
         }
@@ -582,6 +610,15 @@ static char kAttachedKey;
         hold.cancelsTouchesInView = [VGPrefs blockAppHold];
         hold.delaysTouchesBegan = NO;
         hold.delaysTouchesEnded = NO;
+    } else if ([recognizer isKindOfClass:VGButtonHoldRecognizer.class]) {
+        UILongPressGestureRecognizer *hold = (UILongPressGestureRecognizer *)recognizer;
+        hold.enabled = on && ([VGPrefs badge] || [VGPrefs pictures]);
+        hold.numberOfTouchesRequired = 1;
+        hold.minimumPressDuration = kButtonHoldTime;
+        hold.allowableMovement = 14;
+        hold.cancelsTouchesInView = YES;
+        hold.delaysTouchesBegan = NO;
+        hold.delaysTouchesEnded = NO;
     } else {
         recognizer.enabled = on && ([VGPrefs badge] || [VGPrefs pictures]);
         recognizer.cancelsTouchesInView = YES;
@@ -596,8 +633,11 @@ static char kAttachedKey;
         || [name containsString:@"StatusBar"] || [name containsString:@"PiP"]) return;
     objc_setAssociatedObject(window, &kAttachedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     VGHoldRecognizer *hold = [[VGHoldRecognizer alloc] initWithTarget:self action:@selector(held:)];
+    VGButtonHoldRecognizer *buttonHold = [[VGButtonHoldRecognizer alloc] initWithTarget:self action:@selector(buttonHeld:)];
     VGBadgeTapRecognizer *tap = [[VGBadgeTapRecognizer alloc] initWithTarget:self action:@selector(tapped:)];
-    for (UIGestureRecognizer *recognizer in @[hold, tap]) {
+    // a press on a button is a tap only once it is sure not to be a hold (it fails when the finger lifts early)
+    [tap requireGestureRecognizerToFail:buttonHold];
+    for (UIGestureRecognizer *recognizer in @[hold, buttonHold, tap]) {
         recognizer.delegate = self;
         [self configure:recognizer];
         [window addGestureRecognizer:recognizer];
@@ -621,14 +661,25 @@ static char kAttachedKey;
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     VGRefreshBadgesSoon();                                   // a touch is a good moment to look at the players again
     VGFollowScrolling();
-    if (![recognizer isKindOfClass:VGBadgeTapRecognizer.class]) return YES;
-    VGBadgeTapRecognizer *tap = (VGBadgeTapRecognizer *)recognizer;
     UIWindow *window = (UIWindow *)recognizer.view;
     if (![window isKindOfClass:UIWindow.class]) return NO;
     CGPoint point = [touch locationInView:window];
+    if ([recognizer isKindOfClass:VGHoldRecognizer.class]) {
+        // a press on a download button belongs to the button: its tap and its own hold
+        return VGBadgeLayerAtPoint(window, point) == nil;
+    }
+    if ([recognizer isKindOfClass:VGButtonHoldRecognizer.class]) {
+        // a second finger elsewhere does not take the first one's button away
+        CALayer *button = VGBadgeLayerAtPoint(window, point);
+        if (button) ((VGButtonHoldRecognizer *)recognizer).button = button;
+        return button != nil;
+    }
+    if (![recognizer isKindOfClass:VGBadgeTapRecognizer.class]) return YES;
+    VGBadgeTapRecognizer *tap = (VGBadgeTapRecognizer *)recognizer;
     CALayer *layer = VGBadgeLayerAtPoint(window, point);
-    tap.target = layer;
     if (!layer) return NO;                                   // not on a button: this touch is none of ours
+    tap.target = layer;
+    VGLog(@"touch: on the button of %@ at %@", [layer isKindOfClass:AVPlayerLayer.class] ? @"a video" : @"a picture", NSStringFromCGPoint(point));
     // After this touch has been handed out, quieten the app's own tap and hold recognizers under it.
     __weak VGBadgeTapRecognizer *weakTap = tap;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -653,31 +704,45 @@ static char kAttachedKey;
     if (![window isKindOfClass:UIWindow.class]) return NO;
     if ([recognizer isKindOfClass:VGHoldRecognizer.class]) {
         VGHoldRecognizer *hold = (VGHoldRecognizer *)recognizer;
-        CGPoint point = [recognizer locationInView:window];
-        hold.button = VGBadgeLayerAtPoint(window, point);   // on a button (a video's or a picture's): the menu
-        hold.target = hold.button ? nil : VGPlayerLayerAtPoint(window, point);
-        return hold.button != nil || hold.target != nil;     // a hold anywhere else is not VidGrab's business
+        hold.target = VGPlayerLayerAtPoint(window, [recognizer locationInView:window]);
+        return hold.target != nil;                           // a hold anywhere else is not VidGrab's business
+    }
+    if ([recognizer isKindOfClass:VGButtonHoldRecognizer.class]) {
+        // the button the finger came down on, even if the app has since drawn something over it
+        CALayer *button = ((VGButtonHoldRecognizer *)recognizer).button;
+        return button != nil && VGSourceForBadgeLayer(button) != nil;
     }
     return ((VGBadgeTapRecognizer *)recognizer).target != nil;
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
-    return [recognizer isKindOfClass:VGHoldRecognizer.class];
+    // the button's tap and hold are settled between themselves (the tap waits for the hold to fail)
+    if ([recognizer isKindOfClass:VGButtonHoldRecognizer.class] && [other isKindOfClass:VGBadgeTapRecognizer.class]) return NO;
+    if ([recognizer isKindOfClass:VGBadgeTapRecognizer.class] && [other isKindOfClass:VGButtonHoldRecognizer.class]) return NO;
+    return [recognizer isKindOfClass:VGHoldRecognizer.class] || [recognizer isKindOfClass:VGButtonHoldRecognizer.class];
 }
 
 #pragma mark actions
 
-- (void)held:(VGHoldRecognizer *)recognizer {
+- (void)buttonHeld:(VGButtonHoldRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan) return;
     UIWindow *window = (UIWindow *)recognizer.view;
     CALayer *button = recognizer.button;
-    if (button && [window isKindOfClass:UIWindow.class]) {
-        VGSource *source = VGSourceForBadgeLayer(button);
-        if (!source) return;
-        gButtonHeldAt = CACurrentMediaTime();
-        VGTriggerAction(source, window, VGBadgeFrameInWindow(button, window), 0);
-        return;
+    if (!button || ![window isKindOfClass:UIWindow.class]) return;
+    VGSource *source = VGSourceForBadgeLayer(button);
+    if (!source) return;
+    VGLog(@"touch: held on the button: the menu");
+    CGRect anchor = VGBadgeFrameInWindow(button, window);
+    if (CGRectIsNull(anchor)) {
+        CGPoint point = [recognizer locationInView:window];
+        anchor = CGRectMake(point.x, point.y, 1, 1);
     }
+    VGTriggerAction(source, window, anchor, 0);
+}
+
+- (void)held:(VGHoldRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateBegan) return;
+    UIWindow *window = (UIWindow *)recognizer.view;
     AVPlayerLayer *layer = recognizer.target;
     CGPoint point = [recognizer locationInView:window];
     if (!layer || ![window isKindOfClass:UIWindow.class]) return;
@@ -702,13 +767,15 @@ static char kAttachedKey;
     UIWindow *window = (UIWindow *)recognizer.view;
     CALayer *layer = recognizer.target;
     if (!layer || ![window isKindOfClass:UIWindow.class]) return;
-    if (CACurrentMediaTime() - gButtonHeldAt < 2.0) {                 // the finger lifting after a hold on the button
-        gButtonHeldAt = 0;
-        return;
-    }
     VGSource *source = VGSourceForBadgeLayer(layer);
     if (!source) return;
-    VGTriggerAction(source, window, VGBadgeFrameInWindow(layer, window), [VGPrefs tapAction]);
+    VGLog(@"touch: tapped the button");
+    CGRect anchor = VGBadgeFrameInWindow(layer, window);
+    if (CGRectIsNull(anchor)) {
+        CGPoint point = [recognizer locationInView:window];
+        anchor = CGRectMake(point.x, point.y, 1, 1);
+    }
+    VGTriggerAction(source, window, anchor, [VGPrefs tapAction]);
 }
 
 @end
@@ -763,7 +830,7 @@ NSString *VGDescribeTouchAt(UIWindow *window, CGPoint point) {
     for (UIGestureRecognizer *recognizer in VGAppRecognizersAt(window, point)) [recognizers addObject:NSStringFromClass(recognizer.class)];
     NSInteger ours = 0;
     for (UIGestureRecognizer *recognizer in window.gestureRecognizers) {
-        if ([recognizer isKindOfClass:VGHoldRecognizer.class] || [recognizer isKindOfClass:VGBadgeTapRecognizer.class]) ours += recognizer.isEnabled ? 1 : 0;
+        if (VGIsOurs(recognizer)) ours += recognizer.isEnabled ? 1 : 0;
     }
     return [NSString stringWithFormat:@"lands on %@; the app's tap/hold recognizers there: %@; VidGrab recognizers on the window: %ld",
             [chain componentsJoinedByString:@" < "], recognizers.count ? [recognizers componentsJoinedByString:@", "] : @"none", (long)ours];

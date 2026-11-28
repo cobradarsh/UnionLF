@@ -15,7 +15,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-#define VG_VERSION @"2.2.2"
+#define VG_VERSION @"2.2.3"
 
 #pragma mark - core (VGCore.m)
 

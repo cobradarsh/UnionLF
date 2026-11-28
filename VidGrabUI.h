@@ -112,6 +112,12 @@ NSArray<UIWindow *> *VGAppWindows(void);
 /// A window of the app's that VidGrab watches (not its own, not the keyboard's).
 BOOL VGWindowIsWatched(UIWindow *_Nullable window);
 NSString *VGDescribeTouchAt(UIWindow *window, CGPoint point);
+/// What VidGrab was asked to do since the last call (0 menu, 1 save, 2 share, 3 GIF Stash), oldest first.
+NSArray<NSNumber *> *VGTakeTriggers(void);
+
+/// Tests: a finger put down at a point of the window, held, lifted, through UIKit's own touch handling
+/// (VGFinger.m, the way KIF makes touches). done: a line about how it went; nil text means it was sent.
+void VGFingerPress(UIWindow *window, CGPoint point, NSTimeInterval seconds, void (^done)(NSString *_Nullable problem));
 
 void VGDebugStart(void);
 

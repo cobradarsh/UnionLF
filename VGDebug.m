@@ -15,6 +15,9 @@
 //   pictap [n]            what a tap on the button of the n-th picture with a button does (default the first)
 //   pichold [n]           the same for a hold on that button (the menu)
 //   scan                  everything on screen drawn as a large image, known to VidGrab or not
+//   finger <where> <s>    a real touch (through UIKit, see VGFinger.m) held for s seconds, then what VidGrab
+//                         did: save, menu, share, nothing. where: button (the first video's button), video
+//                         (its middle), picture<n> (the n-th picture's button), or x,y
 //   hit [x y]             what a touch at the point (default: the first button) lands on in the app
 //   menu                  the entries of the open menu
 //   choose <title>        run the entry whose title starts so
@@ -186,6 +189,59 @@ static void VGRunLine(NSString *line) {
                       hit ? VGShort(VGSourceForBadgeLayer(hit), YES) : @"the button takes no tap there");
                 if (hit) VGTriggerAction(VGSourceForBadgeLayer(hit), window, badge, [command isEqualToString:@"pichold"] ? 0 : [VGPrefs tapAction]);
             }
+        }
+    } else if ([command isEqualToString:@"finger"] && words.count >= 3) {
+        NSString *where = words[1];
+        NSTimeInterval seconds = MAX(0.03, words[2].doubleValue);
+        UIWindow *window = nil;
+        CGPoint point = CGPointZero;
+        BOOL found = NO;
+        if ([where isEqualToString:@"button"] || [where isEqualToString:@"video"]) {
+            AVPlayerLayer *first = nil;
+            window = VGFirstWindowWithVideo(&first);
+            CGRect area = first ? ([where isEqualToString:@"button"] ? VGBadgeFrameInWindow(first, window) : VGLayerFrameInWindow(first, window)) : CGRectNull;
+            if (!CGRectIsNull(area)) { point = CGPointMake(CGRectGetMidX(area), CGRectGetMidY(area)); found = YES; }
+        } else if ([where hasPrefix:@"picture"]) {
+            NSUInteger wanted = (NSUInteger)MAX(0, [where substringFromIndex:7].integerValue), seen = 0;
+            VGLayoutPictures();
+            for (UIWindow *candidate in VGAppWindows()) {
+                for (CALayer *layer in VGKnownPictureLayers()) {
+                    if (VGHostView(layer).window != candidate) continue;
+                    CGRect badge = VGBadgeFrameInWindow(layer, candidate);
+                    if (CGRectIsNull(badge)) continue;
+                    if (seen++ != wanted) continue;
+                    window = candidate;
+                    point = CGPointMake(CGRectGetMidX(badge), CGRectGetMidY(badge));
+                    found = YES;
+                    break;
+                }
+                if (found) break;
+            }
+        } else if ([where containsString:@","]) {
+            NSArray<NSString *> *xy = [where componentsSeparatedByString:@","];
+            window = VGAppWindows().firstObject;
+            point = CGPointMake(xy[0].doubleValue, xy[1].doubleValue);
+            found = window != nil;
+        }
+        if (!found) {
+            VGLog(@"finger %@ %.2f s: nothing there to press", where, seconds);
+        } else {
+            VGTakeTriggers();
+            NSString *start = [NSString stringWithFormat:@"finger %@ %.2f s at %@", where, seconds, NSStringFromCGPoint(point)];
+            VGFingerPress(window, point, seconds, ^(NSString *problem) {
+                // a moment for what the lift sets off (a tap is recognized as the finger comes up)
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    NSMutableArray<NSString *> *did = [NSMutableArray new];
+                    for (NSNumber *action in VGTakeTriggers()) {
+                        NSInteger a = action.integerValue;
+                        [did addObject:a == 1 ? @"save" : a == 2 ? @"share" : a == 3 ? @"stash" : @"menu"];
+                    }
+                    VGLog(@"%@: %@ → %@; menu %@; download %@", start, problem ?: @"sent", did.count ? [did componentsJoinedByString:@" + "] : @"nothing",
+                          [VGMenu current] && [VGOverlay presented] ? @"open" : @"closed", VGDownloadRunning() ? @"running" : @"idle");
+                    VGRunNext();
+                });
+            });
+            return;
         }
     } else if ([command isEqualToString:@"scan"]) {
         VGLogPictureScan(VGAppWindows().firstObject);

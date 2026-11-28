@@ -18,7 +18,7 @@ import sys
 
 D = "com.adarsh.vidgrab"
 NOTE = "com.adarsh.vidgrab/prefs"
-VERSION = "2.2.2"
+VERSION = "2.2.3"
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 OUT = args[0] if args else "layout/Library/PreferenceLoader/Preferences"
@@ -80,14 +80,16 @@ items = [
     group("Holding a Video",
           "Some apps act on a hold themselves: X plays faster, Instagram pauses. With Stop the "
           "App's Own Hold Action on, VidGrab ends that when it takes the hold. Two Fingers "
-          "keeps the one-finger hold for the app."),
+          "keeps the one-finger hold for the app. These are for holding the video itself; "
+          "the download button has its own hold (below)."),
     choice("hold", "Hold With", 1, [(0, "Off"), (1, "One Finger"), (2, "Two Fingers")]),
     choice("holdTime", "Hold For", 0.55, [(0.4, "0.4 Seconds"), (0.55, "0.55 Seconds"), (0.8, "0.8 Seconds"), (1.0, "1 Second")]),
     switch("blockAppHold", "Stop the App's Own Hold Action", True),
 
     group("Tapping the Button",
           "Save to Photos saves the video or picture at once, in the quality chosen below. "
-          "Hold the button instead for the menu."),
+          "Hold the button for half a second instead for the menu; once the menu is up, "
+          "lifting the finger does not save as well."),
     choice("tapAction", "Tap Does", 1, [(1, "Save to Photos"), (2, "Share"), (0, "Show Menu")]),
 
     group("A Hold on a Video",

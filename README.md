@@ -4,7 +4,7 @@ Save the video you are watching, in apps that play video with iOS's own player.
 
 **Package:** `com.adarsh.vidgrab` · **Built for:** iPhone 14 Pro Max, iOS 16.5, RootHide (ElleKit, PreferenceLoader)
 
-A small download button sits in a corner of every playing video. A tap saves it to Photos at once (best quality); hold the button, or the video, for the menu:
+A small download button sits in a corner of every playing video. A tap saves it to Photos at once (best quality); hold the button for half a second, or hold the video, for the menu:
 
 - **Save to Photos** (also into an album named VidGrab)
 - **Share…** (straight to WhatsApp, Telegram, Files, AirDrop, without going through Photos)
@@ -64,6 +64,7 @@ design avoids. Protected (encrypted) streams and live streams are refused with a
 | `VGDeliver.m` | Photos + album, share sheet, GIF Stash, the queue |
 | `VGPicture.m` | Pictures: which layers show one (`UIImageView`, Texture image nodes), their buttons, fetching the original |
 | `VGDebug.m` | Test commands (off without a marker file) |
+| `VGFinger.m` | Tests: real touches made inside the app, the way KIF makes them |
 | `VidGrabSB.m` | SpringBoard part: moves a clip into GIF Stash's library |
 | `VGS*.{h,m,c}` | GIF encoder, from GIF Stash |
 | `tools/make_prefs.py` | Generates the Settings page and icon |

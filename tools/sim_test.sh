@@ -26,7 +26,7 @@ HOST=com.adarsh.vidgrabhost
 ARCH=$(uname -m)
 SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
 FLAGS="-arch $ARCH -mios-simulator-version-min=15.0 -isysroot $SDK -O1 -g -Wall -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable"
-SOURCES="VGMain.m VGCore.m VGPlaylist.m VGFetch.m VGTS.m VGMux.m VGJob.m VGCapture.m VGUI.m VGDeliver.m VGPicture.m VGDebug.m VGSGifMaker.m VGSCommon.m"
+SOURCES="VGMain.m VGCore.m VGPlaylist.m VGFetch.m VGTS.m VGMux.m VGJob.m VGCapture.m VGUI.m VGDeliver.m VGPicture.m VGDebug.m VGFinger.m VGSGifMaker.m VGSCommon.m"
 FRAMEWORKS="-framework UIKit -framework Foundation -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework Photos -framework ImageIO -framework Accelerate"
 echo "== build for the simulator ($ARCH)"
 (
@@ -150,6 +150,12 @@ FAILED=0
 check() {                                             # check <what> <text that must be in the log>
   if grep -q -F -- "$2" "$LOG" 2>/dev/null; then echo "PASS  $1"; else echo "FAIL  $1   (no \"$2\" in the log)"; FAILED=$((FAILED + 1)); fi
 }
+check_re() {                                          # check_re <what> <extended regular expression a log line must match>
+  if grep -q -E -- "$2" "$LOG" 2>/dev/null; then echo "PASS  $1"; else echo "FAIL  $1   (no line matching /$2/ in the log)"; FAILED=$((FAILED + 1)); fi
+}
+check_none() {                                        # check_none <what> <extended regular expression no log line may match>
+  if grep -q -E -- "$2" "$LOG" 2>/dev/null; then echo "FAIL  $1   ($(grep -E -- "$2" "$LOG" | head -1 | cut -c21-200))"; FAILED=$((FAILED + 1)); else echo "PASS  $1"; fi
+}
 check_last() {                                        # check_last <what> <line marker> <text the newest such line must hold>
   if last "$2" | grep -q -F -- "$3"; then echo "PASS  $1"; else echo "FAIL  $1   (\"$(last "$2")\")"; FAILED=$((FAILED + 1)); fi
 }
@@ -262,6 +268,16 @@ PICTURESOFF=$(last "pictures:")
 echo "  switched off: $PICTURESOFF"
 cmd "set pictures 1" "wait 1"
 
+echo "== 6c. real touches, made inside the app as KIF makes them (VGFinger.m): taps and holds"
+# "Hold For" at 0.8 s as on the phone: the button's own hold (0.45 s) must still give the menu, a tap must save,
+# and a long hold must give the menu only (2.2.2 also saved when the finger stayed down for over two seconds).
+cmd "set tapAction 1" "set holdTime 0.8" "set quality 240" "wait 1" "layers"     "finger button 0.1" "cancel" "wait 2.5" "dismiss" "wait 1"     "finger button 0.6" "wait 0.3" "dismiss" "wait 1"     "finger button 3.0" "wait 0.3" "dismiss" "wait 1"     "finger video 1.2" "wait 0.3" "dismiss" "wait 1"
+shot 10d-after-touches
+cmd "finger picture0 0.1"
+wait_result 60 || echo "  the picture did not end in a minute"
+cmd "finger picture0 1.0" "wait 0.3" "dismiss" "wait 1" "set holdTime 0.55" "result"
+grep -F "finger " "$LOG" | cut -c21- | sed 's/^/  /'
+
 echo "== 7. a hold away from the video (on a picture: VidGrab leaves holds on pictures to the app)"
 cmd "press 200 760"
 echo "  $(last 'press ')"
@@ -294,6 +310,13 @@ check "the queue starts the next one by itself"          "queue: starting the ne
 if [ "$(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null || true)" -ge 3 ]; then echo "PASS  all three queued downloads finished"; else echo "FAIL  all three queued downloads finished ($(grep -c 'download ok: Fetched' "$LOG" 2>/dev/null) of 3)"; FAILED=$((FAILED + 1)); fi
 check "under a solid panel the button takes no tap"      "no download button there"
 check "the picture hooks are in"                         "pictures: 2 hooks"
+check_re "a real tap on a video's button saves at once"     "finger button 0\.10 s at .*: sent → save;"
+check_re "a 0.6 s hold on it opens the menu (Hold For 0.8)" "finger button 0\.60 s at .*: sent → menu;"
+check_re "a 3 s hold on it opens the menu"                  "finger button 3\.00 s at .*: sent → menu;"
+check_none "a hold on the button never also saves"          "finger button .*(menu \+ save|save \+ menu)"
+check_re "a real hold on the video opens the menu"          "finger video 1\.20 s at .*: sent → menu;"
+check_re "a real tap on a picture's button saves it"        "finger picture0 0\.10 s at .*: sent → save;"
+check_re "a real hold on a picture's button opens the menu" "finger picture0 1\.00 s at .*: sent → menu;"
 check "a picture's menu has its entries"                 "menu: Save to Photos | Share… | Copy Picture"
 check "a picture was saved as shown"                    "ok: Saved to Photos [as shown: 600x900"
 check "a picture was fetched again from its address"  "ok: Saved to Photos [jpg 600x800"

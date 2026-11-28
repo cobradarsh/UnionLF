@@ -13,7 +13,7 @@ TWEAK_NAME = VidGrab VidGrabSB
 
 VG_WARN = -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 
-VidGrab_FILES = VGMain.m VGCore.m VGPlaylist.m VGFetch.m VGTS.m VGMux.m VGJob.m VGCapture.m VGUI.m VGDeliver.m VGPicture.m VGDebug.m 	VGSGifMaker.m VGSCommon.m VGSGifWriter.c
+VidGrab_FILES = VGMain.m VGCore.m VGPlaylist.m VGFetch.m VGTS.m VGMux.m VGJob.m VGCapture.m VGUI.m VGDeliver.m VGPicture.m VGDebug.m VGFinger.m 	VGSGifMaker.m VGSCommon.m VGSGifWriter.c
 VidGrab_CFLAGS = -fobjc-arc $(VG_WARN)
 VidGrab_FRAMEWORKS = UIKit Foundation AVFoundation CoreMedia CoreVideo AudioToolbox CoreGraphics QuartzCore Photos ImageIO Accelerate
 # Hooks are made with the Objective-C runtime (VGHook in VGCore.m): the library links iOS's own
