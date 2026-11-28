@@ -67,8 +67,17 @@ static dispatch_source_t gWatch;
     NSString *path = [kWPTestDir stringByAppendingPathComponent:@"cmd"];
     NSString *cmd = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
     if (!cmd) return;
-    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     cmd = [cmd stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    static int emptyReads;
+    if (cmd.length == 0 && ++emptyReads <= 10) {
+        // Seen the moment the file was created, before its text was written (`echo x > cmd`): look again shortly.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [WPSelfTest _check];
+        });
+        return;
+    }
+    emptyReads = 0;
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     @try {
         if ([cmd isEqualToString:@"ocr"]) [self _ocr];
         else if ([cmd isEqualToString:@"scroll"]) [self _scroll];

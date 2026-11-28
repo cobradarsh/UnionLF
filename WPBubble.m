@@ -222,15 +222,18 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     if (now - _lastKeep > kScrollIdleSeconds || now - _scrollStart > kScrollMaxSeconds) {
         _endReason = @"idle or time limit"; [self _finishScrollCapture]; return;
     }
+    // Auto-scroll: the judge watches every probe, our swipes included (it has to see the page move, or the screen
+    // a swipe lands on never counts as new), but nothing is kept while a swipe runs or just after it.
+    BOOL holdOff = NO;
     if (_autoScroll) {
         if (_scrollFrames.count >= kScrollMaxFrames) {                                         // full: stop here
             _endReason = @"frame limit"; [self _finishScrollCapture]; return;
         }
-        if (_swiping || _swipeDone == 0 || now - _swipeDone < 0.6) return;                    // let the page land
+        holdOff = _swiping || _swipeDone == 0 || now - _swipeDone < 0.6;                     // let the page land
     }
     _busy = YES;
     NSData *sig = [WPCapture probeSignature];   // fingerprint only; no frame is kept for a probe
-    if (sig && [_judge wantsFrame:sig mask:[self _probeMask] now:now]) {
+    if (sig && [_judge wantsFrame:sig mask:[self _probeMask] now:now] && !holdOff) {
         NSInteger drop = NSNotFound;
         BOOL keep = YES;
         if (_scrollFrames.count >= kScrollMaxFrames) {   // full: the most repetitive frame makes room, or this one is it
@@ -255,7 +258,7 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
         if (clean || !keep) [_judge settleKept:(clean != nil) replacing:drop now:now];   // a failed shot is tried again
     }
     _busy = NO;
-    if (_autoScroll && _scrolling) {
+    if (_autoScroll && _scrolling && !_swiping && _swipeDone > 0 && now - _swipeDone >= 0.6) {
         if (_lastKeep >= _swipeDone) {                        // that swipe brought a new screen: the next one
             _misses = 0;
             if (now - _lastKeep >= 0.3) [self _autoSwipe];
