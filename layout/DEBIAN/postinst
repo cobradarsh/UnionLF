@@ -1,0 +1,5 @@
+#!/bin/sh
+# Photos that is open still runs without Guest Mode (or with the previous one): closing it makes its
+# next start load the new library. Guest Mode that was on is on again when Photos opens.
+killall -9 MobileSlideShow 2>/dev/null
+exit 0

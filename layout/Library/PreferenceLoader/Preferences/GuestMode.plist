@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>entry</key>
+	<dict>
+		<key>cell</key>
+		<string>PSLinkCell</string>
+		<key>icon</key>
+		<string>GuestMode.png</string>
+		<key>label</key>
+		<string>Guest Mode</string>
+	</dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Guest Mode lets someone look at a few photos on your iPhone without the rest of your library within reach.
+
+1. In Photos, tap the round Guest Mode button and choose up to 10 photos or videos. The button turns blue and shows how many.
+2. Tap the button again. After Face ID, Photos shows only what you chose: a small gallery to swipe through, zoom and play. There is nothing else to scroll to, and nothing to share, edit or delete.
+3. Tap the button (now a lock) once more. After Face ID, Photos is back to normal and the selection is forgotten.
+
+Hold the button to change or clear the selection. Drag it to move it.
+
+Guest Mode stays on when Photos is closed and opened again. It covers the Photos app only: for a guest who might leave Photos, add Guided Access (Settings &gt; Accessibility).</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.guestmode/prefs</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.adarsh.guestmode</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>label</key>
+			<string>Guest Mode Button</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Switching the button off does not end a Guest Mode that is on: only Face ID does.
+
+Guest Mode 1.0.0</string>
+			<key>label</key>
+			<string>Button</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.guestmode/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<integer>46</integer>
+			<key>defaults</key>
+			<string>com.adarsh.guestmode</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>buttonSize</string>
+			<key>label</key>
+			<string>Size</string>
+			<key>validTitles</key>
+			<array>
+				<string>Small</string>
+				<string>Medium</string>
+				<string>Large</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<integer>40</integer>
+				<integer>46</integer>
+				<integer>54</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.adarsh.guestmode/prefs</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<real>0.85</real>
+			<key>defaults</key>
+			<string>com.adarsh.guestmode</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>key</key>
+			<string>buttonDim</string>
+			<key>label</key>
+			<string>When Nothing Is Chosen</string>
+			<key>validTitles</key>
+			<array>
+				<string>Solid</string>
+				<string>Slightly See-Through</string>
+				<string>Faint</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<real>1.0</real>
+				<real>0.85</real>
+				<real>0.55</real>
+			</array>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>Guest Mode</string>
+</dict>
+</plist>
