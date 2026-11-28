@@ -143,7 +143,7 @@ static void WPRealTouch(void *target, void *refcon, void *service, IOHIDEventRef
 
 + (void)watchForRealTouch {
     if (![self _resolve] || gWatcher || !pSchedule || !pRegister) return;
-    if ([gSenderSource isEqualToString:@"real touch"]) return;
+    if (gSender) return;            // the touchscreen service already gave it (it does on the iPhone 14 Pro Max)
     gWatcher = pClientCreate(kCFAllocatorDefault);
     if (!gWatcher) return;
     pSchedule(gWatcher, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
