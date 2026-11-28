@@ -6,6 +6,7 @@
 #import <PhotosUI/PhotosUI.h>
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <CoreMedia/CoreMedia.h>
 
 @interface GMCoverWindow : UIWindow
 @end

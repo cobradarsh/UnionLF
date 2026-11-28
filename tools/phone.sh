@@ -20,6 +20,7 @@ set -u
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=20 iphone-root"
 SHARED=/var/mobile/Library/GuestMode                  # in the jailbreak root: Photos can read it
 # Photos runs without a data folder of its own; the log is in the first of these it may write to
+ID=com.apple.mobileslideshow
 LOGS="/rootfs/var/mobile/tmp/guestmode.log /rootfs/private/var/tmp/guestmode.log /rootfs/var/tmp/guestmode.log /rootfs/var/mobile/Media/PhotoData/Caches/guestmode.log /rootfs/var/mobile/Library/Caches/guestmode.log"
 
 case "${1:-}" in

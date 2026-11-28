@@ -27,7 +27,7 @@ ARCH=$(uname -m)
 SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
 FLAGS="-arch $ARCH -mios-simulator-version-min=15.0 -isysroot $SDK -O1 -g -Wall -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable"
 SOURCES="GMCore.m GMAuth.m GMButton.m GMGallery.m GMDebug.m"
-FRAMEWORKS="-framework UIKit -framework Foundation -framework Photos -framework PhotosUI -framework AVKit -framework AVFoundation -framework LocalAuthentication -framework CoreGraphics -framework QuartzCore"
+FRAMEWORKS="-framework UIKit -framework Foundation -framework Photos -framework PhotosUI -framework AVKit -framework AVFoundation -framework CoreMedia -framework LocalAuthentication -framework CoreGraphics -framework QuartzCore"
 echo "== build for the simulator ($ARCH)"
 (
   xcrun --sdk iphonesimulator clang $FLAGS -DGM_TEST -fobjc-arc -dynamiclib $FRAMEWORKS \
