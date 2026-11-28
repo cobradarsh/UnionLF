@@ -16,6 +16,7 @@
 // ── host helpers (frontmost app, installed-app list, clipboard) ──
 @interface WPHost : NSObject
 + (NSString *)frontmostBundleID;                 // the app currently in front, or nil
++ (NSString *)frontmostAppName;                  // its name as the home screen shows it, or nil
 + (BOOL)wingmanEnabledForFrontmost;              // YES if the front app should show the bubble
 + (NSArray<NSDictionary *> *)installedApps;      // @[ @{ @"id":bundleID, @"name":display } ], user apps, A–Z
 + (NSArray<NSString *> *)recentFrontmostApps;    // bundle ids recently seen in front, newest first (exact)
@@ -59,6 +60,7 @@
 // ── on-device checks run over USB SSH (see WPSelfTest.m) ──
 @interface WPSelfTest : NSObject
 + (void)start;
++ (void)note:(NSString *)line;   // one line in the self-test log (counts and names only, never screen text)
 @end
 
 // ── keyboard focus: a SpringBoard overlay only gets the keyboard if SpringBoard takes focus ──

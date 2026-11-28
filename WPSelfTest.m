@@ -45,6 +45,8 @@ static dispatch_source_t gWatch;
     }
 }
 
++ (void)note:(NSString *)line { if (line.length) [self _log:line]; }
+
 + (void)start {
     static dispatch_once_t once;
     dispatch_once(&once, ^{

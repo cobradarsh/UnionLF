@@ -25,6 +25,20 @@ static NSMutableArray<NSString *> *gRecentFront;
 
 @implementation WPHost
 
++ (NSString *)frontmostAppName {
+    @try {
+        id app = [UIApplication sharedApplication];
+        SEL sel = @selector(_accessibilityFrontMostApplication);
+        if (![app respondsToSelector:sel]) return nil;
+        id front = ((id(*)(id, SEL))objc_msgSend)(app, sel);
+        if (front && [front respondsToSelector:NSSelectorFromString(@"displayName")]) {
+            id n = [front valueForKey:@"displayName"];
+            if ([n isKindOfClass:[NSString class]] && [n length]) return n;
+        }
+    } @catch (__unused id e) {}
+    return nil;
+}
+
 + (NSString *)frontmostBundleID {
     @try {
         id app = [UIApplication sharedApplication];

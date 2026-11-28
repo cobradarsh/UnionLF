@@ -3,6 +3,7 @@
     is picked by you from the installed-apps list in Settings.      */
 
 #import "Wingman.h"
+#import "WPlus.h"      // WPHost: which app SpringBoard has in front
 
 @implementation WMApps
 
@@ -92,13 +93,24 @@
     return WMAppKindNone;
 }
 
+// Wingman Plus runs INSIDE SpringBoard, so the main bundle is SpringBoard's, never the app in front. Asking it made
+// Hinge count as "not a dating app" (no auto-scroll) and every prompt said "APP: SpringBoard" (before 1.0.43).
++ (BOOL)_inSpringBoard { return [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.springboard"]; }
+
 + (WMAppKind)currentKind {
+    if ([self _inSpringBoard]) return [self kindForBundleID:[WPHost frontmostBundleID]];
     // only real apps, never extensions (keyboards, share sheets, widgets)
     if (![[NSBundle mainBundle].bundlePath hasSuffix:@".app"]) return WMAppKindNone;
     return [self kindForBundleID:[NSBundle mainBundle].bundleIdentifier];
 }
 
 + (NSString *)currentAppName {
+    if ([self _inSpringBoard]) {
+        NSString *name = [WPHost frontmostAppName];
+        if (name.length) return name;
+        NSString *bid = [WPHost frontmostBundleID];
+        return bid.length ? bid : @"this app";
+    }
     NSDictionary *info = [NSBundle mainBundle].infoDictionary;
     NSString *n = info[@"CFBundleDisplayName"] ?: info[@"CFBundleName"];
     return n.length ? n : ([NSBundle mainBundle].bundleIdentifier ?: @"this app");

@@ -287,42 +287,30 @@
                     "generic 'hey how's it going', no empty compliments on looks, no "
                     "negging, no over-the-top flattery. Organic, specific and sincere.";
         case WMReplyModePhotoOpener: {
-            // Her first, the scene second (1.0.28: the replies praised the view instead of her). 1.0.36: they
-            // stated the obvious, describing her own photos back to her, so the photo is now only the setup
-            // and the praise lands through a twist.
-            NSString *base = @"PHOTO OPENER (opening message from her photos). Study her photos closely: HER first (her "
-                    "smile, eyes, expression, style, how she carries herself), then the place, the moment and the "
-                    "small details around her. But she knows what's in her own photos, so never describe them "
-                    "back to her ('you at the beach', 'love that dress', 'beautiful smile', 'looks like you love "
-                    "travelling', 'I see you...'): that is stating the obvious, and it's what every other man "
-                    "sends. Use what you notice as the SETUP for something she didn't see coming. Every reply "
-                    "must still leave her in no doubt that I find her beautiful, but the praise lands through the "
-                    "twist, never as a plain adjective stuck on something she can already see (gorgeous or "
-                    "stunning are fine inside a twist, never as the whole line). Ways in: what one look of hers "
-                    "did to me or my day, a playful accusation or mock complaint, a rule or verdict she has to "
-                    "answer for, a comparison she has never heard, a tiny scene that puts me in the picture with "
-                    "her, a guess at what happened just before or just after the shot, what the place itself "
-                    "would say about her, or a read of her personality from one small detail. The scene is the "
-                    "setup, foil or punchline and lands back on her. Use the 'the view lost to you' idea "
-                    "(outshine, upstaged, never stood a chance) at most once, a photo's caption at most once, and "
-                    "let at least one reply end on an easy hook she can answer. If a line would work on any woman "
-                    "with a similar photo, or she'd think 'yes, I know, I was there', rewrite it. Use only what "
-                    "is really in her photos or written on her profile: never invent a place, outfit or prop, "
-                    "never name a landmark, city or venue unless that name is written on her profile (call it by "
-                    "what it looks like instead: 'that monastery on the cliff', 'those city lights'), and never "
-                    "state facts about a place or what she did there (hiked, flew, stayed); a guess has to sound "
-                    "like a guess. BANNED: describing the photo back to her, a bare 'you're beautiful' or 'great "
-                    "smile', 'nice pic', 'main character energy', stock lines like 'should be illegal' or 'should "
-                    "come with a warning', calling her a 'thing' or a 'view', pickup-line cliches, and anything "
-                    "crude, creepy or objectifying. Warm, confident, a little magnetic, and genuinely creative. "
-                    "The examples in these instructions only show the idea: invent your own and never reuse them. "
-                    "Emojis, the way a real guy texts: each reply gets ONE emoji that fits its mood or the photo "
-                    "(a smirk, a wink, a grin, a laugh, heart eyes, looking eyes, sparkles, or one for the scene "
-                    "such as a mountain, a wave or city lights), dropped where he'd naturally put it, usually at "
-                    "the very end or right after the punchline. Two at the very most in one reply, a different "
-                    "emoji in each of the three, nothing suggestive, never a row of them, never one after every "
-                    "phrase, and never an emoji standing in for a word. Make the three about THREE DIFFERENT "
-                    "photos and three different moves.";
+            // The user's own structure (2026-11-28): her beauty in detail, then she outshines the background
+            // (without her the photo would be dull and lifeless), then glad to know her more. Replaces 1.0.36's
+            // 'praise through a twist, never describe the photo', which the user rejected.
+            NSString *base = @"PHOTO OPENER (opening message from her photos). She picked these photos as her very best, so "
+                    "make her feel truly seen and special. Every reply follows the same three steps, written as "
+                    "one flowing message (no list, no labels). First, call out her beauty warmly and "
+                    "specifically, from what is really in that photo: her smile and the way she smiles, her eyes, "
+                    "her hair, her fashion sense (the outfit, the colours, the way she styles it) and the way the "
+                    "light falls on her (for example the sunlight kissing her lips, golden hour on her face, the "
+                    "glow on her skin, when the photo shows it). Two or three details, said with real admiration, "
+                    "so she feels appreciated, never rated. Then tell her how she outshines the background of the "
+                    "picture (the beach, the mountains, the city lights, whatever is behind her), and that "
+                    "without her the photo would be dull and lifeless. End warmly with how glad I'd be to get to "
+                    "know her more and take things forward, worded naturally and differently each time. Sound "
+                    "like a confident, genuine man who appreciates her, not a poet reciting and not a pickup "
+                    "artist: warm, sincere, a little romantic. Keep it classy: nothing crude or sexual, no "
+                    "goddess or angel lines, no stock phrases like 'should be illegal'. Use only what is really "
+                    "in her photos or written on her profile: never invent an outfit, a colour, a place or a "
+                    "prop, never name a landmark, city or venue unless that name is written on her profile (call "
+                    "it by what it looks like instead), and never claim what she did there. Emojis, the way a "
+                    "real guy texts: ONE that fits the photo or the mood (sparkles, a sun, a smiling face, heart "
+                    "eyes, a flower), two at the very most, at the end or right after a compliment, and a "
+                    "different one in each of the three. Make the three about THREE DIFFERENT photos, each with "
+                    "its own details and its own wording for all three steps.";
             NSString *extra = [WMSettings shared].photoStyleExtra;
             return extra.length ? [base stringByAppendingFormat:@" %@", extra] : base;
         }
@@ -549,11 +537,10 @@
                          "rules. Read everything she actually shared, then write my opening "
                          "message to her.\n\n"];
         if (mode == WMReplyModePhotoOpener)
-            [p appendString:@"For THIS opener, work from her PHOTOS: notice how she looks first (her smile, expression and "
-                             "style), then the place, the light and the moment around her, and use what you notice as the "
-                             "setup for a twist, never as a description. A photo's caption can add to the joke, but don't "
-                             "build the opener on her written prompt answers. Every reply compliments HER; the scenery "
-                             "frames it.\n\n"];
+            [p appendString:@"For THIS opener, work from her PHOTOS: how she looks first (her smile, eyes, hair, outfit "
+                             "and style, the light on her), then the background she outshines. A photo's caption can add a "
+                             "touch, but don't build the opener on her written prompt answers. Every reply praises HER "
+                             "first, then says she outshines the scene, then ends warmly about getting to know her.\n\n"];
         if (transcript.length > 0)
             [p appendFormat:@"HER PROFILE TEXT (read on my phone, top to bottom):\n%@\n\n", transcript];
         if (hasImages)
@@ -600,7 +587,7 @@
                "still reading like a text.\n\n"];
     } else if (length == WMReplyLengthShort) {
         [p appendString:mode == WMReplyModePhotoOpener
-            ? @"LENGTH: SHORT. One quick text, about 6 to 18 words: enough room to compliment her and land the twist.\n\n"
+            ? @"LENGTH: SHORT. Two or three sentences, about 25 to 45 words, still all three steps: her beauty, how she outshines the scene, the warm close.\n\n"
             : mode == WMReplyModeFactCheck
             ? @"LENGTH: SHORT. One quick text, about 8 to 22 words: the one fact or contradiction that settles it, said plainly.\n\n"
             : mode == WMReplyModeDefuse
@@ -619,7 +606,9 @@
             ? @"LENGTH: SHORT. One or two sentences, about 12 to 30 words: the fact that sinks their claim, and where it's from.\n\n"
             : @"LENGTH: SHORT. One quick text, about 3 to 15 words.\n\n"];
     } else {
-        [p appendString:mode == WMReplyModeCatch
+        [p appendString:mode == WMReplyModePhotoOpener
+            ? @"LENGTH: LONG. Three to five sentences, about 45 to 80 words, all three steps, with more detail on her.\n\n"
+            : mode == WMReplyModeCatch
             ? @"LENGTH: LONG. Two or three short sentences, about 20 to 45 words: the hook, then one beat of my personality. Never a block of text.\n\n"
             : mode == WMReplyModeBanter
             ? @"LENGTH: LONG. Two or three relaxed sentences, about 20 to 45 words: a playful take, a beat of my own (an opinion or a stance), then the question. Never an essay.\n\n"

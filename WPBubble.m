@@ -52,6 +52,8 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 @property (nonatomic) NSInteger misses;              // swipes in a row that brought nothing new
 @property (nonatomic) CFAbsoluteTime swipeDone;      // when the last swipe finished (0 = none yet)
 @property (nonatomic) BOOL forceAuto;                // self-test: auto-scroll whatever the app
+@property (nonatomic) BOOL fingerOnBubble;           // the long-press finger hasn't lifted yet
+@property (nonatomic) CFAbsoluteTime fingerUpAt;     // when it lifted
 @property (nonatomic, copy) NSString *endReason;     // why the capture ended (self-test log)
 @property (nonatomic, copy) void (^testDone)(NSUInteger, NSInteger, NSString *);   // self-test: report, no sheet
 @end
@@ -163,7 +165,13 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 #pragma mark - hold to start, flick through, tap to finish (scroll-capture)
 
 - (void)_longPress:(UILongPressGestureRecognizer *)g {
+    if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled ||
+        g.state == UIGestureRecognizerStateFailed) {
+        _fingerOnBubble = NO; _fingerUpAt = CFAbsoluteTimeGetCurrent();
+        return;
+    }
     if (g.state != UIGestureRecognizerStateBegan) return;
+    _fingerOnBubble = YES;
     if (_capturing || _scrolling) return;
     [WPScroll watchForRealTouch];        // this finger tells auto-scroll which touchscreen to speak for
     [self _startScrollCapture];
@@ -186,6 +194,13 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
     _autoScroll = (_forceAuto || ([WMSettings shared].autoScroll && [WMApps currentKind] == WMAppKindDating))
                   && [WPScroll available];
     _forceAuto = NO; _endReason = @"tap";
+    {
+        WMAppKind kind = [WMApps currentKind];
+        NSArray *kinds = @[@"other", @"chat", @"dating", @"picked by you"];
+        [WPSelfTest note:[NSString stringWithFormat:@"capture: started in %@ (%@), auto-scroll %@",
+                          [WPHost frontmostBundleID] ?: @"(none)", kinds[MIN((NSUInteger)kind, kinds.count - 1)],
+                          _autoScroll ? @"on" : @"off"]];
+    }
     _swiping = NO; _swipes = 0; _autoKept = 0; _misses = 0; _swipeDone = 0;
     [self _toast:_autoScroll ? @"Scrolling the profile for you. Tap 🪽 to stop."
                              : @"Capturing — scroll the profile, tap 🪽 to finish."];
@@ -275,6 +290,15 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 // fixed amount, so consecutive screens overlap a little and nothing is skipped.
 - (void)_autoSwipe {
     if (!_scrolling || !_autoScroll || _swiping) return;
+    // Not while your finger is still on the bubble: a synthetic finger from the same touchscreen would join that
+    // touch (which began on the bubble) instead of starting its own on the page.
+    if (_fingerOnBubble || CFAbsoluteTimeGetCurrent() - _fingerUpAt < 0.35) {
+        __weak typeof(self) wait = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [wait _autoSwipe];
+        });
+        return;
+    }
     _swiping = YES; _swipes++;
     __weak typeof(self) ws = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -300,11 +324,15 @@ static void WPMaskRect(uint8_t *m, CGRect r, CGSize screen) {
 - (void)_autoHandOver {
     if (!_autoScroll) return;
     _autoScroll = NO;
+    [WPSelfTest note:[NSString stringWithFormat:@"capture: auto-scroll handed over after %ld swipes (the page didn't move)",
+                      (long)_swipes]];
     if (_testDone) { _endReason = @"handed over: the page never moved"; [self _finishScrollCapture]; return; }
     [self _toast:@"This app didn't scroll by itself. Scroll it yourself, tap 🪽 to finish."];
 }
 
 - (void)_finishScrollCapture {
+    [WPSelfTest note:[NSString stringWithFormat:@"capture: ended by %@, %lu screens, %ld swipes, %ld screens after swipes",
+                      _endReason ?: @"tap", (unsigned long)_scrollFrames.count, (long)_swipes, (long)_autoKept]];
     [_scrollTimer invalidate]; _scrollTimer = nil;
     _scrolling = NO; _busy = NO;
     _autoScroll = NO; _swiping = NO;
