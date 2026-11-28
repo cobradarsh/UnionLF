@@ -275,7 +275,21 @@ cmd "set tapAction 1" "set holdTime 0.8" "set quality 240" "wait 1" "layers"    
 shot 10d-after-touches
 cmd "finger picture0 0.1"
 wait_result 60 || echo "  the picture did not end in a minute"
-cmd "finger picture0 1.0" "wait 0.3" "dismiss" "wait 1" "set holdTime 0.55" "result"
+cmd "finger picture0 1.0" "wait 0.3" "dismiss" "wait 1" "result"
+APPMENU_WITH_VIDGRAB=$(grep -c "app menu shown" "$RUN/host.log" 2>/dev/null || true)
+echo "  the app's own long-press menu (on the card, as X has one) came up ${APPMENU_WITH_VIDGRAB:-0} times so far"
+
+echo "== 6d. the app's own long-press menu: away while VidGrab holds, back afterwards, and when the setting gives it back"
+cmd "recognizers video" "finger video 1.2" "wait 0.3" "dismiss" "wait 1" "recognizers video"
+grep -E "recognizers at|    (UIView|PlayerView): " "$LOG" | tail -6 | cut -c21-260 | sed 's/^/  /'
+APPMENU_HELD=$(grep -c "app menu shown" "$RUN/host.log" 2>/dev/null || true)
+# with Stop the App's Own Hold Action off, a long hold on the video is the app's again
+cmd "set blockAppHold 0" "wait 0.5" "finger video 1.2" "wait 0.8" "shot 10e-app-menu"
+shot 10e-app-menu
+APPMENU_OFF=$(grep -c "app menu shown" "$RUN/host.log" 2>/dev/null || true)
+cmd "finger 215,70 0.05" "wait 1.2" "set blockAppHold 1" "set holdTime 0.55" "wait 0.5"
+echo "  app menu: ${APPMENU_HELD:-0} while VidGrab held, ${APPMENU_OFF:-0} after the setting gave the hold back"
+cat "$RUN/host.log" 2>/dev/null | sed 's/^/  host: /'
 grep -F "finger " "$LOG" | cut -c21- | sed 's/^/  /'
 
 echo "== 7. a hold away from the video (on a picture: VidGrab leaves holds on pictures to the app)"
@@ -317,6 +331,10 @@ check_none "a hold on the button never also saves"          "finger button .*(me
 check_re "a real hold on the video opens the menu"          "finger video 1\.20 s at .*: sent → menu;"
 check_re "a real tap on a picture's button saves it"        "finger picture0 0\.10 s at .*: sent → save;"
 check_re "a real hold on a picture's button opens the menu" "finger picture0 1\.00 s at .*: sent → menu;"
+check "VidGrab takes the app's own long-press menu away for its hold" "the app's own long-press menu is off for this touch"
+check "and puts it back after the touch"                          "the app's own long-press menu is back"
+if [ "${APPMENU_HELD:-0}" = "0" ]; then echo "PASS  the app's own long-press menu never came up under VidGrab's holds"; else echo "FAIL  the app's own long-press menu came up ${APPMENU_HELD} times under VidGrab's holds"; FAILED=$((FAILED + 1)); fi
+if [ "${APPMENU_OFF:-0}" -ge 1 ] 2>/dev/null; then echo "PASS  with Stop the App's Own Hold Action off, the app's menu works again"; else echo "FAIL  with Stop the App's Own Hold Action off, the app's menu works again (it never came up: ${APPMENU_OFF:-0})"; FAILED=$((FAILED + 1)); fi
 check "a picture's menu has its entries"                 "menu: Save to Photos | Share… | Copy Picture"
 check "a picture was saved as shown"                    "ok: Saved to Photos [as shown: 600x900"
 check "a picture was fetched again from its address"  "ok: Saved to Photos [jpg 600x800"

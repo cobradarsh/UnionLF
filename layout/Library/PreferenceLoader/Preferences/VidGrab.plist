@@ -113,7 +113,7 @@ It works with videos an app plays through iOS's own player. Where an app draws i
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Some apps act on a hold themselves: X plays faster, Instagram pauses. With Stop the App's Own Hold Action on, VidGrab ends that when it takes the hold. Two Fingers keeps the one-finger hold for the app. These are for holding the video itself; the download button has its own hold (below).</string>
+			<string>Some apps act on a hold themselves: X plays faster or opens its own menu, Instagram pauses. With Stop the App's Own Hold Action on, VidGrab's menu is the one that comes up: the app's own long-press menu is kept off the video while the finger is down, and what the app started is ended when VidGrab takes the hold. Two Fingers keeps the one-finger hold for the app. These are for holding the video itself; the download button has its own hold (below).</string>
 			<key>label</key>
 			<string>Holding a Video</string>
 		</dict>
@@ -597,7 +597,7 @@ It works with videos an app plays through iOS's own player. Where an app draws i
 			<key>footerText</key>
 			<string>Writes what VidGrab does into vidgrab.log in each app's temporary folder: which player was found, what was downloaded and how it ended. Addresses of videos appear in it; nothing leaves the iPhone.
 
-VidGrab 2.2.4</string>
+VidGrab 2.2.5</string>
 			<key>label</key>
 			<string>Troubleshooting</string>
 		</dict>

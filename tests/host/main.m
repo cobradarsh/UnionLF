@@ -2,6 +2,9 @@
 // stream the way such apps do: an AVPlayerLayer inside a card in a scrolling feed, with the
 // app's own see-through controls lying over the video and its own tap and hold on the card.
 //
+// Like X, the card has a long-press menu of the app's own (UIContextMenuInteraction); when it opens
+// or closes, a line goes into $VIDGRAB_DIR/host.log, so the test can tell whose menu a hold brought up.
+//
 // Environment:  VG_PLAY_URL   the stream or file to play (default: Apple's sample stream)
 //               VG_HOST_MODE  "cover": a solid panel of the app lies over the video's right half
 #import <UIKit/UIKit.h>
@@ -39,7 +42,22 @@ static UIImage *TestPicture(CGSize pixels, UIColor *from, UIColor *to, NSString 
     }];
 }
 
-@interface FeedController : UIViewController
+static void HostLog(NSString *text) {
+    NSString *folder = NSProcessInfo.processInfo.environment[@"VIDGRAB_DIR"];
+    if (!folder.length) return;
+    NSString *path = [folder stringByAppendingPathComponent:@"host.log"];
+    NSString *line = [NSString stringWithFormat:@"%.3f %@\n", NSProcessInfo.processInfo.systemUptime, text];
+    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (!handle) {
+        [line writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+        return;
+    }
+    [handle seekToEndOfFile];
+    [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+    [handle closeFile];
+}
+
+@interface FeedController : UIViewController <UIContextMenuInteractionDelegate>
 @property (nonatomic, strong) AVPlayer *player;
 @property (nonatomic, strong) UILabel *status;
 @property (nonatomic) NSInteger taps, holds;
@@ -99,6 +117,7 @@ static UIImage *TestPicture(CGSize pixels, UIColor *from, UIColor *to, NSString 
 
     [card addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cardTapped)]];
     [card addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(cardHeld:)]];
+    [card addInteraction:[[UIContextMenuInteraction alloc] initWithDelegate:self]];
 
     if ([NSProcessInfo.processInfo.environment[@"VG_HOST_MODE"] isEqualToString:@"cover"]) {
         UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(cardWidth / 2, 0, cardWidth / 2, cardHeight)];
@@ -168,6 +187,24 @@ static UIImage *TestPicture(CGSize pixels, UIColor *from, UIColor *to, NSString 
     ((AVPlayerLayer *)video.layer).player = self.player;
     ((AVPlayerLayer *)video.layer).videoGravity = AVLayerVideoGravityResizeAspect;
     [self.player play];
+}
+
+- (UIContextMenuConfiguration *)contextMenuInteraction:(UIContextMenuInteraction *)interaction configurationForMenuAtLocation:(CGPoint)location {
+    return [UIContextMenuConfiguration configurationWithIdentifier:nil previewProvider:nil actionProvider:^UIMenu *(NSArray<UIMenuElement *> *suggested) {
+        UIAction *item = [UIAction actionWithTitle:@"The app's own menu" image:[UIImage systemImageNamed:@"square.and.arrow.down"]
+                                        identifier:nil handler:^(UIAction *action) {}];
+        return [UIMenu menuWithTitle:@"" children:@[item]];
+    }];
+}
+
+- (void)contextMenuInteraction:(UIContextMenuInteraction *)interaction willDisplayMenuForConfiguration:(UIContextMenuConfiguration *)configuration
+                      animator:(id<UIContextMenuInteractionAnimating>)animator {
+    HostLog(@"app menu shown");
+}
+
+- (void)contextMenuInteraction:(UIContextMenuInteraction *)interaction willEndForConfiguration:(UIContextMenuConfiguration *)configuration
+                      animator:(id<UIContextMenuInteractionAnimating>)animator {
+    HostLog(@"app menu closed");
 }
 
 - (void)cardTapped {

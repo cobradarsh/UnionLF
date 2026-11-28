@@ -15,6 +15,7 @@
 //   pictap [n]            what a tap on the button of the n-th picture with a button does (default the first)
 //   pichold [n]           the same for a hold on that button (the menu)
 //   scan                  everything on screen drawn as a large image, known to VidGrab or not
+//   recognizers [where]   every recognizer (iOS's own too) and interaction on the views under that point
 //   finger <where> <s>    a real touch (through UIKit, see VGFinger.m) held for s seconds, then what VidGrab
 //                         did: save, menu, share, nothing. where: button (the first video's button), video
 //                         (its middle), picture<n> (the n-th picture's button), or x,y
@@ -61,6 +62,50 @@ static UIWindow *VGFirstWindowWithVideo(AVPlayerLayer **layerOut) {
         }
     }
     return VGAppWindows().firstObject;
+}
+
+/// A point named the way the test commands name them: button (the first video's button), video (its
+/// middle), picture<n> (the n-th picture's button), or x,y.
+static BOOL VGResolvePoint(NSString *where, UIWindow **windowOut, CGPoint *pointOut) {
+    if ([where isEqualToString:@"button"] || [where isEqualToString:@"video"]) {
+        AVPlayerLayer *first = nil;
+        UIWindow *window = VGFirstWindowWithVideo(&first);
+        CGRect area = first ? ([where isEqualToString:@"button"] ? VGBadgeFrameInWindow(first, window) : VGLayerFrameInWindow(first, window)) : CGRectNull;
+        if (CGRectIsNull(area)) return NO;
+        *windowOut = window;
+        *pointOut = CGPointMake(CGRectGetMidX(area), CGRectGetMidY(area));
+        return YES;
+    }
+    if ([where hasPrefix:@"picture"]) {
+        NSUInteger wanted = (NSUInteger)MAX(0, [where substringFromIndex:7].integerValue), seen = 0;
+        VGLayoutPictures();
+        for (UIWindow *candidate in VGAppWindows()) {
+            for (CALayer *layer in VGKnownPictureLayers()) {
+                if (VGHostView(layer).window != candidate) continue;
+                CGRect badge = VGBadgeFrameInWindow(layer, candidate);
+                if (CGRectIsNull(badge)) continue;
+                if (seen++ != wanted) continue;
+                *windowOut = candidate;
+                *pointOut = CGPointMake(CGRectGetMidX(badge), CGRectGetMidY(badge));
+                return YES;
+            }
+        }
+        return NO;
+    }
+    if ([where containsString:@","]) {
+        NSArray<NSString *> *xy = [where componentsSeparatedByString:@","];
+        UIWindow *window = VGAppWindows().firstObject;
+        if (!window || xy.count < 2) return NO;
+        *windowOut = window;
+        *pointOut = CGPointMake(xy[0].doubleValue, xy[1].doubleValue);
+        return YES;
+    }
+    return NO;
+}
+
+static NSString *VGStateWord(UIGestureRecognizerState state) {
+    NSArray<NSString *> *words = @[@"possible", @"began", @"changed", @"ended", @"cancelled", @"failed"];
+    return (NSUInteger)state < words.count ? words[(NSUInteger)state] : @"?";
 }
 
 static void VGShot(NSString *name) {
@@ -190,39 +235,33 @@ static void VGRunLine(NSString *line) {
                 if (hit) VGTriggerAction(VGSourceForBadgeLayer(hit), window, badge, [command isEqualToString:@"pichold"] ? 0 : [VGPrefs tapAction]);
             }
         }
+    } else if ([command isEqualToString:@"recognizers"]) {
+        // everything that takes touches under a point: each view's recognizers (iOS's own too) and interactions
+        NSString *where = words.count > 1 ? words[1] : @"button";
+        UIWindow *window = nil;
+        CGPoint point = CGPointZero;
+        if (!VGResolvePoint(where, &window, &point)) {
+            VGLog(@"recognizers %@: nothing there", where);
+        } else {
+            VGLog(@"recognizers at %@ (%@):", NSStringFromCGPoint(point), where);
+            for (UIView *view = [window hitTest:point withEvent:nil]; view; view = view.superview) {
+                NSMutableArray<NSString *> *parts = [NSMutableArray new];
+                for (UIGestureRecognizer *r in view.gestureRecognizers) {
+                    [parts addObject:[NSString stringWithFormat:@"%@%@%@", NSStringFromClass(r.class), r.isEnabled ? @"" : @" (off)",
+                                      r.state == UIGestureRecognizerStatePossible ? @"" : [@" " stringByAppendingString:VGStateWord(r.state)]]];
+                }
+                for (id<UIInteraction> interaction in view.interactions) {
+                    [parts addObject:[NSString stringWithFormat:@"[%@]", NSStringFromClass([(NSObject *)interaction class])]];
+                }
+                if (parts.count) VGLog(@"    %@: %@", NSStringFromClass(view.class), [parts componentsJoinedByString:@", "]);
+            }
+        }
     } else if ([command isEqualToString:@"finger"] && words.count >= 3) {
         NSString *where = words[1];
         NSTimeInterval seconds = MAX(0.03, words[2].doubleValue);
         UIWindow *window = nil;
         CGPoint point = CGPointZero;
-        BOOL found = NO;
-        if ([where isEqualToString:@"button"] || [where isEqualToString:@"video"]) {
-            AVPlayerLayer *first = nil;
-            window = VGFirstWindowWithVideo(&first);
-            CGRect area = first ? ([where isEqualToString:@"button"] ? VGBadgeFrameInWindow(first, window) : VGLayerFrameInWindow(first, window)) : CGRectNull;
-            if (!CGRectIsNull(area)) { point = CGPointMake(CGRectGetMidX(area), CGRectGetMidY(area)); found = YES; }
-        } else if ([where hasPrefix:@"picture"]) {
-            NSUInteger wanted = (NSUInteger)MAX(0, [where substringFromIndex:7].integerValue), seen = 0;
-            VGLayoutPictures();
-            for (UIWindow *candidate in VGAppWindows()) {
-                for (CALayer *layer in VGKnownPictureLayers()) {
-                    if (VGHostView(layer).window != candidate) continue;
-                    CGRect badge = VGBadgeFrameInWindow(layer, candidate);
-                    if (CGRectIsNull(badge)) continue;
-                    if (seen++ != wanted) continue;
-                    window = candidate;
-                    point = CGPointMake(CGRectGetMidX(badge), CGRectGetMidY(badge));
-                    found = YES;
-                    break;
-                }
-                if (found) break;
-            }
-        } else if ([where containsString:@","]) {
-            NSArray<NSString *> *xy = [where componentsSeparatedByString:@","];
-            window = VGAppWindows().firstObject;
-            point = CGPointMake(xy[0].doubleValue, xy[1].doubleValue);
-            found = window != nil;
-        }
+        BOOL found = VGResolvePoint(where, &window, &point);
         if (!found) {
             VGLog(@"finger %@ %.2f s: nothing there to press", where, seconds);
         } else {

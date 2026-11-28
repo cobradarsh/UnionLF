@@ -508,11 +508,105 @@ void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSIntege
 
 #pragma mark - recognizers
 
+#pragma mark - the app's own long-press menu
+
+/// One interaction taken off a view for the length of a touch.
+@interface VGTakenInteraction : NSObject
+@property (nonatomic, weak) UIView *view;
+@property (nonatomic, strong) id<UIInteraction> interaction;
+@property (nonatomic) BOOL disabledOnly;                       // a drag interaction: switched off, not removed
+@end
+@implementation VGTakenInteraction
+@end
+
+/// An app's own long-press menu (UIContextMenuInteraction: X's Tweet Video, Copy Video Link, Download
+/// video) comes up after about half a second and takes the touch away from everything else, VidGrab's
+/// hold included. iOS draws it, so it is not one of the app's recognizers that VidGrab can quieten.
+/// For the length of a touch that VidGrab answers, it is taken off the views under the finger (and a
+/// drag lift switched off); -restore puts everything back as it was.
+@interface VGSidelined : NSObject
+@property (nonatomic, strong) NSMutableArray<VGTakenInteraction *> *taken;
+- (void)restore;
+@end
+
+@implementation VGSidelined
+- (void)restore {
+    NSUInteger back = 0;
+    for (VGTakenInteraction *item in self.taken) {
+        if (item.disabledOnly) {
+            ((UIDragInteraction *)item.interaction).enabled = YES;
+            back++;
+            continue;
+        }
+        UIView *view = item.view;
+        if (!view || [view.interactions containsObject:item.interaction]) continue;
+        [view addInteraction:item.interaction];
+        back++;
+    }
+    if (back) VGLog(@"touch: the app's own long-press menu is back (%lu)", (unsigned long)back);
+    [self.taken removeAllObjects];
+}
+- (void)dealloc {
+    [self restore];
+}
+@end
+
+static VGSidelined *VGSidelineAppMenus(UIWindow *window, CGPoint point) {
+    VGSidelined *sidelined = [VGSidelined new];
+    sidelined.taken = [NSMutableArray new];
+    for (UIView *view = [window hitTest:point withEvent:nil]; view && view != window; view = view.superview) {
+        for (id<UIInteraction> interaction in [view.interactions copy]) {
+            VGTakenInteraction *item = nil;
+            if ([interaction isKindOfClass:UIContextMenuInteraction.class]) {
+                item = [VGTakenInteraction new];
+                [view removeInteraction:interaction];
+            } else if ([interaction isKindOfClass:UIDragInteraction.class] && ((UIDragInteraction *)interaction).isEnabled) {
+                item = [VGTakenInteraction new];
+                item.disabledOnly = YES;
+                ((UIDragInteraction *)interaction).enabled = NO;
+            }
+            if (!item) continue;
+            item.view = view;
+            item.interaction = interaction;
+            [sidelined.taken addObject:item];
+        }
+    }
+    if (sidelined.taken.count) VGLog(@"touch: the app's own long-press menu is off for this touch (%lu)", (unsigned long)sidelined.taken.count);
+    return sidelined.taken.count ? sidelined : nil;
+}
+
+static NSString *VGStateName(UIGestureRecognizerState state) {
+    switch (state) {
+        case UIGestureRecognizerStatePossible: return @"possible";
+        case UIGestureRecognizerStateBegan: return @"began";
+        case UIGestureRecognizerStateChanged: return @"changed";
+        case UIGestureRecognizerStateEnded: return @"ended";
+        case UIGestureRecognizerStateCancelled: return @"cancelled";
+        case UIGestureRecognizerStateFailed: return @"failed";
+    }
+    return @"?";
+}
+
 /// A hold on a video (not on its download button): what Settings say a hold does.
 @interface VGHoldRecognizer : UILongPressGestureRecognizer
 @property (nonatomic, weak) AVPlayerLayer *target;
+@property (nonatomic) BOOL onVideo;                            // this touch came down on a video
+@property (nonatomic) CFTimeInterval downAt;
+@property (nonatomic, strong) VGSidelined *sidelined;
 @end
 @implementation VGHoldRecognizer
+- (void)setState:(UIGestureRecognizerState)state {
+    BOOL change = state != self.state;
+    [super setState:state];
+    if (change && self.onVideo && state != UIGestureRecognizerStateChanged)
+        VGLog(@"touch: the hold on the video %@ at %.2f s", VGStateName(state), CACurrentMediaTime() - self.downAt);
+}
+- (void)reset {
+    [super reset];
+    [self.sidelined restore];
+    self.sidelined = nil;
+    self.onVideo = NO;
+}
 @end
 
 /// A hold on a download button: the menu. The button's tap waits for this one to fail, so a press
@@ -523,10 +617,10 @@ void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSIntege
 @end
 @implementation VGButtonHoldRecognizer
 - (void)setState:(UIGestureRecognizerState)state {
-    BOOL giving = state == UIGestureRecognizerStateFailed && self.state != UIGestureRecognizerStateFailed && self.button;
+    BOOL change = state != self.state && state != UIGestureRecognizerStateChanged;
     [super setState:state];
-    // the debug log says why a press on a button became a tap: the finger lifted early, moved, or another took it
-    if (giving) VGLog(@"touch: the button's hold gave up after %.2f s", CACurrentMediaTime() - self.downAt);
+    // the debug log tells what became of a press on a button: tap, hold, or taken by something else
+    if (change && self.button) VGLog(@"touch: the button's hold %@ at %.2f s", VGStateName(state), CACurrentMediaTime() - self.downAt);
 }
 - (void)reset {
     [super reset];
@@ -541,6 +635,7 @@ static const NSTimeInterval kButtonHoldTime = 0.45;           // as long as iOS'
 @interface VGBadgeTapRecognizer : UITapGestureRecognizer
 @property (nonatomic, weak) CALayer *target;                  // a video's layer or a picture's
 @property (nonatomic) CFTimeInterval downAt;
+@property (nonatomic, strong) VGSidelined *sidelined;
 @property (nonatomic, strong) NSHashTable<UIGestureRecognizer *> *silenced;
 - (void)restoreOthers;
 @end
@@ -549,6 +644,13 @@ static const NSTimeInterval kButtonHoldTime = 0.45;           // as long as iOS'
 - (void)restoreOthers {
     for (UIGestureRecognizer *other in self.silenced) other.enabled = YES;
     self.silenced = nil;
+    [self.sidelined restore];
+    self.sidelined = nil;
+}
+- (void)setState:(UIGestureRecognizerState)state {
+    BOOL change = state != self.state && state != UIGestureRecognizerStateChanged;
+    [super setState:state];
+    if (change && self.target) VGLog(@"touch: the button's tap %@ at %.2f s", VGStateName(state), CACurrentMediaTime() - self.downAt);
 }
 - (void)reset {
     [super reset];
@@ -675,7 +777,24 @@ static char kAttachedKey;
     CGPoint point = [touch locationInView:window];
     if ([recognizer isKindOfClass:VGHoldRecognizer.class]) {
         // a press on a download button belongs to the button: its tap and its own hold
-        return VGBadgeLayerAtPoint(window, point) == nil;
+        if (VGBadgeLayerAtPoint(window, point)) return NO;
+        VGHoldRecognizer *hold = (VGHoldRecognizer *)recognizer;
+        if (hold.numberOfTouches == 0 && VGPlayerLayerAtPoint(window, point)) {
+            hold.onVideo = YES;
+            hold.downAt = CACurrentMediaTime();
+            VGLog(@"touch: on a video at %@", NSStringFromCGPoint(point));
+            // with Stop the App's Own Hold Action on, the app's own long-press menu does not get this touch
+            if ([VGPrefs blockAppHold]) {
+                __weak VGHoldRecognizer *weakHold = hold;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    VGHoldRecognizer *strong = weakHold;
+                    if (!strong || strong.numberOfTouches == 0 || strong.sidelined) return;
+                    if (strong.state != UIGestureRecognizerStatePossible && strong.state != UIGestureRecognizerStateBegan) return;
+                    strong.sidelined = VGSidelineAppMenus(window, point);
+                });
+            }
+        }
+        return YES;
     }
     if ([recognizer isKindOfClass:VGButtonHoldRecognizer.class]) {
         // a second finger elsewhere does not take the first one's button away
@@ -704,6 +823,7 @@ static char kAttachedKey;
             [silenced addObject:other];
         }
         strong.silenced = silenced;
+        if (!strong.sidelined) strong.sidelined = VGSidelineAppMenus(window, point);
         // whatever happens to the tap, they are back within moments
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             for (UIGestureRecognizer *other in silenced) other.enabled = YES;

@@ -18,7 +18,7 @@ import sys
 
 D = "com.adarsh.vidgrab"
 NOTE = "com.adarsh.vidgrab/prefs"
-VERSION = "2.2.4"
+VERSION = "2.2.5"
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 OUT = args[0] if args else "layout/Library/PreferenceLoader/Preferences"
@@ -78,8 +78,10 @@ items = [
     choice("badgeCorner", "Corner", -1, [(-1, "Automatic"), (0, "Top Left"), (1, "Top Right"), (2, "Bottom Left"), (3, "Bottom Right")]),
 
     group("Holding a Video",
-          "Some apps act on a hold themselves: X plays faster, Instagram pauses. With Stop the "
-          "App's Own Hold Action on, VidGrab ends that when it takes the hold. Two Fingers "
+          "Some apps act on a hold themselves: X plays faster or opens its own menu, Instagram "
+          "pauses. With Stop the App's Own Hold Action on, VidGrab's menu is the one that comes "
+          "up: the app's own long-press menu is kept off the video while the finger is down, "
+          "and what the app started is ended when VidGrab takes the hold. Two Fingers "
           "keeps the one-finger hold for the app. These are for holding the video itself; "
           "the download button has its own hold (below)."),
     choice("hold", "Hold With", 1, [(0, "Off"), (1, "One Finger"), (2, "Two Fingers")]),

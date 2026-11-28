@@ -1,6 +1,6 @@
 Package: com.adarsh.vidgrab
 Name: VidGrab
-Version: 2.2.4
+Version: 2.2.5
 Architecture: iphoneos-arm64e
 Description: Save the video you are watching. A small download button sits on every video an app plays; tap it, or hold the video, and choose Save to Photos (into a VidGrab album), Share, Save to GIF Stash, a quality, or Copy Link. Streams are put together on the iPhone with their sound, without re-encoding. Works in X, Reddit, Pinterest, WhatsApp, Tumblr, LinkedIn and other apps that play video with iOS's own player; it hooks only that player, never an app's own classes, so app updates do not break it. Settings > VidGrab.
 Maintainer: Adarsh
