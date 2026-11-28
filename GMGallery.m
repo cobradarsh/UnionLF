@@ -58,6 +58,7 @@ static NSString *GMCountText(NSArray<PHAsset *> *assets) {
     PHLivePhotoView *_live;
     UIImageView *_liveBadge;
     AVPlayerViewController *_player;
+    UIButton *_play;
     UIProgressView *_progress;
     PHImageRequestID _imageRequest, _extraRequest;
 }
@@ -83,6 +84,25 @@ static NSString *GMCountText(NSArray<PHAsset *> *assets) {
         [self addChildViewController:_player];
         [self.view addSubview:_player.view];
         [_player didMoveToParentViewController:self];
+        // iOS's player hides its controls after a moment even while paused: a play button of our own
+        // says "this is a video" until it has been started once.
+        _play = [UIButton buttonWithType:UIButtonTypeCustom];
+        UIVisualEffectView *disc = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark]];
+        disc.frame = CGRectMake(0, 0, 72, 72);
+        disc.layer.cornerRadius = 36;
+        disc.clipsToBounds = YES;
+        disc.userInteractionEnabled = NO;
+        [_play addSubview:disc];
+        UIImageView *glyph = [[UIImageView alloc] initWithImage:GMSymbol(@[@"play.fill"], 28, UIImageSymbolWeightSemibold)];
+        glyph.tintColor = UIColor.whiteColor;
+        glyph.contentMode = UIViewContentModeCenter;
+        glyph.frame = CGRectMake(3, 0, 72, 72);
+        glyph.userInteractionEnabled = NO;
+        [_play addSubview:glyph];
+        _play.accessibilityLabel = @"Play";
+        _play.hidden = YES;                                 // shown once the video can play
+        [_play addTarget:self action:@selector(playTapped) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:_play];
     } else {
         _scroll = [[UIScrollView alloc] initWithFrame:self.view.bounds];
         _scroll.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -131,6 +151,8 @@ static NSString *GMCountText(NSArray<PHAsset *> *assets) {
         CGRect inside = UIEdgeInsetsInsetRect(bounds, safe);
         _player.view.frame = inside;
         _image.frame = inside;
+        _play.bounds = CGRectMake(0, 0, 72, 72);
+        _play.center = CGPointMake(CGRectGetMidX(inside), CGRectGetMidY(inside));
     } else if (_scroll.zoomScale <= 1.001) {
         _content.frame = _scroll.bounds;
         _scroll.contentSize = _scroll.bounds.size;
@@ -190,6 +212,7 @@ static NSString *GMCountText(NSArray<PHAsset *> *assets) {
                     return;
                 }
                 me->_player.player = [AVPlayer playerWithPlayerItem:item];
+                me->_play.hidden = NO;
                 GMLog(@"viewer: item %d: video ready (%.0f s)", (int)me.index, me.asset.duration);
             });
         }];
@@ -221,9 +244,18 @@ static NSString *GMCountText(NSArray<PHAsset *> *assets) {
     }
 }
 
+- (void)playTapped {
+    _play.hidden = YES;
+    [_player.player play];
+}
+
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
     [_player.player pause];
+    if (_player.player) {                                   // back at the start, with the play button, for the next look
+        [_player.player seekToTime:kCMTimeZero];
+        _play.hidden = NO;
+    }
     [_live stopPlayback];
     [_scroll setZoomScale:1 animated:NO];
 }

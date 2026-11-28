@@ -161,7 +161,7 @@ cmd "menu"
 check "hold menu with nothing chosen" "menu:" "menu: Choose Photos and Videos"
 
 echo "== 2. the picker inside Photos"
-cmd "pick" "state"
+cmd "pick" "wait 10" "state"
 shot "02-picker"
 check "the picker is presented" "button: window" "presented PHPickerViewController"
 cmd "dismiss" "state"

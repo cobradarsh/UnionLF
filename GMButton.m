@@ -475,8 +475,13 @@ static NSString *const GMButtonKey = @"GuestModeButton";    // in Photos' own pr
     PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:config];
     picker.delegate = self;
     _keyBefore = GMPhotosWindow(_window);
-    [_root presentViewController:picker animated:YES completion:nil];
-    [_window makeKeyWindow];                                // the picker's search field needs the keyboard
+    // iOS holds the picker back until its content (another process) is ready; only then is our
+    // window "busy" and allowed to become key, which the picker's search field needs for the keyboard.
+    __weak typeof(self) weak = self;
+    [_root presentViewController:picker animated:YES completion:^{
+        typeof(self) me = weak;
+        if (me && me->_root.presentedViewController) [me->_window makeKeyWindow];
+    }];
     GMLog(@"picker: shown (limit %d, %d already chosen)", GM_MAX_ITEMS, (int)GMState.shared.identifiers.count);
 }
 
