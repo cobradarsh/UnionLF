@@ -1,6 +1,7 @@
 // Touch and what is drawn: the recognizers on the app's windows, the menu, the progress pill,
 // and the window of VidGrab's own that the last two live in.
 #import "VidGrabUI.h"
+#import <UIKit/UIGestureRecognizerSubclass.h>
 #import <objc/runtime.h>
 
 #pragma mark - the overlay window
@@ -518,8 +519,15 @@ void VGTriggerAction(VGSource *source, UIWindow *window, CGRect anchor, NSIntege
 /// is either a tap (saves) or a hold (menu), never both, however long the finger stays down.
 @interface VGButtonHoldRecognizer : UILongPressGestureRecognizer
 @property (nonatomic, weak) CALayer *button;                  // the button the finger came down on
+@property (nonatomic) CFTimeInterval downAt;
 @end
 @implementation VGButtonHoldRecognizer
+- (void)setState:(UIGestureRecognizerState)state {
+    BOOL giving = state == UIGestureRecognizerStateFailed && self.state != UIGestureRecognizerStateFailed && self.button;
+    [super setState:state];
+    // the debug log says why a press on a button became a tap: the finger lifted early, moved, or another took it
+    if (giving) VGLog(@"touch: the button's hold gave up after %.2f s", CACurrentMediaTime() - self.downAt);
+}
 - (void)reset {
     [super reset];
     self.button = nil;
@@ -532,6 +540,7 @@ static const NSTimeInterval kButtonHoldTime = 0.45;           // as long as iOS'
 /// under the finger are switched off, so the tap is VidGrab's alone; they come back when it is over.
 @interface VGBadgeTapRecognizer : UITapGestureRecognizer
 @property (nonatomic, weak) CALayer *target;                  // a video's layer or a picture's
+@property (nonatomic) CFTimeInterval downAt;
 @property (nonatomic, strong) NSHashTable<UIGestureRecognizer *> *silenced;
 - (void)restoreOthers;
 @end
@@ -671,7 +680,10 @@ static char kAttachedKey;
     if ([recognizer isKindOfClass:VGButtonHoldRecognizer.class]) {
         // a second finger elsewhere does not take the first one's button away
         CALayer *button = VGBadgeLayerAtPoint(window, point);
-        if (button) ((VGButtonHoldRecognizer *)recognizer).button = button;
+        if (button) {
+            ((VGButtonHoldRecognizer *)recognizer).button = button;
+            ((VGButtonHoldRecognizer *)recognizer).downAt = CACurrentMediaTime();
+        }
         return button != nil;
     }
     if (![recognizer isKindOfClass:VGBadgeTapRecognizer.class]) return YES;
@@ -679,6 +691,7 @@ static char kAttachedKey;
     CALayer *layer = VGBadgeLayerAtPoint(window, point);
     if (!layer) return NO;                                   // not on a button: this touch is none of ours
     tap.target = layer;
+    tap.downAt = CACurrentMediaTime();
     VGLog(@"touch: on the button of %@ at %@", [layer isKindOfClass:AVPlayerLayer.class] ? @"a video" : @"a picture", NSStringFromCGPoint(point));
     // After this touch has been handed out, quieten the app's own tap and hold recognizers under it.
     __weak VGBadgeTapRecognizer *weakTap = tap;
@@ -731,7 +744,7 @@ static char kAttachedKey;
     if (!button || ![window isKindOfClass:UIWindow.class]) return;
     VGSource *source = VGSourceForBadgeLayer(button);
     if (!source) return;
-    VGLog(@"touch: held on the button: the menu");
+    VGLog(@"touch: held on the button (%.2f s): the menu", CACurrentMediaTime() - recognizer.downAt);
     CGRect anchor = VGBadgeFrameInWindow(button, window);
     if (CGRectIsNull(anchor)) {
         CGPoint point = [recognizer locationInView:window];
@@ -769,7 +782,7 @@ static char kAttachedKey;
     if (!layer || ![window isKindOfClass:UIWindow.class]) return;
     VGSource *source = VGSourceForBadgeLayer(layer);
     if (!source) return;
-    VGLog(@"touch: tapped the button");
+    VGLog(@"touch: tapped the button (finger down %.2f s)", CACurrentMediaTime() - recognizer.downAt);
     CGRect anchor = VGBadgeFrameInWindow(layer, window);
     if (CGRectIsNull(anchor)) {
         CGPoint point = [recognizer locationInView:window];
