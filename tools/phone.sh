@@ -4,7 +4,7 @@
 #   status            is the package installed, is the library there, is Photos running with it
 #   install <deb>     copy the package over and dpkg -i (its postinst closes Photos; no respring needed)
 #   remove            dpkg -r com.adarsh.guestmode, close Photos
-#   facekey           what Photos' Info.plist says about Face ID (it needs a usage description to ask)
+#   facekey           whether Photos' entitlements let it ask for Face ID (it has no usage description)
 #   diag on|off       make / remove the marker that switches the log and the test commands on
 #                     (Photos notices "on" at its next start, "off" at once)
 #   open              bring Photos to the front (the phone must be unlocked)
@@ -37,7 +37,8 @@ case "${1:-}" in
   remove)
     $SSH 'dpkg -r com.adarsh.guestmode; killall -9 MobileSlideShow 2>/dev/null; true' ;;
   facekey)
-    $SSH "plutil -p /rootfs/Applications/MobileSlideShow.app/Info.plist 2>/dev/null | grep -i -E 'FaceID|CFBundleExecutable\"|CFBundleShortVersion' || echo 'no NSFaceIDUsageDescription in Photos Info.plist'" ;;
+    # Photos has no NSFaceIDUsageDescription; it may ask for Face ID because its entitlements allow it
+    $SSH "ldid -e /rootfs/Applications/MobileSlideShow.app/MobileSlideShow 2>/dev/null | grep -c kTCCServiceFaceID | sed 's/^0$/Photos has NO Face ID entitlement/; s/^[1-9].*/Photos is entitled to Face ID (com.apple.private.tcc.allow: kTCCServiceFaceID)/'" ;;
   diag)
     if [ "${2:-}" = "on" ]; then
       $SSH "mkdir -p $SHARED && touch $SHARED/diag && chown -R mobile:mobile $SHARED && chmod 755 $SHARED && ls -la $SHARED"

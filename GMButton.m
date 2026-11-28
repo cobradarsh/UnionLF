@@ -438,9 +438,10 @@ static NSString *GMButtonPath(void) {
         return [UIAction actionWithTitle:title image:GMSymbol(symbols, 17, UIImageSymbolWeightRegular) identifier:nil handler:^(UIAction *action) { run(); }];
     };
     switch (state.phase) {
-        case GMPhaseIdle:
+        case GMPhaseIdle: {
             [items addObject:item(@"Choose Photos and Videos", @[@"photo.on.rectangle.angled"], ^{ [weak presentPicker]; })];
             break;
+        }
         case GMPhaseChosen: {
             [items addObject:item(@"Start Guest Mode", @[@"faceid", @"lock.fill"], ^{ [weak startGuest]; })];
             [items addObject:item(@"Change Selection", @[@"photo.on.rectangle.angled"], ^{ [weak presentPicker]; })];
@@ -449,9 +450,10 @@ static NSString *GMButtonPath(void) {
             [items addObject:clear];
             break;
         }
-        case GMPhaseGuest:
+        case GMPhaseGuest: {
             [items addObject:item(@"End Guest Mode", @[@"lock.open.fill"], ^{ [weak endGuest]; })];
             break;
+        }
     }
     return items;
 }
